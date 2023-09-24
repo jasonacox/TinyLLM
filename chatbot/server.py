@@ -46,7 +46,8 @@ openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            
 openai.api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1") # Use API endpoint or comment out for OpenAI
 agentname = os.environ.get("AGENT_NAME", "Jarvis")                              # Set the name of your bot
 mymodel = os.environ.get("MY_MODEL", "models/7B/gguf-model.bin")                # Pick model to use e.g. gpt-3.5-turbo for OpenAI
-DEBUG = os.environ.get("DEBUG", False)
+DEBUG = os.environ.get("DEBUG", "False") == "True"
+
 # Configure Flask App and SocketIO
 app = Flask(__name__)
 socketio = SocketIO(app)
