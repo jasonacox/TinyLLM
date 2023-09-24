@@ -93,7 +93,7 @@ This will also build llama.cpp but includes the python bindings. Next, if you do
 ```python
 from llama_cpp import Llama
 
-# Load model - use gpu for 20 of 35 NN layers to keep it within the 6GB VRAM limit
+# Load model - use gpu for 32 of 35 NN layers to keep it within the 6GB VRAM limit
 llm = Llama(model_path="models/llama-2-7b-chat.Q5_K_M.gguf", n_gpu_layers=32)
 
 # Ask a question
