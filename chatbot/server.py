@@ -14,6 +14,12 @@ Features:
 Requirements:
   * pip install openai flask flask-socketio
 
+Environmental variables:
+  * OPENAI_API_KEY - Required only for OpenAI
+  * OPENAI_API_BASE - URL to OpenAI API Server or locally hosted version
+  * AGENT_NAME - Name for Bot
+  * AGENT_NAME - LLM Model to Use
+
 Running a llama-cpp-python server:
   * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
   * pip install llama-cpp-python[server]
