@@ -24,18 +24,22 @@ Author: Jason A. Cox
 https://github.com/jasonacox/TinyLLM
 
 """
-from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO
+import os
+import datetime
 import threading
 import time
+
+from flask import Flask, render_template, request, jsonify
+from flask_socketio import SocketIO
 import openai
-import datetime
+
+VERSION = "v0.1"
 
 # Configuration Settings - Showing local LLM
-openai.api_key = "OPENAI_API_KEY"                # Required, use bogus string for Llama.cpp
-openai.api_base = "http://localhost:8000/v1"     # Use API endpoint or comment out for OpenAI
-agentname = "Jarvis"                             # Set the name of your bot
-mymodel  ="models/7B/gguf-model.bin"             # Pick model to use e.g. gpt-3.5-turbo for OpenAI
+openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            # Required, use bogus string for Llama.cpp
+openai.api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1") # Use API endpoint or comment out for OpenAI
+agentname = os.environ.get("AGENT_NAME", "Jarvis")                              # Set the name of your bot
+mymodel = os.environ.get("MY_MODEL", "models/7B/gguf-model.bin")                # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 
 # Configure Flask App and SocketIO
 app = Flask(__name__)
@@ -43,6 +47,7 @@ socketio = SocketIO(app)
 
 # Globals
 prompt = ""
+visible = True
 
 # Set base prompt and initialize the context array for conversation dialogue
 current_date = datetime.datetime.now()
@@ -71,13 +76,19 @@ def index():
     context = [{"role": "system", "content": baseprompt}]
     return render_template('index.html')
 
+@app.route('/version')
+def version():
+    global VERSION
+    return jsonify({'version': VERSION})
+
 @app.route('/send_message', methods=['POST'])
 def send_message():
-    global prompt
+    global prompt, visible
     # Handle incoming user prompts and store them
     data = request.json
     print("Received Data:", data)
     prompt = data["prompt"]
+    visible = data["show"]
     return jsonify({'status': 'Message received'})
 
 # Function to send updates to all connected clients
@@ -89,7 +100,8 @@ def send_update():
             time.sleep(.5)
         else:
             update_text = prompt 
-            socketio.emit('update', {'update': update_text, 'voice': 'user'})
+            if visible:
+                socketio.emit('update', {'update': update_text, 'voice': 'user'})
             # Ask LLM for answers
             response=ask(prompt)
             completion_text = ''
@@ -99,11 +111,13 @@ def send_update():
                 if 'content' in event_text:
                     chunk = event_text.content
                     completion_text += chunk
+                    # print(f"[{chunk}]")
                     socketio.emit('update', {'update': chunk, 'voice': 'ai'})
             socketio.emit('update', {'update': '', 'voice': 'done'})
             prompt = ''
             # remember context
             context.append({"role": "assistant", "content" : completion_text})
+            # print(f"AI: {completion_text}")
 
 # Create a background thread to send updates
 update_thread = threading.Thread(target=send_update)

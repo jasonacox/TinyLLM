@@ -6,16 +6,22 @@
         body {
             font-family: Arial, sans-serif;
         }
-        #messageContainer {
-            height: 80vh; /* Set the height for the message container */
-            overflow-y: scroll; /* Enable vertical scrolling if needed */
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
             border: 1px solid #ccc;
+        }
+        #messageContainer {
+            flex-grow: 1;
+            overflow-y: scroll; /* Enable vertical scrolling if needed */
+            border-bottom: 1px solid #ccc;
             padding: 10px;
         }
         #inputContainer {
-            height: 10vh; /* Set the height for the input container */
-            border: 1px solid #ccc;
+            border-top: 1px solid #ccc;
             padding: 10px;
+            margin-bottom: 10px; /* Add margin for spacing */
         }
         #messageInput {
             flex: 1; /* Takes up all available space */
@@ -38,33 +44,60 @@
             justify-content: space-between;
             align-items: center; 
         }
+        .code-box {
+            background-color: #f4f4f4;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow-x: auto; /* Enable horizontal scrolling for long lines of code */
+        }
+        .code-box code {
+            display: block; /* Ensures line breaks are preserved */
+            font-family: "Courier New", Courier, monospace; /* Use a monospace font for code */
+            font-size: 14px;
+            line-height: 1.5;
+            color: #333;
+        }
+        #footer {
+            text-align: center; 
+            font-size: 12px; 
+            color: #888; 
+            padding-top: 5px;
+        }
+        #footer a {
+            color: #888; 
+            text-decoration: none; 
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </head>
 <body>
-    <div id="messageContainer">
-        <!-- Messages from the server will be displayed here -->
-    </div>
-    <div id="inputContainer">
-        <!-- User prompts go here -->
-        <div class="user-input">
-            <input type="text" id="messageInput" placeholder="Type a message..." onkeydown="checkEnter(event)">
-            <button onclick="sendMessage()">Send</button>
+    <div id="container">
+        <div id="messageContainer">
+            <!-- Messages from the server will be displayed here -->
+        </div>
+        <div id="inputContainer">
+            <!-- User prompts go here -->
+            <div class="user-input">
+                <input type="text" id="messageInput" placeholder="Type a message..." onkeydown="checkEnter(event)">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+            <div id="footer">TinyLLM Chatbot - <a href="https://github.com/jasonacox/TinyLLM">https://github.com/jasonacox/TinyLLM</a></div>
         </div>
     </div>
-
     <script>
+        // Check for user input
         function checkEnter(event) {
             if (event.key === "Enter") {
                 event.preventDefault(); // Prevent form submission
                 sendMessage(); 
             }
         }
-        function sendMessage() {
-            // Define the data you want to send as an object
+        // Send prompt to LLM
+        function sendMessage(visible = true) {
             var dataToSend = {
                 prompt: document.getElementById('messageInput').value,
-                key2: 'value2'
+                show: visible
             };
 
             // Clear form
@@ -87,26 +120,56 @@
                 console.error('Error:', error);
             });
         }
-    </script>
 
-    <script>
         // Connect to the Socket.IO server
         const socket = io.connect('http://' + document.domain + ':' + location.port);
+        var incode =false;
 
         // Function to handle updates received from the server
         socket.on('update', function(data) {
             const updateContainer = document.getElementById('messageContainer');
-        
+
+            if(data.voice == "done") {
+                // Try to identify code and format it for display
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```python([\s\S]*?)```/g, '<pre class="code-box"><code>$1</code></pre>\n');
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```([\s\S]*?)```/g, '<pre class="code-box"><code>$1</code></pre>\n');
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/`([\s\S]*?)`/g, '<code>$1</code>');
+                // console.log("DONE")
+            }
             if(data.voice == "user") {
                 updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
             }
-            else {
-                updateContainer.innerHTML += data.update.replace(/\n/g, "<br>");
+            if(data.voice == "ai") {
+                updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>");
             }   
             // ensure we always show latest
             updateContainer.scrollTop = updateContainer.scrollHeight;
-
         });
+
+        function getVersion() {
+            fetch('/version')
+                .then(response => response.json())
+                .then(data => {
+                const version = data.version;
+                document.getElementById('footer').innerHTML = 'TinyLLM Chatbot ' + version + ' - <a href="https://github.com/jasonacox/TinyLLM">https://github.com/jasonacox/TinyLLM</a>';
+                })
+                .catch(error => {
+                console.error('Error fetching version:', error);
+                });
+        }
+
+        // Run once on reload
+        window.onload = function() {
+            document.getElementById('messageInput').value = "Hi";
+            sendMessage(false);
+
+            // Set the focus on the text input field
+            var textInput = document.getElementById("messageInput"); 
+            textInput.focus();
+
+            // Fetch version and update footer
+            getVersion();
+        };
     </script>
 </body>
 </html>
