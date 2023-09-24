@@ -12,7 +12,7 @@ Features:
   * Uses response stream to render LLM chunks instead of waiting for full response
 
 Requirements:
-  * pip install openai
+  * pip install openai flask flask-socketio
 
 Running a llama-cpp-python server:
   * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
