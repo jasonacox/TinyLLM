@@ -1,0 +1,54 @@
+#!/bin/bash
+
+SERVICE_NAME="tinyllm"
+
+start_service() {
+    sudo systemctl start "$SERVICE_NAME"
+}
+
+stop_service() {
+    sudo systemctl stop "$SERVICE_NAME"
+}
+
+enable_service() {
+    sudo systemctl enable "$SERVICE_NAME"
+}
+
+disable_service() {
+    sudo systemctl disable "$SERVICE_NAME"
+}
+
+check_status() {
+    sudo systemctl status "$SERVICE_NAME"
+}
+
+view_logs() {
+    sudo journalctl -u "$SERVICE_NAME"
+}
+
+case "$1" in
+    start)
+        start_service
+        ;;
+    stop)
+        stop_service
+        ;;
+    enable)
+        enable_service
+        ;;
+    disable)
+        disable_service
+        ;;
+    status)
+        check_status
+        ;;
+    logs)
+        view_logs
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|enable|disable|status|logs}"
+        exit 1
+        ;;
+esac
+
+exit 0

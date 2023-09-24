@@ -93,8 +93,8 @@ This will also build llama.cpp but includes the python bindings. Next, if you do
 ```python
 from llama_cpp import Llama
 
-# Load model
-llm = Llama(model_path="models/llama-2-7b-chat.Q5_K_M.gguf")
+# Load model - use gpu for 20 of 35 NN layers to keep it within the 6GB VRAM limit
+llm = Llama(model_path="models/llama-2-7b-chat.Q5_K_M.gguf", n_gpu_layers=32)
 
 # Ask a question
 question = "Name the planets in the solar system?"
@@ -119,9 +119,36 @@ CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server
 python3 -m llama_cpp.server \
     --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
     --host localhost \
-    --n_gpu_layers 20 
+    --n_gpu_layers 32 
 
 # It will listen on port 8000
+```
+
+### Run as a Service
+
+You can set up a Linux service using the [tinyllm.service](tinyllm.service) file:
+
+```bash
+# Clone this project for helper files
+git clone https://github.com/jasonacox/TinyLLM.git
+cd TinyLLM
+
+# Edit the tinyllm.service to match your environment (ExecStart, WorkingDirectory & User)
+vim tinyllm.service
+
+# Copy the service file into systemd
+sudo cp tinyllm.service /etc/systemd/system/
+
+# Copy the init.d file for tinyllm
+sudo cp tinyllm /etc/init.d
+
+# Start and activate the service
+sudo /etc/init.d/tinyllm start
+sudo /etc/init.d/tinyllm enable
+
+# Check status and logs
+sudo /etc/init.d/tinyllm status
+sudo /etc/init.d/tinyllm logs
 ```
 
 ## Chat using API
@@ -135,7 +162,7 @@ The example chat.py Features:
   * Retains conversational context for LLM
   * Uses response stream to render LLM chunks instead of waiting for full response
 
-Example Test Run:
+Example Test Run (`./chat.py`):
 
 ```
 ChatBot - Greetings! My name is Jarvis. Enter an empty line to quit chat.
