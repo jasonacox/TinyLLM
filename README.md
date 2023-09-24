@@ -204,6 +204,10 @@ Jarvis> The current time is 10:45 AM.
 Jarvis> You're welcome! Is there anything else I can assist you with?
 ```
 
+## Web Based Chatbot
+
+To-Do
+
 ## Train
 
 The llama.cpp project includes a `train-text-from-scratch` tool. Use `-h` to see the options or an example below.
