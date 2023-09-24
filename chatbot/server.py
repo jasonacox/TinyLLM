@@ -3,7 +3,7 @@
 Web based ChatBot Example
 
 Web chat client for OpenAI and the llama-cpp-python[server] OpenAI API Compatible 
-Web Server. Provides a simple web based chat session.
+Python Flask based Web Server. Provides a simple web based chat session.
 
 Features:
   * Uses OpenAI API
@@ -46,7 +46,7 @@ openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            
 openai.api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1") # Use API endpoint or comment out for OpenAI
 agentname = os.environ.get("AGENT_NAME", "Jarvis")                              # Set the name of your bot
 mymodel = os.environ.get("MY_MODEL", "models/7B/gguf-model.bin")                # Pick model to use e.g. gpt-3.5-turbo for OpenAI
-
+DEBUG = os.environ.get("DEBUG", False)
 # Configure Flask App and SocketIO
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -97,8 +97,13 @@ def send_message():
     visible = data["show"]
     return jsonify({'status': 'Message received'})
 
-# Function to send updates to all connected clients
-def send_update():
+# Convert each character to its hex representation
+def string_to_hex(input_string):
+    hex_values = [hex(ord(char)) for char in input_string]
+    return hex_values
+
+# Continuous thread to send updates to connected clients
+def send_update(): 
     global x, prompt
 
     while True:
@@ -117,19 +122,23 @@ def send_update():
                 if 'content' in event_text:
                     chunk = event_text.content
                     completion_text += chunk
-                    # print(f"[{chunk}]")
+                    if DEBUG:
+                        print(string_to_hex(chunk), end="")
+                        print(f" = [{chunk}]")
                     socketio.emit('update', {'update': chunk, 'voice': 'ai'})
             socketio.emit('update', {'update': '', 'voice': 'done'})
             prompt = ''
             # remember context
             context.append({"role": "assistant", "content" : completion_text})
-            # print(f"AI: {completion_text}")
+            if DEBUG:
+                print(f"AI: {completion_text}")
 
 # Create a background thread to send updates
 update_thread = threading.Thread(target=send_update)
 update_thread.daemon = True  # Thread will terminate when the main program exits
 update_thread.start()
 
+# Start server
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=DEBUG)
 
