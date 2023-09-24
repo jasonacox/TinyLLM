@@ -217,8 +217,9 @@ pip install openai flask flask-socketio
 python3 server.py
 ```
 
-Open http://127.0.0.1:5000
+Open http://127.0.0.1:5000 - Example session:
 
+<img width="953" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/5193cb70-8863-4937-a62e-938e047aff73">
 
 ## Train
 
