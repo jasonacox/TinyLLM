@@ -66,6 +66,9 @@ def ask(prompt):
 
 @app.route('/')
 def index():
+    global context, baseprompt
+    # Reset context
+    context = [{"role": "system", "content": baseprompt}]
     return render_template('index.html')
 
 @app.route('/send_message', methods=['POST'])
