@@ -108,4 +108,5 @@ update_thread.daemon = True  # Thread will terminate when the main program exits
 update_thread.start()
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+
