@@ -209,8 +209,10 @@ Jarvis> You're welcome! Is there anything else I can assist you with?
 The above CLI chat was converted to a web based python flask app in the [chatbot](chatbot) folder. To run the web server:
 
 ```bash
-# Edit the server.py to adjust the global settings for your environment (e.g. openai.api_base)
+# Install required packages
+pip install openai flask flask-socketio
 
+# Edit the server.py to adjust the global settings for your environment (e.g. openai.api_base)
 # Run the chatbot web server
 python3 server.py
 ```
