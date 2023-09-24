@@ -85,7 +85,9 @@ def index():
 
 @app.route('/version')
 def version():
-    global VERSION
+    global VERSION, DEBUG
+    if DEBUG:
+        return jsonify({'version': "%s DEBUG MODE" % VERSION})
     return jsonify({'version': VERSION})
 
 @app.route('/send_message', methods=['POST'])
