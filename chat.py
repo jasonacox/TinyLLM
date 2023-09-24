@@ -12,6 +12,10 @@ Features:
   * Uses response stream to render LLM chunks instead of waiting for full response
 
 Requirements:
+  * pip install openai
+
+Running a llama-cpp-python server:
+  * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
   * pip install llama-cpp-python[server]
   * python3 -m llama_cpp.server --model models/7B/ggml-model.bin
 
