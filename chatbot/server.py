@@ -33,7 +33,7 @@ import datetime
 
 # Configuration Settings - Showing local LLM
 openai.api_key = "OPENAI_API_KEY"                # Required, use bogus string for Llama.cpp
-openai.api_base = "http://10.0.1.89:8000/v1"     # Use API endpoint or comment out for OpenAI
+openai.api_base = "http://localhost:8000/v1"     # Use API endpoint or comment out for OpenAI
 agentname = "Jarvis"                             # Set the name of your bot
 mymodel  ="models/7B/gguf-model.bin"             # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 
