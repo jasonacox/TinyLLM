@@ -45,7 +45,7 @@
         }
         .code-box {
             background-color: #f4f4f4;
-            padding: 20px;
+            padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
             overflow-x: auto; /* Enable horizontal scrolling for long lines of code */
@@ -130,7 +130,7 @@
 
             if(data.voice == "done") {
                 // Try to identify code and format it for display
-                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```python([\s\S]*?)```/g, '<pre class="code-box"><code>$1</code></pre>\n');
+                //updateContainer.innerHTML = updateContainer.innerHTML.replace(/```(python|bash|c|json|html|cpp|go|java|js)([\s\S]*?)```/g, '<pre class="code-box"><code>$2</code></pre>\n');
                 updateContainer.innerHTML = updateContainer.innerHTML.replace(/```([\s\S]*?)```/g, '<pre class="code-box"><code>$1</code></pre>\n');
                 updateContainer.innerHTML = updateContainer.innerHTML.replace(/`([\s\S]*?)`/g, '<code>$1</code>');
                 // console.log("DONE")
