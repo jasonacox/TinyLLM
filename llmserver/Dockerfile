@@ -13,7 +13,7 @@ ENV PORT=8000
 RUN pip3 install llama-cpp-python[server]
 
 # Copy local files into container
-COPY . .
+# COPY . .
 
 # Set the working directory
 WORKDIR /app
