@@ -1,5 +1,6 @@
 # Use a base image
-FROM python:3.10
+#FROM python:3.10
+FROM ubuntu
 
 # Set environment variables
 ENV MODEL=models/llama-2-7b-chat.Q5_K_M.gguf
@@ -12,6 +13,13 @@ ENV PORT=8000
 # RUN sudo dpkg -i cuda-keyring_1.1-1_all.deb
 # RUN sudo apt-get update
 # RUN sudo apt-get -y install cuda
+
+# Install Python
+RUN apt-get update && \
+    apt-get install -y \
+        python3-pip \
+        python3-dev \
+        libglib2.0-0
 
 # Install the 'llama-cpp-python' package
 RUN CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python
