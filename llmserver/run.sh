@@ -1,6 +1,7 @@
 #!/bin/bash
 
 docker run \
+    --rm --runtime=nvidia --gpus all \
     -d \
     -p 8000:8000 \
     -v ./models:/app/models \
