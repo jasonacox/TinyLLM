@@ -19,10 +19,10 @@ RUN pip3 install llama-cpp-python[server]
 WORKDIR /app
 
 # Run the llama_cpp.server command
-CMD ["python3", "-m", "llama_cpp.server", "--model", "${MODEL}", "--n_gpu_layers", "${N_GPU_LAYERS}", "--host", "${HOST}", "--port", "${PORT}"]
+CMD ["python3", "-m", "llama_cpp.server", "--model", "$MODEL", "--n_gpu_layers", "$N_GPU_LAYERS", "--host", "$HOST", "--port", "$PORT"]
 
 # Network
-EXPOSE ${PORT}
+EXPOSE $PORT
 
 # docker run \
 #     -d \
