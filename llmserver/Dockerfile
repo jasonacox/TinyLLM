@@ -2,15 +2,20 @@
 FROM python:3.10
 
 # Set environment variables
-ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on" 
-ENV FORCE_CMAKE=1
 ENV MODEL=models/llama-2-7b-chat.Q5_K_M.gguf
 ENV N_GPU_LAYERS=32
-ENV HOST=localhost
+ENV HOST=0.0.0.0
 ENV PORT=8000
 
+# Install CUDA
+# RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+# RUN sudo dpkg -i cuda-keyring_1.1-1_all.deb
+# RUN sudo apt-get update
+# RUN sudo apt-get -y install cuda
+
 # Install the 'llama-cpp-python' package
-RUN pip3 install llama-cpp-python[server]
+RUN CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python
+RUN CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python[server]
 
 # Copy local files into container
 # COPY . .
