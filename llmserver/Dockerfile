@@ -1,6 +1,13 @@
+# Dockerfile for llmserver - llama_cpp.server OpenAI API Server
+#
+#   Author: Jason A. Cox
+#   23 Sept 2023
+#   https://github.com/jasonacox/TinyLLM
+#
+#   Based on: https://github.com/abetlen/llama-cpp-python/blob/main/docker/cuda_simple/Dockerfile
+
 # Use a base image
-#FROM python:3.10
-FROM ubuntu
+FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
 
 # Set environment variables
 ENV MODEL=models/llama-2-7b-chat.Q5_K_M.gguf
@@ -8,42 +15,45 @@ ENV N_GPU_LAYERS=32
 ENV HOST=0.0.0.0
 ENV PORT=8000
 
-# Install CUDA
-# RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-# RUN sudo dpkg -i cuda-keyring_1.1-1_all.deb
-# RUN sudo apt-get update
-# RUN sudo apt-get -y install cuda
-
-# Install Python
-RUN apt-get update && \
-    apt-get install -y \
-        python3-pip \
-        python3-dev \
-        libglib2.0-0
-
-# Install the 'llama-cpp-python' package
-RUN CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python
-RUN CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python[server]
-
-# Copy local files into container
-# COPY . .
-
 # Set the working directory
 WORKDIR /app
 
-# Run the llama_cpp.server command
-CMD python3 -m llama_cpp.server --model "$MODEL" --n_gpu_layers $N_GPU_LAYERS --host "$HOST" --port $PORT
+# Install Python
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y git build-essential \
+    python3 python3-pip gcc wget \
+    ocl-icd-opencl-dev opencl-headers clinfo \
+    libclblast-dev libopenblas-dev \
+    && mkdir -p /etc/OpenCL/vendors && echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+
+# Copy local files into container
+COPY start.sh .
+
+# Setting build related env vars
+ENV CUDA_DOCKER_ARCH=all
+ENV LLAMA_CUBLAS=1
+
+# Install depencencies
+RUN python3 -m pip install --upgrade pip pytest cmake scikit-build setuptools fastapi uvicorn sse-starlette pydantic-settings starlette-context
+
+# Install llama-cpp-python (build with cuda)
+RUN CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
+
+# Run the server
+CMD python3 -m llama_cpp.server --model "$MODEL" --n_gpu_layers $N_GPU_LAYERS --port $PORT
 
 # Network
 EXPOSE $PORT
 
+# Example docker run:
 # docker run \
+#     --runtime=nvidia --gpus all \
 #     -d \
 #     -p 8000:8000 \
-#     -v models:/app/models \
+#     -v ./models:/app/models \
 #     -e MODEL=models/llama-2-7b-chat.Q5_K_M.gguf \
 #     -e N_GPU_LAYERS=32 \
-#     -e HOST=localhost \
+#     -e HOST=0.0.0.0 \
 #     -e PORT=8000 \
 #     --name llmserver \
 #     --restart unless-stopped \
