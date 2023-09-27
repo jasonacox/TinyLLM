@@ -2,6 +2,18 @@
 
 This is a web based python flask app that allows you to chat with a LLM using the OpenAI API. To run the web server:
 
+# Docker
+
+```bash
+# Build container
+./build.sh
+
+# Run container
+./run.sh
+```
+
+# Manual
+
 ```bash
 # Install required packages
 pip install openai flask flask-socketio
