@@ -19,8 +19,7 @@ ENV DEBUG="False"
 WORKDIR /app
 
 # Copy local files into container
-COPY server.py .
-COPY templates/* .
+COPY . .
 
 # Install depencencies
 RUN pip install openai flask flask-socketio
