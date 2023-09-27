@@ -58,7 +58,7 @@ To test the LLM, you will need to run the [chatbot](https://github.com/jasonacox
 python3 ../chat.py
 ```
 
-```bash
+```
 ChatBot - Greetings! My name is Jarvis. Enter an empty line to quit chat.
 
 > Hi 
