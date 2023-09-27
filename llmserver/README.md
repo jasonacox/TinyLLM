@@ -6,6 +6,8 @@ The `llmserver` is a docker hosted version of the python llama_cpp.server which 
 
 ### Install Nvidia Support for Docker
 
+You can also run the `setup.sh` script.
+
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
   && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
@@ -20,13 +22,15 @@ sudo systemctl restart docker
 
 ### Create Container
 
-Note: This will take a while to download and set up.
+This will take a while to download and set up. You can also run `build.sh`.
 
 ```bash
 docker build -t llmserver .
 ```
 
 ### Run Container
+
+This will launch llmserver as a service, listening on port 8000. You can also run `run.sh`.
 
 ```bash
 docker run \
