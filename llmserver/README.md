@@ -73,3 +73,32 @@ Jarvis> Certainly! If I had to choose a color, I would select blue as it is a ca
 
 Jarvis> Excellent choice! Green is a vibrant and natural color that symbolizes growth, harmony, and balance. It's also the color of many living things, including plants and trees. Is there anything else you would like to know or discuss?
 ```
+
+## Optional Manual Setup
+
+### Run as a Service
+
+You can set up a Linux service using the tinyllm.service file:
+
+```bash
+# Clone this project for helper files
+git clone https://github.com/jasonacox/TinyLLM.git
+cd TinyLLM
+
+# Edit the tinyllm.service to match your environment (ExecStart, WorkingDirectory & User)
+vim tinyllm.service
+
+# Copy the service file into systemd
+sudo cp tinyllm.service /etc/systemd/system/
+
+# Copy the init.d file for tinyllm
+sudo cp tinyllm /etc/init.d
+
+# Start and activate the service
+sudo /etc/init.d/tinyllm start
+sudo /etc/init.d/tinyllm enable
+
+# Check status and logs
+sudo /etc/init.d/tinyllm status
+sudo /etc/init.d/tinyllm logs
+```
