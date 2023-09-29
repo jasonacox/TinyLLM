@@ -40,7 +40,7 @@ from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 import openai
 
-VERSION = "v0.1"
+VERSION = "v0.2"
 
 # Configuration Settings - Showing local LLM
 openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            # Required, use bogus string for Llama.cpp
