@@ -1,6 +1,8 @@
 # Web Based Chatbot
 
-This is a web based python flask app that allows you to chat with a LLM using the OpenAI API. To run the web server:
+This is a web based python flask app that allows you to chat with a LLM using the OpenAI API. 
+
+The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. The examples below use a Llama 2 7B model served up with the OpenAI API compatible [llmserver](https://github.com/jasonacox/TinyLLM/tree/main/llmserver) on an Intel i5 systems with an Nvidia GeForce GTX 1060 GPU.
 
 # Docker
 
@@ -16,11 +18,10 @@ This is a web based python flask app that allows you to chat with a LLM using th
 
 ```bash
 # Install required packages
-pip install openai flask flask-socketio
+pip install openai flask flask-socketio bs4
 
-# Edit the server.py to adjust the global settings for your environment (e.g. openai.api_base)
-# Run the chatbot web server
-python3 server.py
+# Run the chatbot web server - change the base URL to be where you host your llmserver
+OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 ```
 
 ## Example Session
