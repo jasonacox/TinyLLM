@@ -22,7 +22,7 @@ WORKDIR /app
 COPY . .
 
 # Install depencencies
-RUN pip install openai flask flask-socketio
+RUN pip install openai flask flask-socketio bs4
 
 # Run the server
 CMD ["python3", "server.py"]

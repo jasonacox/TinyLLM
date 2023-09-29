@@ -12,7 +12,7 @@ Features:
   * Uses response stream to render LLM chunks instead of waiting for full response
 
 Requirements:
-  * pip install openai flask flask-socketio
+  * pip install openai flask flask-socketio bs4
 
 Environmental variables:
   * OPENAI_API_KEY - Required only for OpenAI
