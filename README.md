@@ -79,7 +79,7 @@ This example model was run on a Ubuntu Linux host with an Intel i5-6500 CPU @ 3.
 
 https://github.com/jasonacox/ProtosAI/assets/836718/285101a0-1045-441d-9960-26d6c251db11
 
-## Python Interface
+## Python API
 
 The models built or downloaded here can be used by the [LLaMa-cpp-python](https://github.com/abetlen/llama-cpp-python) project.
 
@@ -111,6 +111,8 @@ print(output['choices'][0]['text'])
 
 The llama-cpp-python library has a built in OpenAI API compatible server. This can be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
 
+### Manual Setup
+
 ```bash
 # Install Server that uses OpenAI API
 CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]
@@ -123,35 +125,11 @@ python3 -m llama_cpp.server \
 
 # It will listen on port 8000
 ```
+### Run via Docker or Service
 
-### Run as a Service
+See instructions here: https://github.com/jasonacox/TinyLLM/tree/main/llmserver 
 
-You can set up a Linux service using the [tinyllm.service](tinyllm.service) file:
-
-```bash
-# Clone this project for helper files
-git clone https://github.com/jasonacox/TinyLLM.git
-cd TinyLLM
-
-# Edit the tinyllm.service to match your environment (ExecStart, WorkingDirectory & User)
-vim tinyllm.service
-
-# Copy the service file into systemd
-sudo cp tinyllm.service /etc/systemd/system/
-
-# Copy the init.d file for tinyllm
-sudo cp tinyllm /etc/init.d
-
-# Start and activate the service
-sudo /etc/init.d/tinyllm start
-sudo /etc/init.d/tinyllm enable
-
-# Check status and logs
-sudo /etc/init.d/tinyllm status
-sudo /etc/init.d/tinyllm logs
-```
-
-## Chat using API
+## CLI Chat using API
 
 See the example [chat.py](chat.py) CLI Chatbot script that connects to this server and hosts
 an interactive session with the LLM.
@@ -210,11 +188,10 @@ The above CLI chat was converted to a web based python flask app in the [chatbot
 
 ```bash
 # Install required packages
-pip install openai flask flask-socketio
+pip install openai flask flask-socketio bs4
 
-# Edit the server.py to adjust the global settings for your environment (e.g. openai.api_base)
-# Run the chatbot web server
-python3 server.py
+# Run the chatbot web server - change the base URL to be where you host your llmserver
+OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 ```
 
 Open http://127.0.0.1:5000 - Example session:
