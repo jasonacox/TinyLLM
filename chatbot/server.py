@@ -31,10 +31,11 @@ https://github.com/jasonacox/TinyLLM
 
 """
 import os
+import time
 import datetime
 import threading
-import time
-
+import requests
+from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 import openai
@@ -55,6 +56,7 @@ socketio = SocketIO(app)
 # Globals
 prompt = ""
 visible = True
+remember = True
 
 # Set base prompt and initialize the context array for conversation dialogue
 current_date = datetime.datetime.now()
@@ -64,7 +66,7 @@ context = [{"role": "system", "content": baseprompt}]
 
 # Function - Send user prompt to LLM for response
 def ask(prompt):
-    global context
+    global context, remember
     # remember context
     context.append({"role": "user", "content": prompt})
     response = openai.ChatCompletion.create(
@@ -74,7 +76,29 @@ def ask(prompt):
         temperature=0.7,
         messages=context,
     )
+    if not remember:
+        remember =True
+        context.pop()
     return response
+
+def extract_text_from_blog(url):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            # Parse the HTML content of the page
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Find and extract all text within paragraph (p) tags
+            paragraphs = soup.find_all('p')
+
+            # Concatenate the text from all paragraphs
+            blog_text = '\n'.join([p.get_text() for p in paragraphs])
+
+            return blog_text
+        else:
+            print(f"Failed to fetch the webpage. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
 
 @app.route('/')
 def index():
@@ -92,12 +116,24 @@ def version():
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
-    global prompt, visible
+    global prompt, visible, remember
     # Handle incoming user prompts and store them
     data = request.json
     print("Received Data:", data)
-    prompt = data["prompt"]
+    p = data["prompt"]
     visible = data["show"]
+    # Did we get asked to fetch a URL?
+    if p.startswith("http"):
+        # fetch blog
+        url = p
+        visible = False
+        remember = False # Don't add blog to context window, just summary
+        blogtext = extract_text_from_blog(p.strip())
+        print(f"* Reading {len(blogtext)} bytes {url}")
+        socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'})
+        prompt = "Summarize the following text:\n" + blogtext
+    else:
+        prompt = p
     return jsonify({'status': 'Message received'})
 
 # Convert each character to its hex representation
