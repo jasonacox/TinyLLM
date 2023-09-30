@@ -1,6 +1,8 @@
 # TinyLLM
 This project helps you build a small locally hosted LLM using consumer grade hardware. The intent is to be able to build, train, tune and run LLM models locally.
 
+TinyLLM? Yes, the name is a bit of a contradiction, but it means well. It's all about putting a large language model (LLM) on a tiny system that still delivers acceptable performance.
+
 ## Hardware Specs
 
 The reference hardware:
@@ -125,7 +127,8 @@ python3 -m llama_cpp.server \
 
 # It will listen on port 8000
 ```
-### Run via Docker or Service
+
+### Run as a Service
 
 See instructions here: https://github.com/jasonacox/TinyLLM/tree/main/llmserver 
 
@@ -184,11 +187,12 @@ Jarvis> You're welcome! Is there anything else I can assist you with?
 
 ## Web Based Chatbot
 
-The above CLI chat was converted to a web based python flask app in the [chatbot](chatbot) folder. To run the web server:
+The above CLI chat was converted to a web based python flask app in the [chatbot](chatbot) folder. To run the web server you can use the docker container as specified in the chatbot folder or do this manually:
 
 ```bash
 # Install required packages
 pip install openai flask flask-socketio bs4
+cd chatbot
 
 # Run the chatbot web server - change the base URL to be where you host your llmserver
 OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
@@ -197,7 +201,6 @@ OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 Open http://127.0.0.1:5000 - Example session:
 
 <img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
-
 
 ## Train
 
