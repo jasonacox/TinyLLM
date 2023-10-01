@@ -35,6 +35,7 @@ import time
 import datetime
 import threading
 import requests
+import signal
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
@@ -210,7 +211,11 @@ update_thread = threading.Thread(target=send_update)
 update_thread.daemon = True  # Thread will terminate when the main program exits
 update_thread.start()
 
+def sigTermHandler(signum, frame):
+    raise SystemExit
+
 # Start server
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, sigTermHandler);
     socketio.run(app, host='0.0.0.0', port=5000, debug=DEBUG, allow_unsafe_werkzeug=True)
 
