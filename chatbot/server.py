@@ -40,7 +40,10 @@ from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 import openai
 
-VERSION = "v0.2"
+VERSION = "v0.3"
+
+MAXTOKENS = 2048
+TEMPERATURE = 0.7
 
 # Configuration Settings - Showing local LLM
 openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            # Required, use bogus string for Llama.cpp
@@ -67,15 +70,38 @@ context = [{"role": "system", "content": baseprompt}]
 # Function - Send user prompt to LLM for response
 def ask(prompt):
     global context, remember
-    # remember context
-    context.append({"role": "user", "content": prompt})
-    response = openai.ChatCompletion.create(
-        model=mymodel,
-        max_tokens=1024,
-        stream=True, # Send response chunks as LLM computes next tokens
-        temperature=0.7,
-        messages=context,
-    )
+
+    response = False
+    print(f"Context size = {len(context)}")
+    while not response:
+        try:
+            # remember context
+            context.append({"role": "user", "content": prompt})
+            response = openai.ChatCompletion.create(
+                model=mymodel,
+                max_tokens=MAXTOKENS,
+                stream=True, # Send response chunks as LLM computes next tokens
+                temperature=TEMPERATURE,
+                messages=context,
+            )
+        except openai.error.OpenAIError as e:
+            print(f"ERROR {e}")
+            context.pop()
+            if "maximum context length" in str(e):
+                if len(prompt) > 1000:
+                    # assume we have very large prompt - cut out the middle
+                    prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
+                    print(f"Reduce prompt size - now {len(prompt)}")
+                elif len(context) > 4:
+                    # our context has grown too large, truncate the top
+                    context = context[:1] + context[3:]
+                    print(f"Truncate context: {len(context)}")
+                else:
+                    # our context has grown too large, reset
+                    context = [{"role": "system", "content": baseprompt}]   
+                    print(f"Reset context {len(context)}")
+                    socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'})
+
     if not remember:
         remember =True
         context.pop()
@@ -143,7 +169,7 @@ def string_to_hex(input_string):
 
 # Continuous thread to send updates to connected clients
 def send_update(): 
-    global x, prompt
+    global x, prompt, context
 
     while True:
         if prompt == "":
@@ -152,23 +178,30 @@ def send_update():
             update_text = prompt 
             if visible:
                 socketio.emit('update', {'update': update_text, 'voice': 'user'})
-            # Ask LLM for answers
-            response=ask(prompt)
-            completion_text = ''
-            # iterate through the stream of events and print it
-            for event in response:
-                event_text = event['choices'][0]['delta']
-                if 'content' in event_text:
-                    chunk = event_text.content
-                    completion_text += chunk
-                    if DEBUG:
-                        print(string_to_hex(chunk), end="")
-                        print(f" = [{chunk}]")
-                    socketio.emit('update', {'update': chunk, 'voice': 'ai'})
+            try:
+                # Ask LLM for answers
+                response=ask(prompt)
+                completion_text = ''
+                # iterate through the stream of events and print it
+                for event in response:
+                    event_text = event['choices'][0]['delta']
+                    if 'content' in event_text:
+                        chunk = event_text.content
+                        completion_text += chunk
+                        if DEBUG:
+                            print(string_to_hex(chunk), end="")
+                            print(f" = [{chunk}]")
+                        socketio.emit('update', {'update': chunk, 'voice': 'ai'})
+                # remember context
+                context.append({"role": "assistant", "content" : completion_text})
+            except:
+                # Unable to process prompt, give error
+                socketio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'})
+                # Reset context
+                context = [{"role": "system", "content": baseprompt}]
+            # Signal response is done
             socketio.emit('update', {'update': '', 'voice': 'done'})
             prompt = ''
-            # remember context
-            context.append({"role": "assistant", "content" : completion_text})
             if DEBUG:
                 print(f"AI: {completion_text}")
 
