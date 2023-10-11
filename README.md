@@ -87,7 +87,7 @@ The models built or downloaded here can be used by the [LLaMa-cpp-python](https:
 
 ```bash
 # Linux OS - Build and Install with Nvidia GPU support
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.7
 ```
 
 This will also build llama.cpp but includes the python bindings. Next, if you downloaded the Llama-2 LLM model above, you can test it using this python script:
@@ -117,7 +117,7 @@ The llama-cpp-python library has a built in OpenAI API compatible server. This c
 
 ```bash
 # Install Server that uses OpenAI API
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]==0.2.7
 
 # Run the API Server
 python3 -m llama_cpp.server \
