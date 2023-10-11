@@ -28,6 +28,18 @@ ip install qdrant-client sentence-transformers
 
 The example script `qdrant.py` demonstrates how to embed text documents into a vector database. This example uses blog posts, embeds the articles using a sentence transformer and stores them in the qdrant database.
 
+Example Run
+
+```txt
+Prompt: Give me some facts about solar.
+Top 5 Documents found:
+ * California Solar and Net Metering
+ * Halfway Out of the Dark
+ * Richard Feynman on Light
+ * Solar Powered WiFi Weather Station
+ * Make a Difference
+```
+
 ## Chroma
 
 ```bash
