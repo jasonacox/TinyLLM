@@ -1,44 +1,49 @@
 # Retrieval Augmented Generation (RAG)
 
-** This is a work in progress **
-
 Retrieval-Augmented Generation (RAG) is an architecture that combines the strengths of retrieval-based and generation-based language models. The basic idea is to use a retrieval model to generate high-quality text, and then augment this text with additional information from a generative model. This allows RAG models to generate more accurate and informative text than either retrieval or generation models alone.
 
-For TinyLLM we are going to use Qdrant (pronounced quadrant) as a vector databases to store our local corpus or data that we want to search and use for our LLM.
+This will explore the following vector databases:
 
-## Background
+* [Qdrant](https://qdrant.tech/) (pronounced quadrant) - vector database & vector similarity search engine
+* [Chroma](https://www.trychroma.com/) - the AI-native open-source embedding database
 
-External text files are processed, embedded and stored in the Qdrant vector database. When a user query comes in for TinyLLM, it will first search the vector database and will present that as context in the prompt to the LLM. This will allow the LLM to have relevant local data to answer. The system prompt can guide the LLM to only answer based on the context or to use its extended model knowledge to fill in answer.
+These are both an open-source vector database systems that store and retrieve vector embeddings. They are designed to store embeddings with associated metadata for use by large language models. Additional metadata (e.g. url, title, doc_type) can be stored along with the embedded payload.
 
-## Steps
-
-1. Embed text documents into Qdrant vector database
-2. Build chatbot to augment user prompts with relevant context.
-3. Call LLM for text generation.
-
-## Setup
-
-The following assumptions:
-* llmserver is already running on port 
-
-### Qdrant
+## Qdrant
 
 Qdrant server can be started by using the [setup.sh](setup.sh) script.
 
 ```bash
+# Start qdrant container
 docker run -p 6333:6333 \
     -d \
     --name qdrant \
     -v $PWD/storage:/qdrant/storage \
     -v $PWD/config/config.yaml:/qdrant/config/production.yaml \
     qdrant/qdrant
+
+# Install python libraries
+ip install qdrant-client sentence-transformers 
 ```
 
-### Import Documents
+The example script `qdrant.py` demonstrates how to embed text documents into a vector database. This example uses blog posts, embeds the articles using a sentence transformer and stores them in the qdrant database.
 
-See the `import.py` script...
+## Chroma
 
-### Query LLM with Local Documents Context
+```bash
+# Install python libraries
+pip install sentence-transformers chromadb
+```
+
+The example script `chroma.py` demonstrates how to embed text documents into a vector database. This example uses blog posts, embeds the articles using a sentence transformer and stores them in the qdrant database.
+
+## TinyLLM Integration
+
+External text files are processed, embedded and stored in the vector database. When a user query comes in for TinyLLM, it will first search the vector database and will present that as context in the prompt to the LLM. This will allow the LLM to have relevant local data to answer. The system prompt can guide the LLM to only answer based on the context or to use its extended model knowledge to fill in answer.
+
+1. Embed text documents into vector database.
+2. Build chatbot to augment user prompts with relevant context.
+3. Call LLM for text generation.
 
 ```python
   context_str = ""

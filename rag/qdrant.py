@@ -1,11 +1,14 @@
 #!/usr/bin/python3
 """
-Fetch blog data from jasonacox.com and embed into vector database. This uses
-a local Llama-2 for the embedding calculations.
+Fetch blog data from jasonacox.com and embed into a qdrant vector database. 
+This uses a sentence transformer for the embedding calculations.
 
 Author: Jason A. Cox
-8 October 2023
+10 October 2023
 https://github.com/jasonacox/TinyLLM/
+
+Requirements:
+    * pip install qdrant-client sentence-transformers 
 
 Credits:
     * Jacob Marks - How I Turned My Company’s Docs into a Searchable Database with OpenAI
@@ -21,31 +24,30 @@ import uuid
 from html import unescape
 
 import httpx
-import openai
 import qdrant_client as qc
 import qdrant_client.http.models as qmodels
 
-# Configuration Settings - Showing local LLM and Qdrant
-openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            # Required, use bogus string for Llama.cpp
-openai.api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1") # Use API endpoint or comment out for OpenAI
-agentname = os.environ.get("AGENT_NAME", "Jarvis")                              # Set the name of your bot
-MODEL = os.environ.get("MY_MODEL", "models/7B/gguf-model.bin")                  # Pick model to use e.g. gpt-3.5-turbo for OpenAI
+from sentence_transformers import SentenceTransformer
+
+# Configuration Settings
+MODEL = os.environ.get("MY_MODEL", "all-MiniLM-L6-v2")
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "mylibrary") 
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
 
+# Sentence Transformer Setup
+print("Sentence Transformer starting...")
+model = SentenceTransformer(MODEL, device="cuda") 
+
 # Qdrant Setup
+print("Connecting to Qdrant DB...")
 client = qc.QdrantClient(url=QDRANT_HOST)
 METRIC = qmodels.Distance.DOT
-DIMENSION = 4096
+DIMENSION = model.get_sentence_embedding_dimension()
 
 # Create embeddings for text
 def embed_text(text):
-    response = openai.Embedding.create(
-        input=text,
-        model=MODEL
-    )
-    embeddings = response['data'][0]['embedding']
+    embeddings = model.encode(text, convert_to_tensor=True)
     return embeddings
 
 # Initialize qdrant collection (will erase!)
@@ -123,6 +125,7 @@ data = httpx.get(feed).json()
 create_index()
 
 # Loop to read in all articles - ignore any errors
+print("Indexing blog articles...")  
 n = 1
 for item in data["items"]:
     title = item["title"]
@@ -137,5 +140,15 @@ for item in data["items"]:
         print(" - ERROR: Ignoring")
     n = n + 1
 
-# Done
+# Query the collection - TEST
+prompt = "Give me some facts about solar."
+query_result = query_index(prompt, top_k=5)
 
+# Print results
+print("")
+print("Prompt: " + prompt)
+print(f"Top {5} Documents found:")
+for result in query_result:
+    print(" * " + result['title'])
+
+# Done
