@@ -30,6 +30,8 @@ The example script `qdrant.py` demonstrates how to embed text documents into a v
 
 Example Run
 
+<img width="646" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/db92f2b0-033c-4743-84d0-f7a70d629348">
+
 ```txt
 Prompt: Give me some facts about solar.
 Top 5 Documents found:
