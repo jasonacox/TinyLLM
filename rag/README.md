@@ -84,3 +84,4 @@ External text files are processed, embedded and stored in the vector database. W
 
 * Jacob Marks - How I Turned My Company’s Docs into a Searchable Database with OpenAI - https://towardsdatascience.com/how-i-turned-my-companys-docs-into-a-searchable-database-with-openai-4f2d34bd8736
  * Jason Fan - How to connect Llama 2 to your own data, privately - https://jfan001.medium.com/how-to-connect-llama-2-to-your-own-data-privately-3e14a73e82a2
+ * Sentence Transformers - https://www.sbert.net/index.html
