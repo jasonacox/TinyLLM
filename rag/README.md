@@ -15,6 +15,7 @@ Qdrant server can be started by using the [setup.sh](setup.sh) script.
 
 ```bash
 # Start qdrant container
+cd qdrant
 docker run -p 6333:6333 \
     -d \
     --name qdrant \
@@ -23,7 +24,7 @@ docker run -p 6333:6333 \
     qdrant/qdrant
 
 # Install python libraries
-ip install qdrant-client sentence-transformers 
+pip install qdrant-client sentence-transformers 
 ```
 
 The example script `qdrant.py` demonstrates how to embed text documents into a vector database. This example uses blog posts, embeds the articles using a sentence transformer and stores them in the qdrant database.
