@@ -1,4 +1,5 @@
 # TinyLLM
+
 This project helps you build a small locally hosted LLM using consumer grade hardware. The intent is to be able to build, train, tune and run LLM models locally.
 
 TinyLLM? Yes, the name is a bit of a contradiction, but it means well. It's all about putting a large language model (LLM) on a tiny system that still delivers acceptable performance.
@@ -201,6 +202,12 @@ OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 Open http://127.0.0.1:5000 - Example session:
 
 <img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
+
+## Retrieval-Augmented Generation (RAG)
+
+Retrieval-Augmented Generation (RAG) is an architecture that combines the strengths of retrieval-based and generation-based language models. The basic idea is to use a retrieval model to generate high-quality text, and then augment this text with additional information from a generative model. This allows RAG models to generate more accurate and informative text than either retrieval or generation models alone.
+
+See the [rag](https://github.com/jasonacox/TinyLLM/tree/main/rag) folder for information about setting up the vector database, embedding your documents and integrating with the LLM (e.g. llama).
 
 ## Train
 

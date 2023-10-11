@@ -1,50 +1,24 @@
-# llmserver
+# LLM Server
 
-The `llmserver` is a docker hosted version of the python llama_cpp.server which serves up a LLM with OpenAI API interface.
+This creates an instance of llama_cpp.server which serves up a LLM with OpenAI API interface.
 
 ## Setup
 
-### Install Nvidia Support for Docker
-
-You can also run the `setup.sh` script.
-
 ```bash
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-  && \
-    sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-```
+# Install Python Libraries with Nvidia GPU support - Pin to v0.2.7 for now
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.7
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]==0.2.7
 
-### Create Container
+# Download the LLaMA-2 7B GGUF Q-5bit model from Hugging Face.
+cd models
+wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
+cd ..
 
-This will take a while to download and set up. You can also run `build.sh`.
-
-```bash
-docker build -t llmserver .
-```
-
-### Run Container
-
-This will launch llmserver as a service, listening on port 8000. You can also run `run.sh`.
-
-```bash
-docker run \
-    --runtime=nvidia --gpus all \
-    -d \
-    -p 8000:8000 \
-    -v ./models:/app/models \
-    -e MODEL=models/llama-2-7b-chat.Q5_K_M.gguf \
-    -e N_GPU_LAYERS=32 \
-    -e HOST=0.0.0.0 \
-    -e PORT=8000 \
-    --name llmserver \
-    --restart unless-stopped \
-    llmserver
+# Run Test - API Server
+python3 -m llama_cpp.server \
+    --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
+    --host localhost \
+    --n_gpu_layers 32 
 ```
 
 ## Test
@@ -74,11 +48,9 @@ Jarvis> Certainly! If I had to choose a color, I would select blue as it is a ca
 Jarvis> Excellent choice! Green is a vibrant and natural color that symbolizes growth, harmony, and balance. It's also the color of many living things, including plants and trees. Is there anything else you would like to know or discuss?
 ```
 
-## Optional Manual Setup
+### Option - Run as a Service
 
-### Run as a Service
-
-You can set up a Linux service using the tinyllm.service file:
+You can set up a Linux service using the `tinyllm.service` file:
 
 ```bash
 # Clone this project for helper files
@@ -101,4 +73,38 @@ sudo /etc/init.d/tinyllm enable
 # Check status and logs
 sudo /etc/init.d/tinyllm status
 sudo /etc/init.d/tinyllm logs
+```
+
+## Optional - Docker Setup
+
+You can also run the `setup.sh` script.
+
+```bash
+# First - Install Nvidia Support for Docker
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
+  && \
+    sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# Second - Build container
+docker build -t llmserver .
+
+# Third - Run container
+docker run \
+    --runtime=nvidia --gpus all \
+    -d \
+    -p 8000:8000 \
+    -v ./models:/app/models \
+    -e MODEL=models/llama-2-7b-chat.Q5_K_M.gguf \
+    -e N_GPU_LAYERS=32 \
+    -e HOST=0.0.0.0 \
+    -e PORT=8000 \
+    --name llmserver \
+    --restart unless-stopped \
+    llmserver
 ```
