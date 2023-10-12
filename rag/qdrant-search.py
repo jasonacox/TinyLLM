@@ -69,7 +69,7 @@ def query_index(query, top_k=5):
 print("Connected to Vector Database\n")
 print("Enter a query or 'q' to quit.")
 while True:
-    prompt = input("Query: ")
+    prompt = input("\nQuery: ")
     if prompt in ["q", "Q", ""]:
         break
 
