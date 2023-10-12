@@ -3,7 +3,7 @@
 Fetch blog data from jasonacox.com and embed into a qdrant vector database. 
 This uses a sentence transformer for the embedding calculations.
 
-BATCH DOCUMENT VERSION - This version uploads a batch of documents at a time.
+SINGLE DOCUMENT VERSION - This version uploads a single document at a time.
 
 Author: Jason A. Cox
 10 October 2023
@@ -76,6 +76,25 @@ def create_vector(content, title, page_url, doc_type="text"):
     }
     return uid, vector, payload
 
+# Adds document vector to qdrant database
+def add_doc_to_index(text, title, url, doc_type="text"):
+    ids = []
+    vectors = []
+    payloads = []
+    uid, vector, payload = create_vector(text,title,url, doc_type)
+    ids.append(uid)
+    vectors.append(vector)
+    payloads.append(payload)
+    ## Add vectors to collection
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=qmodels.Batch(
+            ids = ids,
+            vectors=vectors,
+            payloads=payloads
+        ),
+    )
+
 # Find document closely related to query
 def query_index(query, top_k=5):
     vector = embed_text(query)
@@ -111,9 +130,6 @@ create_index()
 # Loop to read in all articles - ignore any errors
 print("Indexing blog articles...")  
 n = 1
-ids = []
-vectors = []
-payloads = []
 for item in data["items"]:
     title = item["title"]
     url = item["url"]
@@ -122,24 +138,10 @@ for item in data["items"]:
     body = ''.join(char for char in body if char in string.printable)
     try:
         print(f"Adding: {n} : {title} [size={len(body)}]")
-        uid, vector, payload = create_vector(body, title, url, doc_type="text")
-        ids.append(uid)
-        vectors.append(vector)
-        payloads.append(payload)
+        add_doc_to_index(body, title, url, doc_type="text")
     except:
-        print(" - EMBEDDING ERROR: Ignoring")
+        print(" - ERROR: Ignoring")
     n = n + 1
-    
-## Add vectors to collection
-print("Adding vectors to collection...")
-client.upsert(
-    collection_name=COLLECTION_NAME,
-    points=qmodels.Batch(
-        ids = ids,
-        vectors=vectors,
-        payloads=payloads
-    ),
-)
 
 # Query the collection - TEST
 prompt = "Give me some facts about solar."
