@@ -12,10 +12,11 @@ Features:
   * Uses response stream to render LLM chunks instead of waiting for full response
   * Multithreaded to support multiple clients
   * Supports commands to reset context, get version, etc.
-  * Supports RAG prompts (TODO)
+  * Supports RAG prompts (BETA)
 
 Requirements:
-  * pip install openai flask flask-socketio bs4
+  * pip install openai flask flask-socketio bs4 
+  * pip install qdrant-client sentence-transformers pydantic~=2.4.2
 
 Environmental variables:
   * OPENAI_API_KEY - Required only for OpenAI
@@ -33,18 +34,22 @@ Author: Jason A. Cox
 https://github.com/jasonacox/TinyLLM
 
 """
+# Import Libraries
 import os
 import time
 import datetime
 import threading
-import requests
 import signal
+import requests
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 import openai
+import qdrant_client as qc
+import qdrant_client.http.models as qmodels
+from sentence_transformers import SentenceTransformer
 
-VERSION = "v0.4"
+VERSION = "v0.5"
 
 MAXTOKENS = 2048
 TEMPERATURE = 0.7
@@ -54,10 +59,47 @@ MAXCLIENTS = 10
 openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            # Required, use bogus string for Llama.cpp
 openai.api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1") # Use API endpoint or comment out for OpenAI
 agentname = os.environ.get("AGENT_NAME", "Jarvis")                              # Set the name of your bot
-mymodel = os.environ.get("MY_MODEL", "models/7B/gguf-model.bin")                # Pick model to use e.g. gpt-3.5-turbo for OpenAI
+mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")                # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 DEBUG = os.environ.get("DEBUG", "False") == "True"
+STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")
+QDRANT_HOST = os.environ.get("QDRANT_HOST", "") # Empty = disable RAG support
+DEVICE = os.environ.get("DEVICE", "cuda")
+RESULTS = 2
+
+# Sentence Transformer Setup
+if QDRANT_HOST:
+    print("Sentence Transformer starting...")
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    model = SentenceTransformer(STMODEL, device=DEVICE) 
+
+    # Qdrant Setup
+    print("Connecting to Qdrant DB...")
+    qdrant = qc.QdrantClient(url=QDRANT_HOST)
+
+# Create embeddings for text
+def embed_text(text):
+    embeddings = model.encode(text, convert_to_tensor=True)
+    return embeddings
+
+# Find document closely related to query
+def query_index(query, library, top_k=5):
+    vector = embed_text(query)
+    results = qdrant.search(
+        collection_name=library,
+        query_vector=vector,
+        limit=top_k,
+        with_payload=True,
+    )
+    found=[]
+    for res in results:
+        found.append({"title": res.payload["title"],
+                        "text": res.payload["text"],
+                        "url": res.payload["url"],
+                        "score": res.score})
+    return found
 
 # Configure Flask App and SocketIO
+print("Starting server...")
 app = Flask(__name__)
 socketio = SocketIO(app)
 
@@ -190,7 +232,7 @@ def handle_message(data):
     client[session_id]["visible"] = data["show"]
     # Did we get asked to fetch a URL?
     if p.startswith("http"):
-        # fetch blog
+        # Summarize text at URL
         url = p
         client[session_id]["visible"] = False
         client[session_id]["remember"] = False # Don't add blog to context window, just summary
@@ -208,9 +250,11 @@ def handle_message(data):
             client[session_id]["prompt"] = 'Hi'
             client[session_id]["visible"] = False
         elif command == "version":
+            # Display version
             socketio.emit('update', {'update': '[TinyLLM Version: %s - Session: %s]' % ( VERSION, session_id ), 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
         elif command == "sessions":
+            # Display sessions
             result = ""
             x = 1
             for s in client:
@@ -219,6 +263,7 @@ def handle_message(data):
             socketio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
         else:
+            # Display help
             socketio.emit('update', {'update': '[Commands: /reset /version /help]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
     elif p.startswith("!"):
@@ -229,10 +274,25 @@ def handle_message(data):
         if not library or not prompt:
             socketio.emit('update', {'update': '[Usage: !{library} {prompt}]', 'voice': 'user'},room=session_id)
         else:
-            print(f"Using library {library} with prompt {prompt}")
-            socketio.emit('update', {'update': '[RAG Prompt: Using library: %s]' % library, 'voice': 'user'},room=session_id)
-            # Query Vector Database for library
-            # TODO
+            if QDRANT_HOST:
+                print(f"Using library {library} with prompt {prompt}")
+                socketio.emit('update', {'update': '[RAG Prompt: Reading %s...]' % library, 'voice': 'user'},room=session_id)
+                # Query Vector Database for library
+                results = query_index(prompt, library, top_k=RESULTS)
+                context_str = ""
+                client[session_id]["visible"] = False # Don't show prompt
+                client[session_id]["remember"] = False # Don't add blog to context window, just summary
+                for result in results:
+                    context_str += f"{result['title']}: {result['text']}\n"
+                    print(" * " + result['title'])
+                client[session_id]["prompt"] = (
+                    "[BEGIN]\n"
+                    f"{context_str}"
+                    "\n[END]\n"
+                    f"Using the text between [BEGIN] and [END] answer the question: {prompt}\n"
+                )
+            else:
+                socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
     else:
         client[session_id]["prompt"] = p
     return jsonify({'status': 'Message received'})
