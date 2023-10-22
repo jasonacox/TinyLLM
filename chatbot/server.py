@@ -266,6 +266,33 @@ def handle_message(data):
             # Display help
             socketio.emit('update', {'update': '[Commands: /reset /version /help]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
+    elif p.startswith("@"):
+        # Lookup and pull in context from DB - Format: @library [number] [prompt]
+        parts = p[1:].split()
+        if len(parts) >= 3:
+            library = parts[0]
+            number = int(parts[1])
+            prompt = ' '.join(parts[2:])
+            
+            if QDRANT_HOST:
+                print(f"Pulling {number} entries from {library} with prompt {prompt}")
+                socketio.emit('update', {'update': '[%s...]' % p, 'voice': 'user'},room=session_id)
+                # Query Vector Database for library
+                results = query_index(prompt, library, top_k=number)
+                context_str = ""
+                client[session_id]["visible"] = False
+                client[session_id]["remember"] = True
+                for result in results:
+                    context_str += f" <li> {result['title']}: {result['text']}\n"
+                    print(" * " + result['title'])
+                print(f" = {context_str}")
+                client[session_id]["prompt"] = (
+                    f"Consider and summarize this information found on {prompt}:\n"
+                    f"{context_str}"
+                    "\n"
+                )
+        else:
+            socketio.emit('update', {'update': '[Usage: @{library} {number} {prompt}]', 'voice': 'user'},room=session_id)
     elif p.startswith("!"):
         # RAG Commands - Format: !library [prompt]
         library = p[1:].split(" ")[0]
