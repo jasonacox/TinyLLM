@@ -103,7 +103,7 @@ feed = "https://www.jasonacox.com/wordpress/feed/json"
 
 # pull blog content
 print(f"Pulling blog json feed content from {feed}...")
-data = httpx.get(feed).json()
+data = httpx.get(feed, timeout=None).json()
 
 # First time - create index and import data
 create_index()

@@ -36,7 +36,7 @@ ids = []
 tag_re = re.compile('<.*?>') # regex to remove html tags
 feed = "https://www.jasonacox.com/wordpress/feed/json"
 print(f"Pulling blog json feed content from {feed}...")
-data = httpx.get(feed).json()
+data = httpx.get(feed, timeout=None).json()
 
 # Loop to read in all articles - ignore any errors
 print("Indexing blog articles...")
