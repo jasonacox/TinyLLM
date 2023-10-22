@@ -5,7 +5,7 @@
 #   https://github.com/jasonacox/TinyLLM
 
 # Use a base image
-FROM python:3.10-alpine
+FROM python:3.10
 
 # Setting build related env vars
 ENV PORT=5000
