@@ -64,7 +64,7 @@ DEBUG = os.environ.get("DEBUG", "False") == "True"
 STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "") # Empty = disable RAG support
 DEVICE = os.environ.get("DEVICE", "cuda")
-RESULTS = 2
+RESULTS = os.environ.get("RESULTS", 1)
 
 # Sentence Transformer Setup
 if QDRANT_HOST:

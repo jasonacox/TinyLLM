@@ -14,6 +14,10 @@ ENV OPENAI_API_BASE="http://localhost:8000/v1"
 ENV AGENT_NAME="Jarvis"
 ENV MY_MODEL="models/7B/gguf-model.bin"
 ENV DEBUG="False"
+ENV DEVICE="cuda"
+ENV STMODEL="all-MiniLM-L6-v2"
+ENV QDRANT_HOST=""
+ENV RESULTS=1
 
 # Set the working directory
 WORKDIR /app
@@ -23,6 +27,7 @@ COPY . .
 
 # Install depencencies
 RUN pip install openai flask flask-socketio bs4
+RUN pip install qdrant-client sentence-transformers pydantic~=2.4.2
 
 # Run the server
 CMD ["python3", "server.py"]
