@@ -27,7 +27,7 @@ COPY . .
 
 # Install depencencies
 RUN pip install openai flask flask-socketio bs4
-RUN pip install qdrant-client sentence-transformers pydantic~=2.4.2
+RUN pip install qdrant-client sentence-transformers~=2.2.2 pydantic~=2.4.2
 
 # Run the server
 CMD ["python3", "server.py"]
