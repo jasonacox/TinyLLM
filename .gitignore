@@ -161,3 +161,6 @@ cython_debug/
 
 # LLM Models
 *.gguf
+
+# Exclude sandbox
+sandbox/

@@ -10,6 +10,9 @@ Features:
   * Works with local hosted OpenAI compatible llama-cpp-python[server]
   * Retains conversational context for LLM
   * Uses response stream to render LLM chunks instead of waiting for full response
+  * Multithreaded to support multiple clients
+  * Supports commands to reset context, get version, etc.
+  * Supports RAG prompts (TODO)
 
 Requirements:
   * pip install openai flask flask-socketio bs4
@@ -41,10 +44,11 @@ from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 import openai
 
-VERSION = "v0.3"
+VERSION = "v0.4"
 
 MAXTOKENS = 2048
 TEMPERATURE = 0.7
+MAXCLIENTS = 10
 
 # Configuration Settings - Showing local LLM
 openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            # Required, use bogus string for Llama.cpp
@@ -58,9 +62,7 @@ app = Flask(__name__)
 socketio = SocketIO(app)
 
 # Globals
-prompt = ""
-visible = True
-remember = True
+client = {}
 
 # Set base prompt and initialize the context array for conversation dialogue
 current_date = datetime.datetime.now()
@@ -69,43 +71,43 @@ baseprompt = "You are %s, a highly intelligent assistant. Keep your answers brie
 context = [{"role": "system", "content": baseprompt}]
 
 # Function - Send user prompt to LLM for response
-def ask(prompt):
-    global context, remember
+def ask(prompt, sid=None):
+    global client
 
     response = False
     print(f"Context size = {len(context)}")
     while not response:
         try:
             # remember context
-            context.append({"role": "user", "content": prompt})
+            client[sid]["context"].append({"role": "user", "content": prompt})
             response = openai.ChatCompletion.create(
                 model=mymodel,
                 max_tokens=MAXTOKENS,
                 stream=True, # Send response chunks as LLM computes next tokens
                 temperature=TEMPERATURE,
-                messages=context,
+                messages=client[sid]["context"],
             )
         except openai.error.OpenAIError as e:
             print(f"ERROR {e}")
-            context.pop()
+            client[sid]["context"].pop()
             if "maximum context length" in str(e):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
                     print(f"Reduce prompt size - now {len(prompt)}")
-                elif len(context) > 4:
+                elif len(client[sid]["context"]) > 4:
                     # our context has grown too large, truncate the top
-                    context = context[:1] + context[3:]
-                    print(f"Truncate context: {len(context)}")
+                    client[sid]["context"] = client[sid]["context"][:1] + client[sid]["context"][3:]
+                    print(f"Truncate context: {len(client[sid]['context'])}")
                 else:
                     # our context has grown too large, reset
-                    context = [{"role": "system", "content": baseprompt}]   
-                    print(f"Reset context {len(context)}")
-                    socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'})
+                    client[sid]["context"] = [{"role": "system", "content": baseprompt}]   
+                    print(f"Reset context {len(client[sid]['context'])}")
+                    socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=sid)
 
-    if not remember:
-        remember =True
-        context.pop()
+    if not client[sid]["remember"]:
+        client[sid]["remember"] =True
+        client[sid]["context"].pop()
     return response
 
 def extract_text_from_blog(url):
@@ -129,10 +131,111 @@ def extract_text_from_blog(url):
 
 @app.route('/')
 def index():
-    global context, baseprompt
-    # Reset context
-    context = [{"role": "system", "content": baseprompt}]
+    # Send the user the chatbot HTML page
     return render_template('index.html')
+
+@socketio.on('connect')
+def handle_connect():
+    session_id = request.sid
+    if session_id in client:
+        # Client reconnected - restart thread
+        client[session_id]["thread"].join()
+        print(f"Client reconnected: {session_id}")
+    else:
+        # New client connected
+        print(f"Client connected: {session_id}")
+        # Limit number of clients
+        if len(client) > MAXCLIENTS:
+            print(f"Too many clients connected: {len(client)}")
+            socketio.emit('update', {'update': 'Too many clients connected. Try again later.', 'voice': 'user'},room=session_id)
+            return
+        # Create client session
+        client[session_id]={}
+        # Initialize context for this client
+        client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
+        client[session_id]["remember"] = True
+        client[session_id]["visible"] = True
+        client[session_id]["prompt"] = ""
+        client[session_id]["stop_thread_flag"] = False
+        # Create a background thread to send updates
+        update_thread = threading.Thread(target=send_update, args=(session_id,))
+        update_thread.daemon = True  # Thread will terminate when the main program exits
+        update_thread.start()
+        client[session_id]["thread"] = update_thread
+
+    
+@socketio.on('disconnect')
+def handle_disconnect():
+    session_id = request.sid
+    print(f"Client disconnected: {session_id}")
+    # Remove client
+    if session_id in client:
+        # shutdown thread
+        client[session_id]["stop_thread_flag"] = True
+        client[session_id]["thread"].join()
+        client.pop(session_id)
+
+@socketio.on('message')
+def handle_message(data):
+    global client
+    session_id = request.sid
+    # Handle incoming user prompts and store them
+    print(f'Received message from {session_id}', data)
+    print("Received Data:", data)
+    if session_id not in client:
+        print(f"Invalid session {session_id}")
+        socketio.emit('update', {'update': '[Session Unrecognized - Try Refresh]', 'voice': 'user'},room=session_id)
+        return
+    p = data["prompt"]
+    client[session_id]["visible"] = data["show"]
+    # Did we get asked to fetch a URL?
+    if p.startswith("http"):
+        # fetch blog
+        url = p
+        client[session_id]["visible"] = False
+        client[session_id]["remember"] = False # Don't add blog to context window, just summary
+        blogtext = extract_text_from_blog(p.strip())
+        print(f"* Reading {len(blogtext)} bytes {url}")
+        socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'},room=session_id)
+        client[session_id]["prompt"] = "Summarize the following text:\n" + blogtext
+    elif p.startswith("/"):
+        # Handle commands
+        command = p[1:].split(" ")[0]
+        if command == "reset":
+            # Reset context
+            client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
+            socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = 'Hi'
+            client[session_id]["visible"] = False
+        elif command == "version":
+            socketio.emit('update', {'update': '[TinyLLM Version: %s - Session: %s]' % ( VERSION, session_id ), 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
+        elif command == "sessions":
+            result = ""
+            x = 1
+            for s in client:
+                result += f"<br> * {x}: {s}\n"
+                x += 1
+            socketio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
+        else:
+            socketio.emit('update', {'update': '[Commands: /reset /version /help]', 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
+    elif p.startswith("!"):
+        # RAG Commands - Format: !library [prompt]
+        library = p[1:].split(" ")[0]
+        if library and len(p[1:].split(" ", 1)) > 1:
+            prompt = p[1:].split(" ", 1)[1]
+        if not library or not prompt:
+            socketio.emit('update', {'update': '[Usage: !{library} {prompt}]', 'voice': 'user'},room=session_id)
+        else:
+            print(f"Using library {library} with prompt {prompt}")
+            socketio.emit('update', {'update': '[RAG Prompt: Using library: %s]' % library, 'voice': 'user'},room=session_id)
+            # Query Vector Database for library
+            # TODO
+    else:
+        client[session_id]["prompt"] = p
+    return jsonify({'status': 'Message received'})
 
 @app.route('/version')
 def version():
@@ -141,47 +244,30 @@ def version():
         return jsonify({'version': "%s DEBUG MODE" % VERSION})
     return jsonify({'version': VERSION})
 
-@app.route('/send_message', methods=['POST'])
-def send_message():
-    global prompt, visible, remember
-    # Handle incoming user prompts and store them
-    data = request.json
-    print("Received Data:", data)
-    p = data["prompt"]
-    visible = data["show"]
-    # Did we get asked to fetch a URL?
-    if p.startswith("http"):
-        # fetch blog
-        url = p
-        visible = False
-        remember = False # Don't add blog to context window, just summary
-        blogtext = extract_text_from_blog(p.strip())
-        print(f"* Reading {len(blogtext)} bytes {url}")
-        socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'})
-        prompt = "Summarize the following text:\n" + blogtext
-    else:
-        prompt = p
-    return jsonify({'status': 'Message received'})
-
 # Convert each character to its hex representation
 def string_to_hex(input_string):
     hex_values = [hex(ord(char)) for char in input_string]
     return hex_values
 
 # Continuous thread to send updates to connected clients
-def send_update(): 
-    global x, prompt, context
+def send_update(session_id): 
+    global client
+    print(f"Starting send_update thread for {session_id}")
 
-    while True:
-        if prompt == "":
+    # Verify session is valid
+    if session_id not in client:
+        print(f"Invalid session {session_id}")
+        return
+    while not client[session_id]["stop_thread_flag"]:
+        if client[session_id]["prompt"] == "":
             time.sleep(.5)
         else:
-            update_text = prompt 
-            if visible:
-                socketio.emit('update', {'update': update_text, 'voice': 'user'})
+            update_text = client[session_id]["prompt"] 
+            if client[session_id]["visible"] :
+                socketio.emit('update', {'update': update_text, 'voice': 'user'},room=session_id)
             try:
                 # Ask LLM for answers
-                response=ask(prompt)
+                response=ask(client[session_id]["prompt"],session_id)
                 completion_text = ''
                 # iterate through the stream of events and print it
                 for event in response:
@@ -192,24 +278,19 @@ def send_update():
                         if DEBUG:
                             print(string_to_hex(chunk), end="")
                             print(f" = [{chunk}]")
-                        socketio.emit('update', {'update': chunk, 'voice': 'ai'})
+                        socketio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
                 # remember context
-                context.append({"role": "assistant", "content" : completion_text})
+                client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
             except:
                 # Unable to process prompt, give error
-                socketio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'})
+                socketio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'},room=session_id)
                 # Reset context
-                context = [{"role": "system", "content": baseprompt}]
+                client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
             # Signal response is done
-            socketio.emit('update', {'update': '', 'voice': 'done'})
-            prompt = ''
+            socketio.emit('update', {'update': '', 'voice': 'done'},room=session_id)
+            client[session_id]["prompt"] = ''
             if DEBUG:
                 print(f"AI: {completion_text}")
-
-# Create a background thread to send updates
-update_thread = threading.Thread(target=send_update)
-update_thread.daemon = True  # Thread will terminate when the main program exits
-update_thread.start()
 
 def sigTermHandler(signum, frame):
     raise SystemExit

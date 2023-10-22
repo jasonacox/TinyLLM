@@ -92,8 +92,32 @@
                 sendMessage(); 
             }
         }
-        // Send prompt to LLM
+
+        // Connect to the Socket.IO server
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+        var incode =false;
+
+        // Function to send prompt to the server
         function sendMessage(visible = true) {
+            var message = document.getElementById('messageInput').value;
+            if (message != "") {
+                // Send the message to the server
+                socket.emit('message', {
+                    prompt: message,
+                    show: visible
+                });
+                // Clear the input field
+                document.getElementById('messageInput').value = "";
+                // Add the message to the message container
+                // const updateContainer = document.getElementById('messageContainer');
+                // updateContainer.innerHTML += "<p class='user-text'>" + message + "</p>";
+                // ensure we always show latest
+                // updateContainer.scrollTop = updateContainer.scrollHeight;
+            }
+        }
+
+        // Send prompt to LLM
+        function sendMessagePOST(visible = true) {
             var dataToSend = {
                 prompt: document.getElementById('messageInput').value,
                 show: visible
@@ -119,10 +143,6 @@
                 console.error('Error:', error);
             });
         }
-
-        // Connect to the Socket.IO server
-        const socket = io.connect('http://' + document.domain + ':' + location.port);
-        var incode =false;
 
         // Function to handle updates received from the server
         socket.on('update', function(data) {
