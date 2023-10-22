@@ -8,18 +8,12 @@ Author: Jason A. Cox
 https://github.com/jasonacox/TinyLLM/
 
 Requirements:
-    * pip install qdrant-client sentence-transformers 
+    * pip install qdrant-client sentence-transformers pydantic~=2.4.2
 """
 import os
-import re
-import string
-import uuid
 from html import unescape
-
-import httpx
 import qdrant_client as qc
 import qdrant_client.http.models as qmodels
-
 from sentence_transformers import SentenceTransformer
 
 # Configuration Settings
@@ -27,17 +21,16 @@ MODEL = os.environ.get("MY_MODEL", "all-MiniLM-L6-v2")
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "mylibrary") 
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
+DEVICE = os.environ.get("DEVICE", "cuda")
 RESULTS = 5
 
 # Sentence Transformer Setup
 print("Sentence Transformer starting...")
-model = SentenceTransformer(MODEL, device="cuda") 
+model = SentenceTransformer(MODEL, device=DEVICE) 
 
 # Qdrant Setup
 print("Connecting to Qdrant DB...")
 client = qc.QdrantClient(url=QDRANT_HOST)
-METRIC = qmodels.Distance.DOT
-DIMENSION = model.get_sentence_embedding_dimension()
 
 # Create embeddings for text
 def embed_text(text):
