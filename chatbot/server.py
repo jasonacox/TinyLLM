@@ -237,9 +237,13 @@ def handle_message(data):
         client[session_id]["visible"] = False
         client[session_id]["remember"] = False # Don't add blog to context window, just summary
         blogtext = extract_text_from_blog(p.strip())
-        print(f"* Reading {len(blogtext)} bytes {url}")
-        socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'},room=session_id)
-        client[session_id]["prompt"] = "Summarize the following text:\n" + blogtext
+        if blogtext:
+            print(f"* Reading {len(blogtext)} bytes {url}")
+            socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = "Summarize the following text:\n" + blogtext
+        else:
+            socketio.emit('update', {'update': '[Unable to read URL]', 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
     elif p.startswith("/"):
         # Handle commands
         command = p[1:].split(" ")[0]
@@ -264,7 +268,7 @@ def handle_message(data):
             client[session_id]["prompt"] = ''
         else:
             # Display help
-            socketio.emit('update', {'update': '[Commands: /reset /version /help]', 'voice': 'user'},room=session_id)
+            socketio.emit('update', {'update': '[Commands: /reset /version /sessions]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
     elif p.startswith("@"):
         # Lookup and pull in context from DB - Format: @library [number] [prompt]
@@ -273,10 +277,9 @@ def handle_message(data):
             library = parts[0]
             number = int(parts[1])
             prompt = ' '.join(parts[2:])
-            
             if QDRANT_HOST:
                 print(f"Pulling {number} entries from {library} with prompt {prompt}")
-                socketio.emit('update', {'update': '[%s...]' % p, 'voice': 'user'},room=session_id)
+                socketio.emit('update', {'update': '[RAG: \'%s\' running...]' % p, 'voice': 'user'},room=session_id)
                 # Query Vector Database for library
                 results = query_index(prompt, library, top_k=number)
                 context_str = ""
@@ -287,7 +290,7 @@ def handle_message(data):
                     print(" * " + result['title'])
                 print(f" = {context_str}")
                 client[session_id]["prompt"] = (
-                    f"Consider and summarize this information found on {prompt}:\n"
+                    "Consider and summarize this information:\n"
                     f"{context_str}"
                     "\n"
                 )
@@ -303,7 +306,7 @@ def handle_message(data):
         else:
             if QDRANT_HOST:
                 print(f"Using library {library} with prompt {prompt}")
-                socketio.emit('update', {'update': '[RAG Prompt: Reading %s...]' % library, 'voice': 'user'},room=session_id)
+                socketio.emit('update', {'update': '[RAG: \'%s\' running...]' % p, 'voice': 'user'},room=session_id)
                 # Query Vector Database for library
                 results = query_index(prompt, library, top_k=RESULTS)
                 context_str = ""
