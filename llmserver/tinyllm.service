@@ -3,7 +3,7 @@ Description=TinyLLM
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 -m llama_cpp.server --model llama-2-7b-chat.Q5_K_M.gguf --host localhost --n_gpu_layers 32
+ExecStart=/usr/bin/python3 -m llama_cpp.server --model llama-2-7b-chat.Q5_K_M.gguf --host localhost --interrupt_requests False --n_gpu_layers 32
 WorkingDirectory=/data/ai/llama.cpp/models
 Restart=always
 User=ai
