@@ -22,12 +22,12 @@ ENV RESULTS=1
 # Set the working directory
 WORKDIR /app
 
-# Copy local files into container
-COPY . .
-
 # Install depencencies
 RUN pip install openai flask flask-socketio bs4
 RUN pip install torch~=2.0.1 qdrant-client sentence-transformers~=2.2.2 pydantic~=2.4.2
+
+# Copy local files into container
+COPY . .
 
 # Run the server
 CMD ["python3", "server.py"]
