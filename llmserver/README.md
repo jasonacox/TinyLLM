@@ -9,9 +9,15 @@ This creates an instance of llama_cpp.server which serves up a LLM with OpenAI A
 CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.7
 CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]==0.2.7
 
-# Download the LLaMA-2 7B GGUF Q-5bit model from Hugging Face.
+# Download Models from HuggingFace
 cd models
+
+# Mistral 7B GGUF Q-5bit model Q5_K_M
+wget https://huggingface.co/TheBloke/Mistral-7B-Claude-Chat-GGUF/resolve/main/mistral-7b-claude-chat.Q5_K_M.gguf
+
+# Meta LLaMA-2 7B GGUF Q-5bit model Q5_K_M
 wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
+
 cd ..
 
 # Run Test - API Server

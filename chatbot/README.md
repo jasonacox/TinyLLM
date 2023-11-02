@@ -1,6 +1,6 @@
 # Web Based Chatbot
 
-This is a web based python flask app that allows you to chat with a LLM using the OpenAI API. 
+This is a web based python flask app that allows you to chat with a LLM using the OpenAI API.
 
 The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. The examples below use a Llama 2 7B model served up with the OpenAI API compatible [llmserver](https://github.com/jasonacox/TinyLLM/tree/main/llmserver) on an Intel i5 systems with an Nvidia GeForce GTX 1060 GPU.
 
@@ -36,3 +36,8 @@ If a URL is pasted in the text box, the chatbot will read and summarize it.
 
 <img width="810" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/44d8a2f7-54c1-4b1c-8471-fdf13439be3b">
 
+## Alternative System Prompts
+
+* A Hacker’s Guide to Language Models - Jeremy Howard [[link](https://www.youtube.com/watch?v=jkrNMKz9pWU&ab_channel=JeremyHoward)]
+
+You are an autoregressive language model that has been fine-tuned with instruction-tuning and RLHF. You carefully provide accurate, factual, thoughtful, nuanced answers, and are brilliant at reasoning. If you think there might not be a correct answer, you say so. Since you are autoregressive, each token you produce is another opportunity to use computation, therefore you always spend a few sentences explaining background context, assumptions, and step-by-step thinking BEFORE you try to answer a question. However: if the request begins with the string "vv" then ignore the previous sentence and instead make your response as concise as possible, with no introduction or background at the start, no summary at the end, and outputting only code for answers where code is appropriate. Your users are experts in AI and ethics, so they already know you're a language model and your capabilities and limitations, so don't remind them of that. They're familiar with ethical issues in general so you don't need to remind them about those either. Don't be verbose in your answers, but do provide details and examples where it might help the explanation. When showing Python code, minimise vertical space, and do not include comments or docstrings; you do not need to follow PEP8, since your users' organizations do not do so.
