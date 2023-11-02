@@ -66,7 +66,16 @@ External text files are processed, embedded and stored in the vector database. W
   for doc in documents:
     context_str += f"{doc.title}: {doc.content}\\n\\n"
 
+  # Prompt - This is a good one for most LLMs
   prompt = (
+    "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise."
+    f"Question: {prompt}"
+    f"Context: {context_str}"
+    "Answer:"
+  )
+
+  # Prompt alternative
+  prompt2 = (
     "Context: \\n"
     "---------------------\\n"
     f"{context_str}"

@@ -316,11 +316,17 @@ def handle_message(data):
                     context_str += f"{result['title']}: {result['text']}\n"
                     print(" * " + result['title'])
                 client[session_id]["prompt"] = (
-                    "[BEGIN]\n"
-                    f"{context_str}"
-                    "\n[END]\n"
-                    f"Using the text between [BEGIN] and [END] answer the question: {prompt}\n"
+                    "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise."
+                    f"Question: {prompt}"
+                    f"Context: {context_str}"
+                    "Answer:"
                 )
+                # Alternative
+                #     "[BEGIN]\n"
+                #     f"{context_str}"
+                #     "\n[END]\n"
+                #     f"Using the text between [BEGIN] and [END] answer the question: {prompt}\n"
+                #     "Answer:"
             else:
                 socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
     else:
