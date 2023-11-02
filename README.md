@@ -27,13 +27,18 @@ cmake .. -DLLAMA_CUBLAS=ON   # Omit -DLLAMA_CUBLAS=ON for CPU only
 cmake --build . --config Release
 ```
 
-## Using LLaMA-2 7B - 5-bit Quantized Model
+## Using LLaMA-2 or Mistral 7B - 5-bit Quantized Models
 
 ```bash
-# Download the LLaMA-2 7B GGUF model from Hugging Face.
+# Download GGUF models from HuggingFace.
 cd models
-# Could use llama-2-7b-chat.Q3_K_M.gguf for small 3 bit version for smaller hardware
+
+# Meta LLaMA-2 7B GGUF Q-5bit model Q5_K_M
 wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
+
+# Mistral 7B GGUF Q-5bit model Q5_K_M
+wget https://huggingface.co/TheBloke/Mistral-7B-Claude-Chat-GGUF/resolve/main/mistral-7b-claude-chat.Q5_K_M.gguf
+
 cd ..
 
 # Run interactive chat.
