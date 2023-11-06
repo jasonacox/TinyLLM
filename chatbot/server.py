@@ -49,7 +49,7 @@ import qdrant_client as qc
 import qdrant_client.http.models as qmodels
 from sentence_transformers import SentenceTransformer
 
-VERSION = "v0.5"
+VERSION = "v0.6"
 
 MAXTOKENS = 2048
 TEMPERATURE = 0.7
@@ -270,16 +270,26 @@ def handle_message(data):
             # Display help
             socketio.emit('update', {'update': '[Commands: /reset /version /sessions]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
-    elif p.startswith("@"):
-        # Lookup and pull in context from DB - Format: @library [number] [prompt]
+    
+    # RAG Command - IMPORT from library - Format: #library [opt:number=1] [prompt]
+    elif p.startswith("#"):
         parts = p[1:].split()
-        if len(parts) >= 3:
+        library = ""
+        # Check to see if second element is a number
+        if len(parts) >= 2:
             library = parts[0]
-            number = int(parts[1])
-            prompt = ' '.join(parts[2:])
+            if parts[1].isdigit():
+                number = int(parts[1])
+                prompt = ' '.join(parts[2:])
+            else:
+                number = 1
+                prompt = ' '.join(parts[1:])
+        if not library or not prompt:
+            socketio.emit('update', {'update': '[Usage: #{library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'},room=session_id)
+        else:
             if QDRANT_HOST:
                 print(f"Pulling {number} entries from {library} with prompt {prompt}")
-                socketio.emit('update', {'update': '[RAG: \'%s\' running...]' % p, 'voice': 'user'},room=session_id)
+                socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
                 # Query Vector Database for library
                 results = query_index(prompt, library, top_k=number)
                 context_str = ""
@@ -294,21 +304,30 @@ def handle_message(data):
                     f"{context_str}"
                     "\n"
                 )
-        else:
-            socketio.emit('update', {'update': '[Usage: @{library} {number} {prompt}]', 'voice': 'user'},room=session_id)
-    elif p.startswith("!"):
-        # RAG Commands - Format: !library [prompt]
-        library = p[1:].split(" ")[0]
-        if library and len(p[1:].split(" ", 1)) > 1:
-            prompt = p[1:].split(" ", 1)[1]
+            else:
+                socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
+                
+    # RAG Commands - ANSWER from Library - Format: @library [opt:number=1] [prompt]
+    elif p.startswith("@"):
+        parts = p[1:].split()
+        library = ""
+        # Check to see if second element is a number
+        if len(parts) >= 2:
+            library = parts[0]
+            if parts[1].isdigit():
+                number = int(parts[1])
+                prompt = ' '.join(parts[2:])
+            else:
+                number = 1
+                prompt = ' '.join(parts[1:])
         if not library or not prompt:
-            socketio.emit('update', {'update': '[Usage: !{library} {prompt}]', 'voice': 'user'},room=session_id)
+            socketio.emit('update', {'update': '[Usage: @{library} {opt:number} {prompt} - Answer prompt based on library]', 'voice': 'user'},room=session_id)
         else:
             if QDRANT_HOST:
                 print(f"Using library {library} with prompt {prompt}")
-                socketio.emit('update', {'update': '[RAG: \'%s\' running...]' % p, 'voice': 'user'},room=session_id)
+                socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
                 # Query Vector Database for library
-                results = query_index(prompt, library, top_k=RESULTS)
+                results = query_index(prompt, library, top_k=number)
                 context_str = ""
                 client[session_id]["visible"] = False # Don't show prompt
                 client[session_id]["remember"] = False # Don't add blog to context window, just summary
