@@ -24,6 +24,20 @@ pip install openai flask flask-socketio bs4
 OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 ```
 
+## Chat Commands and Retrieval Augmented Generation (RAG)
+
+* Summarize External Site - If a URL is pasted in the prompt, the chatbot will read and summarize it.
+* RAG - If a Qdrant host is specified, the chatbot will use the vector database information to respond.
+* Command - There are information commands using `/`.
+
+```
+@library [opt:number] [prompt] # RAG - answer prompt based on response from qdrant library
+#library [opt:number] [prompt] # RAG - import from qdrant library and summarize
+/reset                         # Reset session
+/version                       # Display chatbot version
+/sessions                      # Display nmber of sessions
+```
+
 ## Example Session
 
 Open http://127.0.0.1:5000 - Example session:
