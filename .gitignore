@@ -165,4 +165,4 @@ cython_debug/
 # Exclude sandbox
 sandbox/
 .DS_Store
-chatbot/r.sh
+chatbot/test.sh

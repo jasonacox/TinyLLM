@@ -15,7 +15,7 @@ Features:
   * Supports RAG prompts (BETA)
 
 Requirements:
-  * pip install openai flask flask-socketio bs4 
+  * pip install openai flask flask-socketio bs4 pypdf
   * pip install qdrant-client sentence-transformers pydantic~=2.4.2
 
 Environmental variables:
@@ -36,6 +36,7 @@ https://github.com/jasonacox/TinyLLM
 """
 # Import Libraries
 import os
+import io
 import time
 import datetime
 import threading
@@ -48,8 +49,9 @@ import openai
 import qdrant_client as qc
 import qdrant_client.http.models as qmodels
 from sentence_transformers import SentenceTransformer
+from pypdf import PdfReader
 
-VERSION = "v0.6"
+VERSION = "v0.7.0"
 
 MAXTOKENS = 2048
 TEMPERATURE = 0.7
@@ -154,9 +156,18 @@ def ask(prompt, sid=None):
 
 def extract_text_from_blog(url):
     try:
-        response = requests.get(url)
+        response = requests.get(url, allow_redirects=True)
         if response.status_code == 200:
-            # Parse the HTML content of the page
+            # Check to see if response is a PDF
+            if response.headers["Content-Type"] == "application/pdf":
+                # Convert PDF to text
+                pdf2text = ""
+                f = io.BytesIO(response.content)
+                reader = PdfReader(f)
+                for page in reader.pages:
+                    pdf2text = pdf2text + page.extract_text() + "\n"
+                return pdf2text
+            # Check to see if response is HTML
             soup = BeautifulSoup(response.text, 'html.parser')
 
             # Find and extract all text within paragraph (p) tags
@@ -167,7 +178,9 @@ def extract_text_from_blog(url):
 
             return blog_text
         else:
-            print(f"Failed to fetch the webpage. Status code: {response.status_code}")
+            m = f"Failed to fetch the webpage. Status code: {response.status_code}"
+            print(m)
+            return m
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
