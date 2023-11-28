@@ -72,7 +72,7 @@ RESULTS = os.environ.get("RESULTS", 1)
 while True:
     print("Testing OpenAI API...")
     try:
-        openai.ChatCompletion.create(
+        openai.chat.completions.create(
             model=mymodel,
             max_tokens=MAXTOKENS,
             stream=False,
@@ -142,7 +142,7 @@ def ask(prompt, sid=None):
         try:
             # remember context
             client[sid]["context"].append({"role": "user", "content": prompt})
-            response = openai.ChatCompletion.create(
+            response = openai.chat.completions.create(
                 model=mymodel,
                 max_tokens=MAXTOKENS,
                 stream=True, # Send response chunks as LLM computes next tokens
