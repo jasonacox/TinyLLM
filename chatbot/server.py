@@ -51,7 +51,7 @@ import qdrant_client.http.models as qmodels
 from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
-VERSION = "v0.7.0"
+VERSION = "v0.7.1"
 
 MAXTOKENS = 2048
 TEMPERATURE = 0.7
@@ -67,6 +67,24 @@ STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "") # Empty = disable RAG support
 DEVICE = os.environ.get("DEVICE", "cuda")
 RESULTS = os.environ.get("RESULTS", 1)
+
+# Test OpenAI API
+while True:
+    print("Testing OpenAI API...")
+    try:
+        openai.ChatCompletion.create(
+            model=mymodel,
+            max_tokens=MAXTOKENS,
+            stream=False,
+            temperature=TEMPERATURE,
+            messages=[{"role": "system", "content": "Hello"}],
+        )
+        break
+    except Exception as e:
+        print("OpenAI API Error: %s" % e)
+        print(f"Unable to connect to OpenAI API at {openai.api_base} using model {mymodel}.")
+        print("Sleeping 10 seconds...")
+        time.sleep(10)
 
 # Sentence Transformer Setup
 if QDRANT_HOST:
