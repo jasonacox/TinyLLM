@@ -53,7 +53,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.7.1"
+VERSION = "v0.8.0"
 MAXTOKENS = 2048
 TEMPERATURE = 0.7
 MAXCLIENTS = 10
