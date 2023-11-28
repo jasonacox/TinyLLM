@@ -37,29 +37,43 @@ https://github.com/jasonacox/TinyLLM
 # Import Libraries
 import os
 import io
+import sys
 import time
 import datetime
 import threading
 import signal
 import requests
+import logging
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 import openai
 import qdrant_client as qc
 import qdrant_client.http.models as qmodels
-from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
+# Constants
 VERSION = "v0.7.1"
-
 MAXTOKENS = 2048
 TEMPERATURE = 0.7
 MAXCLIENTS = 10
 
+# Set up logging
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s %(levelname)s %(message)s', 
+                    datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.info("TinyLLM %s" % VERSION)
+# Sentence Transformer
+from sentence_transformers import SentenceTransformer
+
+def log(text):
+    logger.info(text)
+
 # Configuration Settings - Showing local LLM
-openai.api_key = os.environ.get("OPENAI_API_KEY", "DEFAULT_API_KEY")            # Required, use bogus string for Llama.cpp
-openai.api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1") # Use API endpoint or comment out for OpenAI
+api_key = os.environ.get("OPENAI_API_KEY", "open_api_key")    # Required, use bogus string for Llama.cpp
+api_base = os.environ.get("OPENAI_API_BASE", "https://api.openai.com") 
 agentname = os.environ.get("AGENT_NAME", "Jarvis")                              # Set the name of your bot
 mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")                # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 DEBUG = os.environ.get("DEBUG", "False") == "True"
@@ -70,9 +84,11 @@ RESULTS = os.environ.get("RESULTS", 1)
 
 # Test OpenAI API
 while True:
-    print("Testing OpenAI API...")
+    log("Testing OpenAI API...")
     try:
-        openai.chat.completions.create(
+        log(f"Using openai library version {openai.__version__}")
+        llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+        llm.chat.completions.create(
             model=mymodel,
             max_tokens=MAXTOKENS,
             stream=False,
@@ -81,19 +97,19 @@ while True:
         )
         break
     except Exception as e:
-        print("OpenAI API Error: %s" % e)
-        print(f"Unable to connect to OpenAI API at {openai.api_base} using model {mymodel}.")
-        print("Sleeping 10 seconds...")
+        log("OpenAI API Error: %s" % e)
+        log(f"Unable to connect to OpenAI API at {openai.api_base} using model {mymodel}.")
+        log("Sleeping 10 seconds...")
         time.sleep(10)
 
 # Sentence Transformer Setup
 if QDRANT_HOST:
-    print("Sentence Transformer starting...")
+    log("Sentence Transformer starting...")
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     model = SentenceTransformer(STMODEL, device=DEVICE) 
 
     # Qdrant Setup
-    print("Connecting to Qdrant DB...")
+    log("Connecting to Qdrant DB...")
     qdrant = qc.QdrantClient(url=QDRANT_HOST)
 
 # Create embeddings for text
@@ -119,7 +135,7 @@ def query_index(query, library, top_k=5):
     return found
 
 # Configure Flask App and SocketIO
-print("Starting server...")
+log("Starting server...")
 app = Flask(__name__)
 socketio = SocketIO(app)
 
@@ -137,34 +153,35 @@ def ask(prompt, sid=None):
     global client
 
     response = False
-    print(f"Context size = {len(context)}")
+    log(f"Context size = {len(context)}")
     while not response:
         try:
             # remember context
             client[sid]["context"].append({"role": "user", "content": prompt})
-            response = openai.chat.completions.create(
+            llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+            response = llm.chat.completions.create(
                 model=mymodel,
                 max_tokens=MAXTOKENS,
                 stream=True, # Send response chunks as LLM computes next tokens
                 temperature=TEMPERATURE,
                 messages=client[sid]["context"],
             )
-        except openai.error.OpenAIError as e:
-            print(f"ERROR {e}")
+        except openai.OpenAIError as e:
+            log(f"ERROR {e}")
             client[sid]["context"].pop()
             if "maximum context length" in str(e):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
-                    print(f"Reduce prompt size - now {len(prompt)}")
+                    log(f"Reduce prompt size - now {len(prompt)}")
                 elif len(client[sid]["context"]) > 4:
                     # our context has grown too large, truncate the top
                     client[sid]["context"] = client[sid]["context"][:1] + client[sid]["context"][3:]
-                    print(f"Truncate context: {len(client[sid]['context'])}")
+                    log(f"Truncate context: {len(client[sid]['context'])}")
                 else:
                     # our context has grown too large, reset
                     client[sid]["context"] = [{"role": "system", "content": baseprompt}]   
-                    print(f"Reset context {len(client[sid]['context'])}")
+                    log(f"Reset context {len(client[sid]['context'])}")
                     socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=sid)
 
     if not client[sid]["remember"]:
@@ -197,10 +214,10 @@ def extract_text_from_blog(url):
             return blog_text
         else:
             m = f"Failed to fetch the webpage. Status code: {response.status_code}"
-            print(m)
+            log(m)
             return m
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        log(f"An error occurred: {str(e)}")
 
 @app.route('/')
 def index():
@@ -213,13 +230,13 @@ def handle_connect():
     if session_id in client:
         # Client reconnected - restart thread
         client[session_id]["thread"].join()
-        print(f"Client reconnected: {session_id}")
+        log(f"Client reconnected: {session_id}")
     else:
         # New client connected
-        print(f"Client connected: {session_id}")
+        log(f"Client connected: {session_id}")
         # Limit number of clients
         if len(client) > MAXCLIENTS:
-            print(f"Too many clients connected: {len(client)}")
+            log(f"Too many clients connected: {len(client)}")
             socketio.emit('update', {'update': 'Too many clients connected. Try again later.', 'voice': 'user'},room=session_id)
             return
         # Create client session
@@ -240,7 +257,7 @@ def handle_connect():
 @socketio.on('disconnect')
 def handle_disconnect():
     session_id = request.sid
-    print(f"Client disconnected: {session_id}")
+    log(f"Client disconnected: {session_id}")
     # Remove client
     if session_id in client:
         # shutdown thread
@@ -253,10 +270,10 @@ def handle_message(data):
     global client
     session_id = request.sid
     # Handle incoming user prompts and store them
-    print(f'Received message from {session_id}', data)
-    print("Received Data:", data)
+    log(f'Received message from {session_id}')
+    log(f"Received Data: {data}")
     if session_id not in client:
-        print(f"Invalid session {session_id}")
+        log(f"Invalid session {session_id}")
         socketio.emit('update', {'update': '[Session Unrecognized - Try Refresh]', 'voice': 'user'},room=session_id)
         return
     p = data["prompt"]
@@ -269,7 +286,7 @@ def handle_message(data):
         client[session_id]["remember"] = False # Don't add blog to context window, just summary
         blogtext = extract_text_from_blog(p.strip())
         if blogtext:
-            print(f"* Reading {len(blogtext)} bytes {url}")
+            log(f"* Reading {len(blogtext)} bytes {url}")
             socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = "Summarize the following text:\n" + blogtext
         else:
@@ -319,7 +336,7 @@ def handle_message(data):
             socketio.emit('update', {'update': '[Usage: #{library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'},room=session_id)
         else:
             if QDRANT_HOST:
-                print(f"Pulling {number} entries from {library} with prompt {prompt}")
+                log(f"Pulling {number} entries from {library} with prompt {prompt}")
                 socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
                 # Query Vector Database for library
                 results = query_index(prompt, library, top_k=number)
@@ -328,8 +345,8 @@ def handle_message(data):
                 client[session_id]["remember"] = True
                 for result in results:
                     context_str += f" <li> {result['title']}: {result['text']}\n"
-                    print(" * " + result['title'])
-                print(f" = {context_str}")
+                    log(" * " + result['title'])
+                log(f" = {context_str}")
                 client[session_id]["prompt"] = (
                     "Consider and summarize this information:\n"
                     f"{context_str}"
@@ -355,7 +372,7 @@ def handle_message(data):
             socketio.emit('update', {'update': '[Usage: @{library} {opt:number} {prompt} - Answer prompt based on library]', 'voice': 'user'},room=session_id)
         else:
             if QDRANT_HOST:
-                print(f"Using library {library} with prompt {prompt}")
+                log(f"Using library {library} with prompt {prompt}")
                 socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
                 # Query Vector Database for library
                 results = query_index(prompt, library, top_k=number)
@@ -364,7 +381,7 @@ def handle_message(data):
                 client[session_id]["remember"] = False # Don't add blog to context window, just summary
                 for result in results:
                     context_str += f"{result['title']}: {result['text']}\n"
-                    print(" * " + result['title'])
+                    log(" * " + result['title'])
                 client[session_id]["prompt"] = (
                     "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise."
                     f"Question: {prompt}"
@@ -398,11 +415,11 @@ def string_to_hex(input_string):
 # Continuous thread to send updates to connected clients
 def send_update(session_id): 
     global client
-    print(f"Starting send_update thread for {session_id}")
+    log(f"Starting send_update thread for {session_id}")
 
     # Verify session is valid
     if session_id not in client:
-        print(f"Invalid session {session_id}")
+        log(f"Invalid session {session_id}")
         return
     while not client[session_id]["stop_thread_flag"]:
         if client[session_id]["prompt"] == "":
@@ -417,9 +434,9 @@ def send_update(session_id):
                 completion_text = ''
                 # iterate through the stream of events and print it
                 for event in response:
-                    event_text = event['choices'][0]['delta']
-                    if 'content' in event_text:
-                        chunk = event_text.content
+                    event_text = event.choices[0].delta.content
+                    if event_text:
+                        chunk = event_text
                         completion_text += chunk
                         if DEBUG:
                             print(string_to_hex(chunk), end="")
@@ -427,8 +444,9 @@ def send_update(session_id):
                         socketio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
                 # remember context
                 client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
-            except:
+            except Exception as e:
                 # Unable to process prompt, give error
+                log(f"ERROR {e}")
                 socketio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'},room=session_id)
                 # Reset context
                 client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
