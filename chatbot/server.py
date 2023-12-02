@@ -53,10 +53,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.8.0"
-MAXTOKENS = 2048
-TEMPERATURE = 0.7
-MAXCLIENTS = 10
+VERSION = "v0.8.2"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -81,6 +78,9 @@ STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "") # Empty = disable RAG support
 DEVICE = os.environ.get("DEVICE", "cuda")
 RESULTS = os.environ.get("RESULTS", 1)
+MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 10))
+MAXTOKENS = int(os.environ.get("MAXTOKENS", 2048))
+TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.7))
 
 # Test OpenAI API
 while True:

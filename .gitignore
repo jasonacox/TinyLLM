@@ -166,3 +166,4 @@ cython_debug/
 sandbox/
 .DS_Store
 chatbot/test.sh
+chatbot/test8080.sh

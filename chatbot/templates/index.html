@@ -43,19 +43,51 @@
             justify-content: space-between;
             align-items: center; 
         }
-        .code-box {
-            background-color: #f4f4f4;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            overflow-x: auto; /* Enable horizontal scrolling for long lines of code */
-        }
         .code-box code {
             display: block; /* Ensures line breaks are preserved */
             font-family: "Courier New", Courier, monospace; /* Use a monospace font for code */
             font-size: 14px;
             line-height: 1.5;
             color: #333;
+        }
+        /* Style for code container */
+        .code-container {
+            position: relative;
+        }
+        /* Style for code-box */
+        .code-box {
+            background-color: #f4f4f4;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            overflow-x: auto; /* Enable horizontal scrolling for long lines of code */
+        }
+        /* Style for copy button */
+        .copy-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .copy-button:hover {
+            background-color: #45a049;
+        }
+        .notification {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: #4CAF50; /* Green color for success */
+            color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .notification.error {
+            background-color: #f44336; /* Red color for error */
         }
         #footer {
             text-align: center; 
@@ -148,22 +180,65 @@
         socket.on('update', function(data) {
             const updateContainer = document.getElementById('messageContainer');
 
-            if(data.voice == "done") {
+            if (data.voice === "done") {
                 // Try to identify code and format it for display
-                //updateContainer.innerHTML = updateContainer.innerHTML.replace(/```(python|bash|c|json|html|cpp|go|java|js)([\s\S]*?)```/g, '<pre class="code-box"><code>$2</code></pre>\n');
-                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```([\s\S]*?)```/g, '<pre class="code-box"><code>$1</code></pre>\n');
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```([\s\S]*?)```/g, function(match, codeBlock) {
+                    const codeTypeMatch = codeBlock.match(/^(\w+)<br>\n/);
+                    const codeType = codeTypeMatch ? codeTypeMatch[1] : '';
+                    const formattedCodeBlock = codeBlock.replace(/^\w+<br>\n/, '').replace(/<br>\n/g, '\n');
+
+                    // Add a copy-to-clipboard button
+                    const codeBox = `<div class="code-container"><pre class="code-box" data-code-type="${codeType}"><code>${formattedCodeBlock}</code></pre><button class="copy-button" onclick="copyToClipboard(this)">Copy ${codeType} code</button></div>\n`;
+                    return codeBox;
+                });
+
+                // Convert newline and carriage return characters outside the code-box to <br>
+                //updateContainer.innerHTML = updateContainer.innerHTML.replace(/([^`])\n/g, '$1<br>');
+                //updateContainer.innerHTML = updateContainer.innerHTML.replace(/([^`])\r/g, '$1<br>');
+                
                 updateContainer.innerHTML = updateContainer.innerHTML.replace(/`([\s\S]*?)`/g, '<code>$1</code>');
-                // console.log("DONE")
+            
             }
-            if(data.voice == "user") {
-                updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
+
+            if (data.voice === "user") {
+                updateContainer.innerHTML += "<p class='user-text'>" + data.update.replace(/[\n\r]/g, "<br>") + "</p>";
             }
-            if(data.voice == "ai") {
-                updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>");
-            }   
-            // ensure we always show latest
+
+            if (data.voice === "ai") {
+                updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>\n");
+            }
+
+            // Ensure we always show the latest
             updateContainer.scrollTop = updateContainer.scrollHeight;
         });
+
+        // Function to copy text to clipboard
+        function copyToClipboard(button) {
+            const codeBox = button.parentNode.querySelector('.code-box');
+            const codeText = codeBox.textContent || codeBox.innerText;
+
+            navigator.clipboard.writeText(codeText)
+                .then(() => {
+                    showNotification('Code copied to clipboard!');
+                })
+                .catch(err => {
+                    showNotification('Unable to copy to clipboard', true);
+                    console.error('Unable to copy to clipboard', err);
+                });
+        }
+
+        // Function to display a notification
+        function showNotification(message, isError = false) {
+            const notification = document.createElement('div');
+            notification.className = isError ? 'notification error' : 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            // Automatically remove the notification after a certain time (e.g., 3 seconds)
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
 
         function getVersion() {
             fetch('/version')
