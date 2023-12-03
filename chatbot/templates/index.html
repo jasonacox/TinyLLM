@@ -212,19 +212,23 @@
             updateContainer.scrollTop = updateContainer.scrollHeight;
         });
 
-        // Function to copy text to clipboard
         function copyToClipboard(button) {
             const codeBox = button.parentNode.querySelector('.code-box');
             const codeText = codeBox.textContent || codeBox.innerText;
 
-            navigator.clipboard.writeText(codeText)
-                .then(() => {
-                    showNotification('Code copied to clipboard!');
-                })
-                .catch(err => {
-                    showNotification('Unable to copy to clipboard', true);
-                    console.error('Unable to copy to clipboard', err);
-                });
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(codeText)
+                    .then(() => {
+                        showNotification('Code copied to clipboard!');
+                    })
+                    .catch(err => {
+                        showNotification('Unable to copy to clipboard', true);
+                        console.error('Clipboard writeText failed:', err);
+                    });
+            } else {
+                showNotification('Clipboard API not supported in this browser', true);
+                console.error('Clipboard API not supported in this browser');
+            }
         }
 
         // Function to display a notification
