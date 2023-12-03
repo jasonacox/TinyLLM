@@ -212,6 +212,7 @@
             updateContainer.scrollTop = updateContainer.scrollHeight;
         });
 
+        // Function to copy code to clipboard
         function copyToClipboard(button) {
             const codeBox = button.parentNode.querySelector('.code-box');
             const codeText = codeBox.textContent || codeBox.innerText;
@@ -226,8 +227,21 @@
                         console.error('Clipboard writeText failed:', err);
                     });
             } else {
-                showNotification('Clipboard API not supported in this browser', true);
-                console.error('Clipboard API not supported in this browser');
+                // Clipboard API not supported in this browser so use textarea hack
+                // Create a temporary textarea element to facilitate copying
+                const textarea = document.createElement('textarea');
+                textarea.value = codeText;
+                document.body.appendChild(textarea);
+
+                // Select and copy the text
+                textarea.select();
+                document.execCommand('copy');
+
+                // Remove the temporary textarea
+                document.body.removeChild(textarea);
+
+                // Show notification
+                showNotification('Code copied to clipboard!');
             }
         }
 
