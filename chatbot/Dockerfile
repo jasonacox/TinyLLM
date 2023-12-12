@@ -23,9 +23,17 @@ ENV RESULTS=1
 WORKDIR /app
 
 # Install depencencies
-RUN pip install openai flask flask-socketio bs4
-RUN pip install torch~=2.0.1 qdrant-client sentence-transformers~=2.2.2 pydantic~=2.4.2
+RUN pip install openai flask flask-socketio bs4 requests
+RUN pip install torch qdrant-client sentence-transformers pydantic~=2.4.2 --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install pypdf
+
+# Install depencencies - CPU only
+# RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# RUN pip install openai flask flask-socketio bs4 qdrant-client requests
+# RUN pip install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
+# RUN pip install --no-deps sentence-transformers
+# RUN pip install pydantic~=2.4.2
+# RUN pip install pypdf
 
 # Copy local files into container
 COPY . .
