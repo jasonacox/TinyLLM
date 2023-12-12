@@ -6,28 +6,37 @@ Web chat client for OpenAI and the llama-cpp-python[server] OpenAI API Compatibl
 Python Flask based Web Server. Provides a simple web based chat session.
 
 Features:
-  * Uses OpenAI API
-  * Works with local hosted OpenAI compatible llama-cpp-python[server]
-  * Retains conversational context for LLM
-  * Uses response stream to render LLM chunks instead of waiting for full response
-  * Multithreaded to support multiple clients
-  * Supports commands to reset context, get version, etc.
-  * Supports RAG prompts (BETA)
+    * Uses OpenAI API
+    * Works with local hosted OpenAI compatible llama-cpp-python[server]
+    * Retains conversational context for LLM
+    * Uses response stream to render LLM chunks instead of waiting for full response
+    * Multithreaded to support multiple clients
+    * Supports commands to reset context, get version, etc.
+    * Supports RAG prompts (BETA)
 
 Requirements:
-  * pip install openai flask flask-socketio bs4 pypdf
-  * pip install qdrant-client sentence-transformers pydantic~=2.4.2
+    * pip install openai flask flask-socketio bs4 pypdf
+    * pip install qdrant-client sentence-transformers pydantic~=2.4.2
 
 Environmental variables:
-  * OPENAI_API_KEY - Required only for OpenAI
-  * OPENAI_API_BASE - URL to OpenAI API Server or locally hosted version
-  * AGENT_NAME - Name for Bot
-  * AGENT_NAME - LLM Model to Use
+    * OPENAI_API_KEY - Required only for OpenAI
+    * OPENAI_API_BASE - URL to OpenAI API Server or locally hosted version
+    * AGENT_NAME - Name for Bot
+    * AGENT_NAME - LLM Model to Use
+    * ALPHA_KEY - Alpha Vantage API Key for Stocks (Optional) - https://www.alphavantage.co/support/#api-key
+    * QDRANT_HOST - URL to Qdrant Vector Database (Optional) - https://qdrant.tech/
+    * DEVICE - cuda or cpu
+    * RESULTS - Number of results to return from RAG query
+    * MAXCLIENTS - Maximum number of clients to allow
+    * MAXTOKENS - Maximum number of tokens to send to LLM
+    * TEMPERATURE - LLM temperature
+    * ST_MODEL - Sentence Transformer Model to use
+    * PORT - Port to listen on
 
 Running a llama-cpp-python server:
-  * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
-  * pip install llama-cpp-python[server]
-  * python3 -m llama_cpp.server --model models/7B/ggml-model.bin
+    * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
+    * pip install llama-cpp-python[server]
+    * python3 -m llama_cpp.server --model models/7B/ggml-model.bin
 
 Author: Jason A. Cox
 23 Sept 2023
@@ -37,7 +46,6 @@ https://github.com/jasonacox/TinyLLM
 # Import Libraries
 import os
 import io
-import sys
 import time
 import datetime
 import threading
@@ -53,7 +61,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.8.2"
+VERSION = "v0.9.0"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -81,6 +89,8 @@ RESULTS = os.environ.get("RESULTS", 1)
 MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 10))
 MAXTOKENS = int(os.environ.get("MAXTOKENS", 2048))
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.7))
+ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key") # Optional - Alpha Vantage API Key
+PORT = int(os.environ.get("PORT", 5000))
 
 # Test OpenAI API
 while True:
@@ -158,6 +168,7 @@ def ask(prompt, sid=None):
         try:
             # remember context
             client[sid]["context"].append({"role": "user", "content": prompt})
+            log(f"messages = {client[sid]['context']} - model = {mymodel}")
             llm = openai.OpenAI(api_key=api_key, base_url=api_base)
             response = llm.chat.completions.create(
                 model=mymodel,
@@ -189,6 +200,102 @@ def ask(prompt, sid=None):
         client[sid]["context"].pop()
     return response
 
+def classify(prompt):
+    # Ask LLM to classify the prompt
+    #return "something else"
+    content = [{"role": "system", 
+                "content": "You are a highly intelligent assistant. Keep your answers brief and accurate."},
+                {"role": "user",
+                "content": f"Examine the following statement and identify, with a single word answer if it is about a greeting, weather, stock price, news, or something else. [BEGIN] {prompt} [END]"}]
+    log(f"content: {content}")
+    llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+    response = llm.chat.completions.create(
+        model=mymodel,
+        max_tokens=MAXTOKENS,
+        stream=False,
+        temperature=TEMPERATURE,
+        messages=content,
+    )
+    log(f"classify = {response.choices[0].message.content.strip()}")
+    return response.choices[0].message.content.strip()
+    
+def clarify(prompt):
+    # Ask LLM to clarify the prompt
+    content = [{"role": "system", 
+                "content": "You are a highly intelligent assistant. Keep your answers brief and accurate."},
+                {"role": "user",
+                "content": f"{prompt}"}]
+    log(f"content: {content}")
+    llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+    response = llm.chat.completions.create(
+        model=mymodel,
+        max_tokens=MAXTOKENS,
+        stream=False,
+        temperature=TEMPERATURE,
+        messages=content,
+    )
+    log(f"clarify = {response.choices[0].message.content.strip()}")
+    return response.choices[0].message.content.strip()
+
+# Function - Get weather for location
+def get_weather(location):
+    # Look up weather for location
+    if location == "":
+        location = "New York"
+    location = location.replace(" ", "+")
+    url = "https://wttr.in/%s?format=j2" % location
+    log(f"Fetching weather for {location} from {url}")
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.text
+    else:
+        return "Unable to fetch weather for %s" % location
+    
+# Function - Get stock price for company
+def get_stock(company):
+    if ALPHA_KEY == "alpha_key":
+        return "Unable to fetch stock price for %s - No Alpha Vantage API Key" % company
+    # First try to get the ticker symbol
+    symbol = clarify(f"What is the stock symbol for {company}?  Please list only the symbol, or none if unknown.")
+    if "none" in symbol.lower():
+        return "Unable to fetch stock price for %s - No matching symbol" % company
+    # Now get the stock price
+    url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s" % (symbol, ALPHA_KEY)
+    log(f"Fetching stock price for {company} from {url}")
+    response = requests.get(url)
+    if response.status_code == 200:
+        try:
+            price = response.json()["Global Quote"]["05. price"]
+            return f"The price of {company} (symbol {symbol}) is ${price}."
+        except:
+            return "Unable to fetch stock price for %s - No data available." % company
+    
+# Function - Get news for topic
+def get_top_articles(url, max=10):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'xml')
+    items = soup.findAll('item')
+    articles = ""
+    count = 0
+    for item in items:
+        title = item.find('title').string.strip()
+        pubdate = item.find('pubDate').string.strip()
+        articles += f"Headline: {title} - Pub Date: {pubdate}\n"
+        count += 1
+        if count >= max:
+            break
+    return articles
+
+def get_news(topic):
+    # Look up news for topic
+    if "none" in topic.lower() or "current" in topic.lower():
+        url = "https://news.google.com/rss/"
+    else:
+        url = "https://news.google.com/rss/search?q=%s" % topic
+    log(f"Fetching news for {topic} from {url}")
+    response = get_top_articles(url)
+    return response
+    
 def extract_text_from_blog(url):
     try:
         response = requests.get(url, allow_redirects=True)
@@ -354,7 +461,7 @@ def handle_message(data):
                 )
             else:
                 socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
-                
+
     # RAG Commands - ANSWER from Library - Format: @library [opt:number=1] [prompt]
     elif p.startswith("@"):
         parts = p[1:].split()
@@ -396,7 +503,51 @@ def handle_message(data):
                 #     "Answer:"
             else:
                 socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
+    elif p.startswith(":"):
+        # Use LLM to classify prompt and take action
+        p = p[1:] # remove :
+        context_str = ""
+        prompttype = classify(p)
+        log(f"Prompt type = {prompttype}")
+        socketio.emit('update', {'update': '[Topic: %s]' % prompttype, 'voice': 'user'},room=session_id)
+        # check if prompttype string contains weather, stock, or news regardless of case
+        if "weather" in prompttype.lower():
+            # Weather prompt
+            log("Weather prompt")
+            location = clarify(f"What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {p} [END]")
+            if "none" in location.lower():
+                context_str = get_weather("")
+            else:
+                context_str = get_weather(location)
+        elif "stock" in prompttype.lower():
+            # Stock prompt
+            log("Stock prompt")
+            company = clarify(f"What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {p} [END]")
+            context_str = get_stock(company)
+            log(f"Company = {company} - Context = {context_str}")
+        elif "news" in prompttype.lower():
+            # News prompt
+            log("News prompt")
+            subject = clarify(f"What subject is specified in this prompt, state none if there isn't one. Use a single word answer. [BEGIN] {p} [END]")
+            context_str = get_news(subject)
+            log(f"Subject = {subject} - Context = {context_str}")
+        else:
+            # Normal prompt
+            log("Normal prompt")
+            context_str = ""
+        if context_str == "":
+            client[session_id]["prompt"] = p
+        else:
+            client[session_id]["visible"] = False
+            client[session_id]["remember"] = True
+            client[session_id]["prompt"] = (
+                "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise."
+                f"\nQuestion: {p}"
+                f"\nContext: {context_str}"
+                "\nAnswer:"
+            )
     else:
+        # Normal prompt
         client[session_id]["prompt"] = p
     return jsonify({'status': 'Message received'})
 
@@ -462,5 +613,5 @@ def sigTermHandler(signum, frame):
 # Start server
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, sigTermHandler);
-    socketio.run(app, host='0.0.0.0', port=5000, debug=DEBUG, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=PORT, debug=DEBUG, allow_unsafe_werkzeug=True)
 
