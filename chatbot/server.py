@@ -61,7 +61,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.9.1"
+VERSION = "v0.9.2"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -256,7 +256,7 @@ def get_stock(company):
     if ALPHA_KEY == "alpha_key":
         return "Unable to fetch stock price for %s - No Alpha Vantage API Key" % company
     # First try to get the ticker symbol
-    symbol = clarify(f"What is the stock symbol for {company}? Respond with one word.")
+    symbol = clarify(f"What is the stock symbol for {company}? Respond with symbol.")
     if "none" in symbol.lower():
         return "Unable to fetch stock price for %s - No matching symbol" % company
     # Check to see if response has multiple words and if so, pick the last one
@@ -531,6 +531,10 @@ def handle_message(data):
             company = clarify(f"What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {p} [END]")
             context_str = get_stock(company)
             log(f"Company = {company} - Context = {context_str}")
+            socketio.emit('update', {'update': context_str, 'voice': 'ai'},room=session_id)
+            # remember context
+            client[session_id]["context"].append({"role": "assistant", "content" : context_str})
+            return jsonify({'status': 'Message received'})
         elif "news" in prompttype.lower():
             # News prompt
             log("News prompt")
