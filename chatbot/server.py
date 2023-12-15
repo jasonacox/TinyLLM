@@ -61,7 +61,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.9.0"
+VERSION = "v0.9.1"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -219,10 +219,10 @@ def classify(prompt):
     log(f"classify = {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
     
-def clarify(prompt):
+def clarify(prompt, format="text"):
     # Ask LLM to clarify the prompt
     content = [{"role": "system", 
-                "content": "You are a highly intelligent assistant. Keep your answers brief and accurate."},
+                "content": f"You are a highly intelligent assistant. Keep your answers brief and accurate. Respond in {format}."},
                 {"role": "user",
                 "content": f"{prompt}"}]
     log(f"content: {content}")
@@ -256,11 +256,16 @@ def get_stock(company):
     if ALPHA_KEY == "alpha_key":
         return "Unable to fetch stock price for %s - No Alpha Vantage API Key" % company
     # First try to get the ticker symbol
-    symbol = clarify(f"What is the stock symbol for {company}?  Please list only the symbol, or none if unknown.")
+    symbol = clarify(f"What is the stock symbol for {company}? Respond with one word.")
     if "none" in symbol.lower():
         return "Unable to fetch stock price for %s - No matching symbol" % company
+    # Check to see if response has multiple words and if so, pick the last one
+    if len(symbol.split()) > 1:
+        symbol = symbol.split()[-1]
+    # Strip off any spaces or non-alpha characters
+    symbol = ''.join(e for e in symbol if e.isalnum())
     # Now get the stock price
-    url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s" % (symbol, ALPHA_KEY)
+    url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s" % (symbol.upper(), ALPHA_KEY)
     log(f"Fetching stock price for {company} from {url}")
     response = requests.get(url)
     if response.status_code == 200:
@@ -291,6 +296,7 @@ def get_news(topic):
     if "none" in topic.lower() or "current" in topic.lower():
         url = "https://news.google.com/rss/"
     else:
+        topic = topic.replace(" ", "+")
         url = "https://news.google.com/rss/search?q=%s" % topic
     log(f"Fetching news for {topic} from {url}")
     response = get_top_articles(url)
@@ -509,7 +515,7 @@ def handle_message(data):
         context_str = ""
         prompttype = classify(p)
         log(f"Prompt type = {prompttype}")
-        socketio.emit('update', {'update': '[Topic: %s]' % prompttype, 'voice': 'user'},room=session_id)
+        socketio.emit('update', {'update': '%s\n[Topic: %s]' % (p,prompttype), 'voice': 'user'},room=session_id)
         # check if prompttype string contains weather, stock, or news regardless of case
         if "weather" in prompttype.lower():
             # Weather prompt
@@ -541,7 +547,7 @@ def handle_message(data):
             client[session_id]["visible"] = False
             client[session_id]["remember"] = True
             client[session_id]["prompt"] = (
-                "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise."
+                "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know."
                 f"\nQuestion: {p}"
                 f"\nContext: {context_str}"
                 "\nAnswer:"

@@ -25,7 +25,7 @@ WORKDIR /app
 # Install depencencies
 RUN pip install openai flask flask-socketio bs4 requests
 RUN pip install torch qdrant-client sentence-transformers pydantic~=2.4.2 --extra-index-url https://download.pytorch.org/whl/cpu
-RUN pip install pypdf
+RUN pip install pypdf lxml
 
 # Install depencencies - CPU only
 # RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
