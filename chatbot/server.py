@@ -154,7 +154,7 @@ client = {}
 
 # Set base prompt and initialize the context array for conversation dialogue
 current_date = datetime.datetime.now()
-formatted_date = current_date.strftime("%m/%d/%Y")
+formatted_date = current_date.strftime("%B %-d, %Y")
 baseprompt = "You are %s, a highly intelligent assistant. Keep your answers brief and accurate. Current date is %s." % (agentname, formatted_date)
 context = [{"role": "system", "content": baseprompt}]
 
@@ -291,7 +291,7 @@ def get_top_articles(url, max=10):
             break
     return articles
 
-def get_news(topic):
+def get_news(topic, max=10):
     # Look up news for topic
     if "none" in topic.lower() or "current" in topic.lower():
         url = "https://news.google.com/rss/"
@@ -299,7 +299,7 @@ def get_news(topic):
         topic = topic.replace(" ", "+")
         url = "https://news.google.com/rss/search?q=%s" % topic
     log(f"Fetching news for {topic} from {url}")
-    response = get_top_articles(url)
+    response = get_top_articles(url, max)
     return response
     
 def extract_text_from_blog(url):
@@ -427,9 +427,21 @@ def handle_message(data):
                 x += 1
             socketio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
+        elif command == "news":
+            log("News requested")
+            socketio.emit('update', {'update': '/news\n[Fetching News]', 'voice': 'user'},room=session_id)
+            context_str = get_news("none", 25)
+            log(f"News Raw Context = {context_str}")
+            client[session_id]["visible"] = False
+            client[session_id]["remember"] = True
+            client[session_id]["prompt"] = (
+                "You are a newscaster who specializes in providing clear and verbose headline news. Use the following pieces of retrieved context to put together the top headlines for today. Include the source and rank them by most important to least important."
+                f"\nContext: {context_str}"
+                "\nAnswer:"
+            )
         else:
             # Display help
-            socketio.emit('update', {'update': '[Commands: /reset /version /sessions]', 'voice': 'user'},room=session_id)
+            socketio.emit('update', {'update': '[Commands: /reset /version /sessions /news]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
     
     # RAG Command - IMPORT from library - Format: #library [opt:number=1] [prompt]
