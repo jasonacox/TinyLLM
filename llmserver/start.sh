@@ -13,6 +13,8 @@ MODEL=llama-2-7b-chat.Q5_K_M.gguf  # Use the llama-2-7b-chat model
 HOST=0.0.0.0                       # Listen on all interfaces
 PORT=5000                          # Listen on port 5000
 N_GPU_LAYERS=32                    # Use 32 GPU layers
+N_CTX=2048                         # Use 2048 context tokens
+CHAT_FORMAT=llama-2                # Use llama-2 chat format
 
 # Start server
 python3 -m llama_cpp.server \
@@ -20,6 +22,8 @@ python3 -m llama_cpp.server \
     --host $HOST \
     --port $PORT \
     --interrupt_requests False \
-    --n_gpu_layers $N_GPU_LAYERS
+    --n_gpu_layers $N_GPU_LAYERS \
+    --n_ctx $N_CTX \
+    --chat_format $CHAT_FORMAT
 
 echo "Started... listening on http://$HOST:$PORT"

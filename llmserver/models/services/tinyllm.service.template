@@ -1,0 +1,12 @@
+[Unit]
+Description=TinyLLM
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -m llama_cpp.server --model tinyllm --host 0.0.0.0 --interrupt_requests False --n_gpu_layers 99 --n_ctx 2048 --chat_format chatml
+WorkingDirectory=/home/ai/tinyllm/llmserver/models
+Restart=always
+User=ai
+
+[Install]
+WantedBy=multi-user.target

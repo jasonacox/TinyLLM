@@ -6,8 +6,8 @@ This creates an instance of llama_cpp.server which serves up a LLM with OpenAI A
 
 ```bash
 # Install Python Libraries with Nvidia GPU support - Pin to v0.2.7 for now
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.7
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]==0.2.7
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.27
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]==0.2.27
 
 # Download Models from HuggingFace
 cd models
@@ -24,7 +24,10 @@ cd ..
 python3 -m llama_cpp.server \
     --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
     --host localhost \
-    --n_gpu_layers 32 
+    --n_gpu_layers 32 \
+    -n_ctx 2048 \
+    --chat_format llama-2
+
 ```
 
 ## Test
@@ -56,7 +59,8 @@ Jarvis> Excellent choice! Green is a vibrant and natural color that symbolizes g
 
 ### Option - Run as a Service
 
-You can set up a Linux service using the `tinyllm.service` file:
+You can set up a Linux service using the `tinyllm.service` file.  Make sure to edit `tinyllm` and `tinyllm.service` 
+to have the username and paths required for your system.
 
 ```bash
 # Clone this project for helper files
@@ -113,4 +117,41 @@ docker run \
     --name llmserver \
     --restart unless-stopped \
     llmserver
+```
+
+## Chat Formats
+
+The llama.cpp server will support chat formats for various models. The format is specified with the `--chat_format chatml` parameter in the startup command. Here are the valid chat formats:
+
+```
+alpaca
+baichuan
+baichuan-2
+chatglm3
+chatml
+intel
+llama-2
+mistrallite
+oasst_llama
+openbuddy
+openchat
+open-orca
+phind
+pygmalion
+qwen
+redpajama-incite
+saiga
+snoozy
+vicuna
+zephyr
+```
+
+```bash
+# Run Test - API Server
+python3 -m llama_cpp.server \
+    --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
+    --host localhost \
+    --n_gpu_layers 32 \
+    -n_ctx 2048 \
+    --chat_format llama-2
 ```
