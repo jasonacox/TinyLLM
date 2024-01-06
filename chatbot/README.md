@@ -50,6 +50,12 @@ If a URL is pasted in the text box, the chatbot will read and summarize it.
 
 <img width="810" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/44d8a2f7-54c1-4b1c-8471-fdf13439be3b">
 
+## Current News
+
+If the `/news` command is used, the chatbot will attempt to fetch the latest news and have the LLM summarize it for you.
+
+<img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
+
 ## Alternative System Prompts
 
 * A Hacker’s Guide to Language Models - Jeremy Howard [[link](https://www.youtube.com/watch?v=jkrNMKz9pWU&ab_channel=JeremyHoward)]

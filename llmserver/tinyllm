@@ -33,6 +33,10 @@ case "$1" in
     stop)
         stop_service
         ;;
+    restart)
+        stop_service
+        start_service
+        ;;
     enable)
         enable_service
         ;;
@@ -46,7 +50,7 @@ case "$1" in
         view_logs
         ;;
     *)
-        echo "Usage: $0 {start|stop|enable|disable|status|logs}"
+        echo "Usage: $0 {start|stop|restart|enable|disable|status|logs}"
         exit 1
         ;;
 esac
