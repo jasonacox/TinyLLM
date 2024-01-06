@@ -28,8 +28,8 @@ import openai
 import datetime
 
 # Configuration Settings - Showing local LLM
-openai.api_key = "OPENAI_API_KEY"                # Required, use bogus string for Llama.cpp
-openai.api_base = "http://localhost:8000/v1"     # Use API endpoint or comment out for OpenAI
+api_key = "OPENAI_API_KEY"                       # Required, use bogus string for Llama.cpp
+api_base = "http://localhost:8000/v1"            # Use API endpoint or comment out for OpenAI
 agentname = "Jarvis"                             # Set the name of your bot
 mymodel  ="models/7B/gguf-model.bin"             # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 TESTMODE = False                                 # Uses test prompts
@@ -45,7 +45,8 @@ def ask(prompt):
     global context
     # remember context
     context.append({"role": "user", "content": prompt})
-    response = openai.ChatCompletion.create(
+    llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+    response = llm.chat.completions.create(
         model=mymodel,
         max_tokens=1024,
         stream=True, # Send response chunks as LLM computes next tokens
@@ -59,9 +60,9 @@ def printresponse(response):
     completion_text = ''
     # iterate through the stream of events and print it
     for event in response:
-        event_text = event['choices'][0]['delta']
-        if 'content' in event_text:
-            chunk = event_text.content
+        event_text = event.choices[0].delta.content
+        if event_text:
+            chunk = event_text
             completion_text += chunk
             print(f"{chunk}",end="",flush=True) 
     print("",flush=True)
