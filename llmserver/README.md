@@ -152,6 +152,6 @@ python3 -m llama_cpp.server \
     --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
     --host localhost \
     --n_gpu_layers 32 \
-    -n_ctx 2048 \
+    --n_ctx 2048 \
     --chat_format llama-2
 ```
