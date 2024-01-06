@@ -61,7 +61,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.9.2"
+VERSION = "v0.9.3"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -435,7 +435,7 @@ def handle_message(data):
             client[session_id]["visible"] = False
             client[session_id]["remember"] = True
             client[session_id]["prompt"] = (
-                "You are a newscaster who specializes in providing headline news. Use the following context provided by Google News to summarize the top 10 headlines for today. Include the source and rank them by most important to least important."
+                "You are a newscaster who specializes in providing headline news. Use the following context provided by Google News to summarize the top 10 headlines for today. Omit the date but include the source and rank them by most important to least important."
                 f"\nContext: {context_str}"
                 "\nAnswer:"
             )
