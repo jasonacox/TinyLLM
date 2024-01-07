@@ -117,7 +117,8 @@
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            max-width: 400px;
+            max-width: 800px;
+            overflow-y: auto;
         }
         .dialogue-title {
             font-size: 18px;
@@ -142,35 +143,140 @@
             display: flex;
             flex-direction: column;
         }
-    </style>
+        .table-container {
+            height: 80vh; /* Set the height to 90% of the viewport height */
+            overflow-y: auto; /* Enable vertical scrolling */
+            /* add border to table */
+            border: 1px solid #ddd;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            padding: 5px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .prompt-value {
+            width: calc(100% - 10px);
+            height: 40px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .leftcolumn {
+            width: 20px;
+        }
+        .rightcolumn {
+            width: 100%;
+        }
 
+    </style>
     <div class="dialogue-overlay" id="dialogueOverlay">
-        <div class="dialogue-box">
+        <div class="dialogue-box" style="width: 90%;">
             <h2 class="dialogue-title">Settings</h2>
             <div class="dialogue-content">
-                <!-- Add your form elements here for settings -->
-                Future home of settings...
+                <p class="dialogue-content">The TinyLLM Chatbot can be customized by changing the prompts used to generate responses.</p> 
                 <form id="settingsForm">
-                    <!-- Your form fields go here -->
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="leftcolumn">Prompt Name</th>
+                                    <th class="rightcolumn">Prompt Value</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </form>
             </div>
             <button class="dialogue-button" onclick="saveSettings()">Save</button>
-            <button class="dialogue-button" onclick="closeDialogue()">Close</button>
+            <button class="dialogue-button" onclick="closeDialogue()">Cancel</button>
+            <button class="dialogue-button" onclick="resetSettings()">Reset</button>
         </div>
     </div>
 
     <script>
         function openDialogue() {
             document.getElementById("dialogueOverlay").style.display = "flex";
+            // First clear the form from any previous settings
+            document.querySelector('tbody').innerHTML = '';
+            // Fetch the current settings and populate the form
+            fetch('/prompts')
+                .then(response => response.json())
+                .then(data => {
+                    Object.entries(data).forEach(([name, value]) => {
+                        document.querySelector('tbody').innerHTML += `
+                            <tr>
+                                <td>${name}</td>
+                                <td>
+                                    <textarea id="${name}" class="prompt-value" oninput="highlightTextarea(this)">${value}</textarea>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                });
         }
 
+        function highlightTextarea(textarea) {
+            textarea.style.backgroundColor = '#ffffcc';
+        }
+    
         function closeDialogue() {
             document.getElementById("dialogueOverlay").style.display = "none";
         }
 
+        function resetSettings() {
+            // Verify that the user wants to reset the settings
+            if (!confirm('Are you sure you want to reset the settings to the default values?')) {
+                return;
+            }
+            // Reset the settings to the default values
+            fetch('/resetprompts')
+                .then(response => response.json())
+                .then(data => {
+                    Object.entries(data).forEach(([name, value]) => {
+                        document.getElementById(name).value = value;
+                    });
+                });
+        }
+
         function saveSettings() {
-            // Handle form submission and save settings to the server
-            document.getElementById("settingsForm").submit();
+            // Combine name and value into a JSON payload
+            const payload = {};
+            const form = document.getElementById("settingsForm");
+            for (let i = 0; i < form.elements.length; i++) {
+                const element = form.elements[i];
+                if (element.tagName === "TEXTAREA") {
+                    payload[element.id] = element.value;
+                }
+            }
+            console.log('Settings payload:', payload);
+            // Post the payload to the /saveprompts API endpoint
+            fetch('/saveprompts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+                .then(response => {
+                    if (response.ok) {
+                        console.log('Settings saved successfully');
+                    } else {
+                        console.error('Failed to save settings');
+                    }
+                })
+                .catch(error => {
+                    console.error('An error occurred while saving settings:', error);
+                });
+            // Close the dialogue
+            closeDialogue();
         }
     </script>
     <!-- END: pop-up-dialogue -->

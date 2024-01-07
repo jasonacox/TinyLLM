@@ -6,6 +6,7 @@ docker run \
     -e QDRANT_HOST="" \
     -e DEVICE="cuda" \
     -e RESULTS=1 \
+    -v prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
     chatbot

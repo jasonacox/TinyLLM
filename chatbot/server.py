@@ -52,6 +52,7 @@ import threading
 import signal
 import requests
 import logging
+import json
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
@@ -61,7 +62,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.9.3"
+VERSION = "v0.10.0"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -91,6 +92,26 @@ MAXTOKENS = int(os.environ.get("MAXTOKENS", 2048))
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.7))
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key") # Optional - Alpha Vantage API Key
 PORT = int(os.environ.get("PORT", 5000))
+PROMPT_FILE = os.environ.get("PROMPT_FILE", "prompts.json")
+
+# Prompt Defaults
+default_prompts = {}
+default_prompts["greeting"] = "Hi"
+default_prompts["agentname"] = "Jarvis"
+default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Keep your answers brief and accurate. Current date is {date}."
+default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date}."
+default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
+default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use the following context provided by Google News to summarize the top 10 headlines for today. Omit the date but include the source and rank them by most important to least important.\nContext: {context_str}\nAnswer:"
+default_prompts["classify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate."
+default_prompts["classify_prompt"] = "Examine the following statement and identify, with a single word answer if it is about a greeting, weather, stock price, news, or something else. [BEGIN] {prompt} [END]"
+default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. Respond in {format}."
+default_prompts["library"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
+default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
+default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
+default_prompts["subject"] = "What subject is specified in this prompt, state none if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
+default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
+default_prompts["summarize"] = "Consider and summarize this information:\n{context_str}\n"
+default_prompts["blog"] = "Summarize the following text:\n{blogtext}"
 
 # Test OpenAI API
 while True:
@@ -151,11 +172,56 @@ socketio = SocketIO(app)
 
 # Globals
 client = {}
+prompts = {}
+
+# Functions to mange prompts and PROMPT_FILE
+# Load prompts from PROMPT_FILE
+def load_prompts():
+    global prompts
+    try:
+        with open(PROMPT_FILE, "r") as f:
+            prompts = json.load(f)
+    except:
+        log("Unable to load prompts.")
+        prompts = {}
+
+# Save prompts to PROMPT_FILE
+def save_prompts():
+    global prompts
+    try:
+        with open(PROMPT_FILE, "w") as f:
+            json.dump(prompts, f)
+    except:
+        log("Unable to save prompts.")
+
+# Expand variables in prompt to values
+def expand_prompt(prompt, values):
+    for k in values:
+        prompt = prompt.replace(f"{{{k}}}", values[k])
+    return prompt
+
+# Reset prompts
+def reset_prompts():
+    global prompts
+    prompts = {}
+    for k in default_prompts:
+        prompts[k] = default_prompts[k]
+
+# Load prompts
+load_prompts()
+if len(prompts) == 0:
+    # Add default prompts
+    reset_prompts()
+    save_prompts()
+    log(f"Setting defaults for {len(prompts)} prompts.")
+else:
+    log(f"Loaded {len(prompts)} prompts.")
 
 # Set base prompt and initialize the context array for conversation dialogue
 current_date = datetime.datetime.now()
 formatted_date = current_date.strftime("%B %-d, %Y")
-baseprompt = "You are %s, a highly intelligent assistant. Keep your answers brief and accurate. Current date is %s." % (agentname, formatted_date)
+values = {"agentname": agentname, "date": formatted_date}
+baseprompt = expand_prompt(prompts["baseprompt"], values)
 context = [{"role": "system", "content": baseprompt}]
 
 # Function - Send user prompt to LLM for response
@@ -204,9 +270,9 @@ def classify(prompt):
     # Ask LLM to classify the prompt
     #return "something else"
     content = [{"role": "system", 
-                "content": "You are a highly intelligent assistant. Keep your answers brief and accurate."},
+                "content": prompts["classify"]},
                 {"role": "user",
-                "content": f"Examine the following statement and identify, with a single word answer if it is about a greeting, weather, stock price, news, or something else. [BEGIN] {prompt} [END]"}]
+                "content": prompts["classify_prompt"].replace("{prompt}", prompt)}]
     log(f"content: {content}")
     llm = openai.OpenAI(api_key=api_key, base_url=api_base)
     response = llm.chat.completions.create(
@@ -222,7 +288,7 @@ def classify(prompt):
 def clarify(prompt, format="text"):
     # Ask LLM to clarify the prompt
     content = [{"role": "system", 
-                "content": f"You are a highly intelligent assistant. Keep your answers brief and accurate. Respond in {format}."},
+                "content": expand_prompt(prompts["clarify"], {"format": format})},
                 {"role": "user",
                 "content": f"{prompt}"}]
     log(f"content: {content}")
@@ -401,7 +467,7 @@ def handle_message(data):
         if blogtext:
             log(f"* Reading {len(blogtext)} bytes {url}")
             socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = "Summarize the following text:\n" + blogtext
+            client[session_id]["prompt"] = expand_prompt(prompts["blog"], {"blogtext": blogtext})
         else:
             socketio.emit('update', {'update': '[Unable to read URL]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
@@ -412,7 +478,7 @@ def handle_message(data):
             # Reset context
             client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
             socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = 'Hi'
+            client[session_id]["prompt"] = prompts["greeting"]
             client[session_id]["visible"] = False
         elif command == "version":
             # Display version
@@ -435,9 +501,7 @@ def handle_message(data):
             client[session_id]["visible"] = False
             client[session_id]["remember"] = True
             client[session_id]["prompt"] = (
-                "You are a newscaster who specializes in providing headline news. Use the following context provided by Google News to summarize the top 10 headlines for today. Omit the date but include the source and rank them by most important to least important."
-                f"\nContext: {context_str}"
-                "\nAnswer:"
+                expand_prompt(prompts["news"], {"context_str": context_str})
             )
         else:
             # Display help
@@ -473,9 +537,7 @@ def handle_message(data):
                     log(" * " + result['title'])
                 log(f" = {context_str}")
                 client[session_id]["prompt"] = (
-                    "Consider and summarize this information:\n"
-                    f"{context_str}"
-                    "\n"
+                    expand_prompt(prompts["summarize"], {"context_str": context_str})
                 )
             else:
                 socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
@@ -508,11 +570,9 @@ def handle_message(data):
                     context_str += f"{result['title']}: {result['text']}\n"
                     log(" * " + result['title'])
                 client[session_id]["prompt"] = (
-                    "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise."
-                    f"Question: {prompt}"
-                    f"Context: {context_str}"
-                    "Answer:"
+                    expand_prompt(prompts["library"], {"prompt": prompt, "context_str": context_str})
                 )
+                # "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
                 # Alternative
                 #     "[BEGIN]\n"
                 #     f"{context_str}"
@@ -532,7 +592,8 @@ def handle_message(data):
         if "weather" in prompttype.lower():
             # Weather prompt
             log("Weather prompt")
-            location = clarify(f"What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {p} [END]")
+            # "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
+            location = clarify(expand_prompt(prompts["location"], {"prompt": p}))
             if "none" in location.lower():
                 context_str = get_weather("")
             else:
@@ -540,7 +601,7 @@ def handle_message(data):
         elif "stock" in prompttype.lower():
             # Stock prompt
             log("Stock prompt")
-            company = clarify(f"What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {p} [END]")
+            company = clarify(expand_prompt(prompts["company"], {"prompt": p}))
             context_str = get_stock(company)
             log(f"Company = {company} - Context = {context_str}")
             socketio.emit('update', {'update': context_str, 'voice': 'ai'},room=session_id)
@@ -550,7 +611,7 @@ def handle_message(data):
         elif "news" in prompttype.lower():
             # News prompt
             log("News prompt")
-            subject = clarify(f"What subject is specified in this prompt, state none if there isn't one. Use a single word answer. [BEGIN] {p} [END]")
+            subject = clarify(expand_prompt(prompts["subject"], {"prompt": p}))
             context_str = get_news(subject)
             log(f"Subject = {subject} - Context = {context_str}")
         else:
@@ -563,15 +624,48 @@ def handle_message(data):
             client[session_id]["visible"] = False
             client[session_id]["remember"] = True
             client[session_id]["prompt"] = (
-                "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know."
-                f"\nQuestion: {p}"
-                f"\nContext: {context_str}"
-                "\nAnswer:"
+                expand_prompt(prompts["qa"], {"prompt": p, "context_str": context_str})
             )
     else:
         # Normal prompt
         client[session_id]["prompt"] = p
     return jsonify({'status': 'Message received'})
+
+@app.route('/prompts')
+def get_prompts():
+    global prompts
+    return jsonify(prompts)
+
+# Add a route for POST requests to update prompts
+@app.route('/saveprompts', methods=['POST'])
+def update_prompts():
+    global prompts, baseprompt, socketio
+    oldbaseprompt = prompts["baseprompt"]
+    oldagentname = prompts["agentname"]
+    # Get the JSON data sent from the client
+    data = request.get_json(force=True)
+    log(f"Received prompts: {data}")
+    # Update prompts
+    for key in data:
+        prompts[key] = data[key]
+    save_prompts()
+    if oldbaseprompt != prompts["baseprompt"] or oldagentname != prompts["agentname"]:
+        # Update baseprompt
+        agentname = prompts["agentname"]
+        current_date = datetime.datetime.now()
+        formatted_date = current_date.strftime("%B %-d, %Y")
+        values = {"agentname": agentname, "date": formatted_date}
+        baseprompt = expand_prompt(prompts["baseprompt"], values)
+    # Notify all clients of update
+    log("Base prompt updated - notifying users")
+    socketio.emit('update', {'update': '[Prompts Updated]', 'voice': 'user'})
+    return jsonify({"Result": "Prompts updated"})
+
+@app.route('/resetprompts')
+def reset_prompts_route():
+    # Send the user the default prompts
+    global default_prompts
+    return jsonify(default_prompts)
 
 @app.route('/version')
 def version():
