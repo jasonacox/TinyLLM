@@ -432,7 +432,6 @@ def handle_connect():
         update_thread.start()
         client[session_id]["thread"] = update_thread
 
-    
 @socketio.on('disconnect')
 def handle_disconnect():
     session_id = request.sid
@@ -457,6 +456,9 @@ def handle_message(data):
         return
     p = data["prompt"]
     client[session_id]["visible"] = data["show"]
+    # Did we get a start command? Use greeting prompt.
+    if p == "{start}":
+        p = prompts["greeting"]
     # Did we get asked to fetch a URL?
     if p.startswith("http"):
         # Summarize text at URL
