@@ -36,6 +36,7 @@ OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 /reset                         # Reset session
 /version                       # Display chatbot version
 /sessions                      # Display nmber of sessions
+/news                          # Fetch and summarize latest news
 ```
 
 ## Example Session
@@ -52,7 +53,7 @@ If a URL is pasted in the text box, the chatbot will read and summarize it.
 
 ## Current News
 
-If the `/news` command is used, the chatbot will attempt to fetch the latest news and have the LLM summarize it for you.
+The `/news` command will fetch the latest news and have the LLM summarize the top ten headlines. It will store the raw feed in the context prompt to allow follow-up questions.
 
 <img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
 
