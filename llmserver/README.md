@@ -13,7 +13,7 @@ CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server
 cd models
 
 # Mistral 7B GGUF Q-5bit model Q5_K_M
-wget https://huggingface.co/TheBloke/Mistral-7B-Claude-Chat-GGUF/resolve/main/mistral-7b-claude-chat.Q5_K_M.gguf
+wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf
 
 # Meta LLaMA-2 7B GGUF Q-5bit model Q5_K_M
 wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
@@ -119,11 +119,19 @@ docker run \
     llmserver
 ```
 
+## LLM Models
+
+Here are some suggested models that work with TinyLLM. You can test other models and different quantization, but in my experiments, the Q5_K_M models performed the best. I provide the links to download those models from HuggingFace as well as the model card's suggested context size and chat prompt mode.
+
+| LLM | Quantized | Link to Download | Context Size | Chat Prompt Mode |
+| --- | --- | --- | --- | --- |
+| Llama-2 7B | 5-bit | [llama-2-7b-chat.Q5_K_M.gguf](https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf) | 2048 | llama-2 |
+| Mistral v0.1 7B | 5-bit | [mistral-7b-instruct-v0.1.Q5_K_M.gguf](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf) | 3000 | chatml |
+
 ## Chat Formats
 
-The llama.cpp server will support chat formats for various models. The format is specified with the `--chat_format chatml` parameter in the startup command. Here are the valid chat formats:
+The llama.cpp server will support chat formats for various models. It is important to select the right one as each model was trained to respond to a particular format. If the model doesn't seem to work or chat seems to be filled with random dialogue that you didn't insert, you probably have the wrong model. The chat format is specified with the `--chat_format chatml` parameter in the startup command. Here are the current valid chat formats for llama_cpp:
 
-```
 alpaca
 baichuan
 baichuan-2
@@ -144,10 +152,11 @@ saiga
 snoozy
 vicuna
 zephyr
-```
+
+Example Run
 
 ```bash
-# Run Test - API Server
+# Run Test - API Server - see run.sh
 python3 -m llama_cpp.server \
     --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
     --host localhost \

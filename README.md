@@ -6,12 +6,14 @@ TinyLLM? Yes, the name is a bit of a contradiction, but it means well. It's all 
 
 ## Hardware Specs
 
-The reference hardware:
-
+The reference base hardware:
 * CPU: Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz
 * Memory: 8GB DDR4 (more recommended)
 * Disk: 128G SSD Boot, 4TB HDD
 * GPU: NVIDIA GeForce GTX 1060 6GB
+
+Suggested:
+* GPU: NVIDIA GeForce RTX 3090 24GB (with CUDA Version: 12.2)
 
 ## Setup
 
@@ -93,7 +95,7 @@ The models built or downloaded here can be used by the [LLaMa-cpp-python](https:
 
 ```bash
 # Linux OS - Build and Install with Nvidia GPU support
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.7
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.27
 ```
 
 This will also build llama.cpp but includes the python bindings. Next, if you downloaded the Llama-2 LLM model above, you can test it using this python script:
