@@ -1,252 +1,138 @@
 # TinyLLM
 
-This project helps you build a small locally hosted LLM using consumer grade hardware. The intent is to be able to build, train, tune and run LLM models locally.
-
 TinyLLM? Yes, the name is a bit of a contradiction, but it means well. It's all about putting a large language model (LLM) on a tiny system that still delivers acceptable performance.
 
-## Hardware Specs
+This project helps you build a small locally hosted LLM with a ChatGPT-like web interface using consumer grade hardware. 
 
-The reference base hardware:
-* CPU: Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz
-* Memory: 8GB DDR4 (more recommended)
-* Disk: 128G SSD Boot, 4TB HDD
-* GPU: NVIDIA GeForce GTX 1060 6GB
+Key Features
+* Supports multiple LLMs (see list below)
+* Builds a local OpenAI API web service via llama-cpp-python. 
+* Serves up Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and sources.
 
-Suggested:
-* GPU: NVIDIA GeForce RTX 3090 24GB (with CUDA Version: 12.2)
+## Hardware Requirements
 
-## Setup
+* CPU: Intel, AMD or Apple Silicon
+* Memory: 8GB+ DDR4
+* Disk: 128G+ SSD
+* GPU: NVIDIA (e.g. GTX 1060 6GB, RTX 3090 24GB) or Apple M1/M2
+* OS: Ubuntu Linux, MacOS
+* Software: Python 3, CUDA Version: 12.2
+
+## Quickstart
+
+TODO - Quick start setup script.
+
+## Manual Setup
 
 ```bash
-# Clone the llama.cpp project
-git clone https://github.com/ggerganov/llama.cpp.git
-cd llama.cpp
-
-# Linux - Build for Nvidia GPU using CMake
-mkdir build
-cd build
-cmake .. -DLLAMA_CUBLAS=ON   # Omit -DLLAMA_CUBLAS=ON for CPU only
-cmake --build . --config Release
+# Clone the project
+git clone https://github.com/jasonacox/TinyLLM.git
+cd TinyLLM
 ```
 
-## Using LLaMA-2 or Mistral 7B - 5-bit Quantized Models
+Build the llama-cpp-python components for your target systems.
+
+### LLMserver
 
 ```bash
-# Download GGUF models from HuggingFace.
-cd models
+# Install Python Libraries with Nvidia GPU support - Pin to v0.2.27 for now
 
-# Meta LLaMA-2 7B GGUF Q-5bit model Q5_K_M
+# Uninstall any old version of llama-cpp-python
+pip3 uninstall llama-cpp-python -y
+
+# Linux Target with Nvidia CUDA support
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python==0.2.27 --no-cache-dir
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python[server]==0.2.27 --no-cache-dir
+
+# MacOS Target with Apple Silicon M1/M2
+CMAKE_ARGS="-DLLAMA_METAL=on" pip3 install -U llama-cpp-python --no-cache-dir
+pip3 install 'llama-cpp-python[server]'
+
+# Download Models from HuggingFace
+cd llmserver/models
+
+# Get the Mistral 7B GGUF Q-5bit model Q5_K_M and Meta LLaMA-2 7B GGUF Q-5bit model Q5_K_M
+wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf
 wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
 
-# Mistral 7B GGUF Q-5bit model Q5_K_M
-wget https://huggingface.co/TheBloke/Mistral-7B-Claude-Chat-GGUF/resolve/main/mistral-7b-claude-chat.Q5_K_M.gguf
-
+# Edit the tinyllm.service to match your environment, specifically:
+#   ExecStart - make sure path to python3 and  --n_gpu_layers is set to 32 if GPU vram is below 12G
+#   WorkingDirectory - this is the absolutel path to the gguf file downloaded above
+#   User - this is your local username
 cd ..
+vim tinyllm.service
 
-# Run interactive chat.
-./build/bin/main -m models/llama-2-7b-chat.Q5_K_M.gguf \
-    -t 4 \
-    --color \
-    -c 4096 \
-    --temp 0.7 \
-    --gpu-layers 32 \
-    -n -1 \
-    -i -ins 
+# Set up the service in systemd
+sudo cp tinyllm.service /etc/systemd/system/
+sudo cp tinyllm /etc/init.d
+sudo /etc/init.d/tinyllm start
+sudo /etc/init.d/tinyllm enable
 
-Where:
-    -m models/llama-2-7b-chat.Q5_K_M.gguf   # The model
-    -t 4                                    # change to match number of CPU cores
-    -c 4096                                 # context length
-    --temp 0.7                              # randomness 
-    --gpu-layers 32                         # number of layers to offload to GPU - remove if cpu only
-    -n -1 --color                           # options 
-    -i -ins                                 # interactive mode and instruction
+# Check status and logs to make sure service is running
+sudo /etc/init.d/tinyllm status
+
+# Test server with a Command Line chat
+python3 ../chat.py
 ```
 
-See https://github.com/ggerganov/llama.cpp/blob/master/examples/main/README.md for more details on inference parameters.
-
-Example chat using llama.cpp interactive mode:
+### Chatbot
 
 ```bash
-./main -t 4 -m models/llama-2-7b-chat.Q5_K_M.gguf \
-    --color -c 4096 --temp 0.7 --gpu-layers 32 -n -1 -i -ins
+# Move to chatbot folder
+cd ../chatbot
+
+# Build Docker container
+docker build -t chatbot .
+
+# Run container as a service on port 5000
+docker run \
+    -d \
+    -p 5000:5000 \
+    -e QDRANT_HOST="" \
+    -e DEVICE="cuda" \
+    -e RESULTS=1 \
+    -v prompts.json:/app/prompts.json \
+    --name chatbot \
+    --restart unless-stopped \
+    chatbot
 ```
 
-```
-> Pick a color
-Green
+You can test the chatbot at http://localhost:5000
 
-> What is a llama?
-A llama is a large, domesticated mammal that is native to South America. It has long, shaggy fur and distinctive ears with a distinctive curled-over shape. Llamas are used for their wool and as pack animals in remote areas where cars cannot reach. They are also known for their calm and gentle nature.
+<img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
 
-> Write a haiku
-Llama in the sun
-Gentle eyes, shaggy coat
-Soft as a cloud
-```
-
-This example model was run on a Ubuntu Linux host with an Intel i5-6500 CPU @ 3.20GHz, 8GB RAM and an Nvidia GTX 1060 GPU with 6GB VRAM.
-
-https://github.com/jasonacox/ProtosAI/assets/836718/285101a0-1045-441d-9960-26d6c251db11
-
-## Python API
-
-The models built or downloaded here can be used by the [LLaMa-cpp-python](https://github.com/abetlen/llama-cpp-python) project.
+You can also test the chatbot server without docker using the following.
 
 ```bash
-# Linux OS - Build and Install with Nvidia GPU support
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.27
+# Install required packages
+pip install openai flask flask-socketio bs4
+
+# Run the chatbot web server - change the base URL to be where you host your llmserver
+python3 server.py
 ```
 
-This will also build llama.cpp but includes the python bindings. Next, if you downloaded the Llama-2 LLM model above, you can test it using this python script:
+## LLM Models
 
-```python
-from llama_cpp import Llama
+Here are some suggested models that work well with TinyLLM. You can test other models and different quantization, but in my experiments, the Q5_K_M models performed the best. Below are the download links from HuggingFace as well as the model card's suggested context size and chat prompt mode.
 
-# Load model - use gpu for 32 of 35 NN layers to keep it within the 6GB VRAM limit
-llm = Llama(model_path="models/llama-2-7b-chat.Q5_K_M.gguf", n_gpu_layers=32)
+| LLM | Quantized | Link to Download | Context Size | Chat Prompt Mode |
+| --- | --- | --- | --- | --- |
+| Mistral v0.1 7B | 5-bit | [mistral-7b-instruct-v0.1.Q5_K_M.gguf](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf) | 4096 | llama-2 |
+| Llama-2 7B | 5-bit | [llama-2-7b-chat.Q5_K_M.gguf](https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf) | 2048 | llama-2 |
+| Mistrallite 32K 7B | 5-bit | [mistrallite.Q5_K_M.gguf](https://huggingface.co/TheBloke/MistralLite-7B-GGUF/resolve/main/mistrallite.Q5_K_M.gguf) | 16384 | mistrallite (can be glitchy) |
+| --- | --- | --- | --- | --- |
+| Nous-Hermes-2-SOLAR 10.7B | 5-bit | [nous-hermes-2-solar-10.7b.Q5_K_M.gguf](https://huggingface.co/TheBloke/Nous-Hermes-2-SOLAR-10.7B-GGUF/resolve/main/nous-hermes-2-solar-10.7b.Q5_K_M.gguf) | 4096 | chatml |
+| --- | --- | --- | --- | --- |
+| Claude2 trained Alpaca 13B | 5-bit | [claude2-alpaca-13b.Q5_K_M.gguf](https://huggingface.co/TheBloke/claude2-alpaca-13B-GGUF/resolve/main/claude2-alpaca-13b.Q5_K_M.gguf) | 2048 | chatml |
+| Llama-2 13B | 5-bit | [llama-2-13b-chat.Q5_K_M.gguf](https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF/resolve/main/llama-2-13b-chat.Q5_K_M.gguf) | 2048 | llama-2 |
+| Vicuna 13B v1.5| 5-bit | [vicuna-13b-v1.5.Q5_K_M.gguf](https://huggingface.co/TheBloke/vicuna-13B-v1.5-GGUF/resolve/main/vicuna-13b-v1.5.Q5_K_M.gguf) | 2048 | vicuna |
 
-# Ask a question
-question = "Name the planets in the solar system?"
-print(f"Asking: {question}...")
-output = llm(f"Q: {question} A: ", 
-    max_tokens=64, stop=["Q:", "\n"], echo=True)
-
-# Print answer
-print("\nResponse:")
-print(output['choices'][0]['text'])
-```
 
 ## OpenAI API Compatible Server
 
 The llama-cpp-python library has a built in OpenAI API compatible server. This can be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
 
-### Manual Setup
-
-```bash
-# Install Server that uses OpenAI API
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]==0.2.7
-
-# Run the API Server
-python3 -m llama_cpp.server \
-    --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
-    --host localhost \
-    --n_gpu_layers 32 
-
-# It will listen on port 8000
-```
-
-### Run as a Service
-
-See instructions here: https://github.com/jasonacox/TinyLLM/tree/main/llmserver 
-
-## CLI Chat using API
-
-See the example [chat.py](chat.py) CLI Chatbot script that connects to this server and hosts
-an interactive session with the LLM.
-
-The example chat.py Features:
-  * Use of OpenAI API (could be used to connect to the OpenAI service if you have a key)
-  * Works with local hosted OpenAI compatible llama-cpp-python[server]
-  * Retains conversational context for LLM
-  * Uses response stream to render LLM chunks instead of waiting for full response
-
-Example Test Run (`./chat.py`):
-
-```
-ChatBot - Greetings! My name is Jarvis. Enter an empty line to quit chat.
-
-> What is your name?
-
-Jarvis> Jarvis.
-
-> What is today's date?
-
-Jarvis> Today's date is September 10, 2023.
-
-> What day of the week is it?
-
-Jarvis> It is Sunday.
-
-> Answer this riddle: Ram's mom has three children, Reshma, Raja and a third one. What is the name of the third child?
-
-Jarvis> The answer to the riddle is "Ram."
-
-> Pick a color.
-
-Jarvis> Jarvis will choose blue.
-
-> Now write a poem about that color.
-
-Jarvis> Here is a short poem about the color blue:
-Blue, the hue of the sky so high
-A symbol of hope, and a sight to the eye
-Soothing and calm, yet bold and bright
-The color of serenity, and pure delight.
-
-> What time is it?
-
-Jarvis> The current time is 10:45 AM.
-
-> Thank you very much!
-
-Jarvis> You're welcome! Is there anything else I can assist you with?
-```
-
-## Web Based Chatbot
-
-The above CLI chat was converted to a web based python flask app in the [chatbot](chatbot) folder. To run the web server you can use the docker container as specified in the chatbot folder or do this manually:
-
-```bash
-# Install required packages
-pip install openai flask flask-socketio bs4
-cd chatbot
-
-# Run the chatbot web server - change the base URL to be where you host your llmserver
-OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
-```
-
-Open http://127.0.0.1:5000 - Example session:
-
-<img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
-
-## Retrieval-Augmented Generation (RAG)
-
-Retrieval-Augmented Generation (RAG) is an architecture that combines the strengths of retrieval-based and generation-based language models. The basic idea is to use a retrieval model to generate high-quality text, and then augment this text with additional information from a generative model. This allows RAG models to generate more accurate and informative text than either retrieval or generation models alone.
-
-See the [rag](https://github.com/jasonacox/TinyLLM/tree/main/rag) folder for information about setting up the vector database, embedding your documents and integrating with the LLM (e.g. llama).
-
-## Train
-
-The llama.cpp project includes a `train-text-from-scratch` tool. Use `-h` to see the options or an example below.
-
-```bash
-# Create a text file to use for training
-mkdir models/jason
-curl -s https://github.com/jasonacox/ProtosAI/files/11715802/input.txt > models/jason/jason.txt
-
-# Run the training
-./train-text-from-scratch \
-        --vocab-model models/ggml-vocab.bin \
-        --checkpoint-in models/jason/jason.chk.bin \
-        --checkpoint-out models/jason/jason.chk.bin \
-        --model-out models/jason/jason.bin \
-        --train-data models/jason/jason.txt \
-        --ctx 32 --embd 256 --head 8 --layer 16 \
-        -t 4 -b 32 --seed 42 --adam-iter 16 \
-        --use-flash --print-details-interval 0 --predict 64 \
-        -n 1 # adjust this for the number of iterations to run
-```
-
 ## References
 
 * LLaMa.cpp - https://github.com/ggerganov/llama.cpp
 * LLaMa-cpp-python - https://github.com/abetlen/llama-cpp-python
-* Video Tutorial - Train your own llama.cpp mini-ggml-model from scratch!: https://asciinema.org/a/592303
-* How to run your own LLM GPT - https://blog.rfox.eu/en/Programming/How_to_run_your_own_LLM_GPT.html
-
-## Additional Tools
-
-* LlamaIndex - augment LLMs with our own private data - https://gpt-index.readthedocs.io/en/latest/index.html
-
-
