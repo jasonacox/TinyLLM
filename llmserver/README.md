@@ -5,7 +5,7 @@ This creates an instance of llama_cpp.server which serves up a LLM with OpenAI A
 ## Setup
 
 ```bash
-# Install Python Libraries with Nvidia GPU support - Pin to v0.2.7 for now
+# Install Python Libraries with Nvidia GPU support - Pin to v0.2.27 for now
 CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.2.27
 CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python[server]==0.2.27
 
@@ -22,9 +22,9 @@ cd ..
 
 # Run Test - API Server
 python3 -m llama_cpp.server \
-    --model ./models/llama-2-7b-chat.Q5_K_M.gguf \
+    --model ./models/mistral-7b-instruct-v0.1.Q5_K_M.gguf \
     --host localhost \
-    --n_gpu_layers 32 \
+    --n_gpu_layers 99 \
     -n_ctx 2048 \
     --chat_format llama-2
 

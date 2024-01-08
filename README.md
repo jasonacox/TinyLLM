@@ -7,7 +7,7 @@ This project helps you build a small locally hosted LLM with a ChatGPT-like web 
 Key Features
 * Supports multiple LLMs (see list below)
 * Builds a local OpenAI API web service via llama-cpp-python. 
-* Serves up Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and sources.
+* Serves up Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and other sources (e.g. news, stocks, weather).
 
 ## Hardware Requirements
 
@@ -55,12 +55,14 @@ cd llmserver/models
 wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf
 wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
 
-# Edit the tinyllm.service to match your environment, specifically:
-#   ExecStart - make sure path to python3 and  --n_gpu_layers is set to 32 if GPU vram is below 12G
-#   WorkingDirectory - this is the absolutel path to the gguf file downloaded above
-#   User - this is your local username
+# Edit the tinyllm.service to match your environment:
 cd ..
 vim tinyllm.service
+
+# Edit
+#   ExecStart - make sure path to python3 and  --n_gpu_layers (e.g. 32 if GPU VRAM is 6GB)
+#   WorkingDirectory - this is the absolute path to the gguf file downloaded above
+#   User - this is your local username
 
 # Set up the service in systemd
 sudo cp tinyllm.service /etc/systemd/system/
@@ -113,9 +115,9 @@ python3 server.py
 
 ## LLM Models
 
-Here are some suggested models that work well with TinyLLM. You can test other models and different quantization, but in my experiments, the Q5_K_M models performed the best. Below are the download links from HuggingFace as well as the model card's suggested context size and chat prompt mode.
+Here are some suggested models that work well with TinyLLM. You can test other models and different quantization, but in my experiments, the Q5_K_M models performed the best. Below are the download links from HuggingFace as well as the model card's suggested context length size and chat prompt mode.
 
-| LLM | Quantized | Link to Download | Context Size | Chat Prompt Mode |
+| LLM | Quantized | Link to Download | Context Length | Chat Prompt Mode |
 | --- | --- | --- | --- | --- |
 | Mistral v0.1 7B | 5-bit | [mistral-7b-instruct-v0.1.Q5_K_M.gguf](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf) | 4096 | llama-2 |
 | Llama-2 7B | 5-bit | [llama-2-7b-chat.Q5_K_M.gguf](https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf) | 2048 | llama-2 |
