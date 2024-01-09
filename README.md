@@ -104,7 +104,9 @@ docker run \
 
 You can test the chatbot at http://localhost:5000
 
-<img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
+<img width="715" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/cb6e2a53-444a-46e3-ab87-86ed9fb29839">
+
+<img width="714" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/928ae86f-fd7d-4fd6-849a-875d771acf64">
 
 You can also test the chatbot server without docker using the following.
 
