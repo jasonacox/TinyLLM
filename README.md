@@ -2,9 +2,10 @@
 
 TinyLLM? Yes, the name is a bit of a contradiction, but it means well. It's all about putting a large language model (LLM) on a tiny system that still delivers acceptable performance.
 
-This project helps you build a small locally hosted LLM with a ChatGPT-like web interface using consumer grade hardware. 
+This project helps you build a small locally hosted LLM with a ChatGPT-like web interface using consumer grade hardware. To read more about my research with llama.cpp and LLMs, see [research.md](research.md).
 
-Key Features
+## Key Features
+
 * Supports multiple LLMs (see list below)
 * Builds a local OpenAI API web service via llama-cpp-python. 
 * Serves up Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and other sources (e.g. news, stocks, weather).
@@ -33,6 +34,8 @@ cd TinyLLM
 Build the llama-cpp-python components for your target systems.
 
 ### LLMserver
+
+LLMserver uses the llama-cpp-python library has a built in OpenAI API compatible server. This can be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
 
 ```bash
 # Install Python Libraries with Nvidia GPU support - Pin to v0.2.27 for now
@@ -78,6 +81,8 @@ python3 ../chat.py
 ```
 
 ### Chatbot
+
+Chatbot is a simple web based python flask app that allows you to chat with a LLM using the OpenAI API. It offers some RAG features including summarizing external websites (just paste a URL to a webpage or PDF), fetching and summarizing current news, and working with vector databases and other sources (see [chatbot](chatbot) page for more details).
 
 ```bash
 # Move to chatbot folder
@@ -129,10 +134,6 @@ Here are some suggested models that work well with TinyLLM. You can test other m
 | Llama-2 13B | 5-bit | [llama-2-13b-chat.Q5_K_M.gguf](https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF/resolve/main/llama-2-13b-chat.Q5_K_M.gguf) | 2048 | llama-2 |
 | Vicuna 13B v1.5| 5-bit | [vicuna-13b-v1.5.Q5_K_M.gguf](https://huggingface.co/TheBloke/vicuna-13B-v1.5-GGUF/resolve/main/vicuna-13b-v1.5.Q5_K_M.gguf) | 2048 | vicuna |
 
-
-## OpenAI API Compatible Server
-
-The llama-cpp-python library has a built in OpenAI API compatible server. This can be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
 
 ## References
 
