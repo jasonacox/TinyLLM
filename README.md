@@ -29,7 +29,7 @@ TODO - Quick start setup script.
 # Clone the project
 git clone https://github.com/jasonacox/TinyLLM.git
 cd TinyLLM
-```x
+```
 
 ### LLMserver
 
