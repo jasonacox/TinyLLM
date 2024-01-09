@@ -80,7 +80,7 @@ python3 ../chat.py
 
 ### Chatbot
 
-Chatbot is a simple web based python flask app that allows you to chat with a LLM using the OpenAI API. It offers some RAG features including summarizing external websites (just paste a URL to a webpage or PDF), fetching and summarizing current news, and working with vector databases and other sources (see [chatbot](chatbot) page for more details).
+Chatbot is a simple web based python flask app that allows you to chat with a LLM using the OpenAI API. It offers some RAG (Retrieval Augmented Generation) features including summarizing external websites (just paste a URL to a webpage or PDF), fetching and summarizing current news, and working with vector databases and other sources (see [chatbot](chatbot) page for more details).
 
 ```bash
 # Move to chatbot folder
@@ -105,6 +105,8 @@ docker run \
 You can test the chatbot at http://localhost:5000
 
 <img width="715" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/cb6e2a53-444a-46e3-ab87-86ed9fb29839">
+
+Here are some example using RAG commands to pull external data, including reading a PDF, pulling latest news and having a conversation about it, and answering a question based on a dictionary stored in an attached Vector Database.
 
 <img width="714" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/928ae86f-fd7d-4fd6-849a-875d771acf64">
 
