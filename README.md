@@ -33,10 +33,10 @@ cd TinyLLM
 
 ### LLMserver
 
-LLMserver uses the llama-cpp-python library has a built in OpenAI API compatible server. This can be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
+LLMserver uses the llama-cpp-python library which has a built in OpenAI API compatible server. This can be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
 
 ```bash
-# Install Python Libraries with Nvidia GPU support - Pin to v0.2.27 for now
+# Install Python Libraries with Nvidia GPU support
 
 # Uninstall any old version of llama-cpp-python
 pip3 uninstall llama-cpp-python -y
@@ -58,7 +58,7 @@ wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7
 
 # Edit the tinyllm.service to match your environment:
 cd ..
-vim tinyllm.service
+nano tinyllm.service
 
 # Edit
 #   ExecStart - make sure path to python3 and  --n_gpu_layers (e.g. 32 if GPU VRAM is 6GB)
