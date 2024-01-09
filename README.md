@@ -29,9 +29,7 @@ TODO - Quick start setup script.
 # Clone the project
 git clone https://github.com/jasonacox/TinyLLM.git
 cd TinyLLM
-```
-
-Build the llama-cpp-python components for your target systems.
+```x
 
 ### LLMserver
 
