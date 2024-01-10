@@ -109,11 +109,9 @@ docker run \
     chatbot
 ```
 
-You can test the chatbot at http://localhost:5000
-
 ### Example Session
 
-Open http://127.0.0.1:5000 - Example session:
+Open http://localhost:5000 - Example session:
 
 <img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/9eef2769-a352-4cc9-9698-ce15e41c2c45">
 
