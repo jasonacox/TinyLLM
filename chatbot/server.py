@@ -62,7 +62,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.10.0"
+VERSION = "v0.10.1"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -470,7 +470,7 @@ def handle_message(data):
         blogtext = extract_text_from_blog(p.strip())
         if blogtext:
             log(f"* Reading {len(blogtext)} bytes {url}")
-            socketio.emit('update', {'update': '[Reading: %s]' % url, 'voice': 'user'},room=session_id)
+            socketio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = expand_prompt(prompts["blog"], {"blogtext": blogtext})
         else:
             socketio.emit('update', {'update': '[Unable to read URL]', 'voice': 'user'},room=session_id)
@@ -499,7 +499,7 @@ def handle_message(data):
             client[session_id]["prompt"] = ''
         elif command == "news":
             log("News requested")
-            socketio.emit('update', {'update': '/news\n[Fetching News]', 'voice': 'user'},room=session_id)
+            socketio.emit('update', {'update': '/news [Fetching News]', 'voice': 'user'},room=session_id)
             context_str = get_news("none", 25)
             log(f"News Raw Context = {context_str}")
             client[session_id]["visible"] = False

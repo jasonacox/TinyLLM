@@ -1,8 +1,13 @@
 # Releases
 
+## 0.10.1 - Misc Updates
+
+* Updated default prompts.
+* Minor formatting updates
+
 ## 0.10.0 - Chat Prompt Settings
 
-* Settings button allows user to update base and query fonts for the chatbot.
+* Settings button allows user to update base and query prompts for the chatbot.
 
 ## 0.9.3 - Chat Format and News
 
