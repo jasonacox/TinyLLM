@@ -77,22 +77,24 @@ from sentence_transformers import SentenceTransformer
 def log(text):
     logger.info(text)
 
-# Configuration Settings - Showing local LLM
-api_key = os.environ.get("OPENAI_API_KEY", "open_api_key")    # Required, use bogus string for Llama.cpp
-api_base = os.environ.get("OPENAI_API_BASE", "https://api.openai.com") 
-agentname = os.environ.get("AGENT_NAME", "Jarvis")                              # Set the name of your bot
-mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")                # Pick model to use e.g. gpt-3.5-turbo for OpenAI
-DEBUG = os.environ.get("DEBUG", "False") == "True"
-STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")
-QDRANT_HOST = os.environ.get("QDRANT_HOST", "") # Empty = disable RAG support
-DEVICE = os.environ.get("DEVICE", "cuda")
-RESULTS = os.environ.get("RESULTS", 1)
-MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 10))
-MAXTOKENS = int(os.environ.get("MAXTOKENS", 2048))
-TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.7))
-ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key") # Optional - Alpha Vantage API Key
-PORT = int(os.environ.get("PORT", 5000))
-PROMPT_FILE = os.environ.get("PROMPT_FILE", "prompts.json")
+# Configuration Settings
+api_key = os.environ.get("OPENAI_API_KEY", "open_api_key")                  # Required, use bogus string for Llama.cpp
+api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Required, use https://api.openai.com for OpenAI
+agentname = os.environ.get("AGENT_NAME", "Jarvis")                          # Set the name of your bot
+mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
+DEBUG = os.environ.get("DEBUG", "False") == "True"                          # Set to True to enable debug mode
+MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 10))                          # Maximum number of concurrent clients
+MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
+TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.7))                     # LLM temperature
+PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
+PROMPT_FILE = os.environ.get("PROMPT_FILE", "prompts.json")                 # File to store prompts
+
+# RAG Configuration Settings
+STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")                    # Sentence Transformer Model to use
+QDRANT_HOST = os.environ.get("QDRANT_HOST", "")                             # Empty = disable RAG support
+DEVICE = os.environ.get("DEVICE", "cuda")                   # cuda or cpu   # Device to use for Sentence Transformer
+RESULTS = os.environ.get("RESULTS", 1)                                      # Number of results to return from RAG query
+ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Optional - Alpha Vantage API Key
 
 # Prompt Defaults
 default_prompts = {}

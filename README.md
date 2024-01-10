@@ -83,9 +83,8 @@ python3 ../chat.py
 Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It support multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
 
 * Summarizing external websites (just paste a URL in chat window)
-* Fetch current news (use `/news`)
-* Use a vector databases for RAG queries.
-* See [chatbot](chatbot) page for more details.
+* Fetch current news (use `/news`) - see [chatbot](chatbot) page for more details.
+* Use a vector databases for RAG queries - see [RAG](rag) page for details
 
 ```bash
 # Move to chatbot folder
@@ -98,6 +97,7 @@ docker build -t chatbot .
 docker run \
     -d \
     -p 5000:5000 \
+    -e OPENAI_API_BASE="http://localhost:8000/v1" \
     -e QDRANT_HOST="" \
     -e DEVICE="cuda" \
     -e RESULTS=1 \
@@ -127,13 +127,15 @@ The `/news` command will fetch the latest news and have the LLM summarize the to
 
 <img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
 
+### Manual Setup
+
 You can also test the chatbot server without docker using the following.
 
 ```bash
 # Install required packages
 pip install openai flask flask-socketio bs4
 
-# Run the chatbot web server - change the base URL to be where you host your llmserver
+# Run the chatbot web server
 python3 server.py
 ```
 

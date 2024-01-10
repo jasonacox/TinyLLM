@@ -3,6 +3,7 @@
 docker run \
     -d \
     -p 5000:5000 \
+    -e OPENAI_API_BASE="http://localhost:8000/v1" \
     -e QDRANT_HOST="" \
     -e DEVICE="cuda" \
     -e RESULTS=1 \
