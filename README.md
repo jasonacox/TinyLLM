@@ -8,7 +8,7 @@ This project helps you build a small locally hosted LLM with a ChatGPT-like web 
 
 * Supports multiple LLMs (see list below)
 * Builds a local OpenAI API web service via llama-cpp-python. 
-* Serves up Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and other sources (e.g. news, stocks, weather).
+* Serves up a Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and other sources (e.g. news, stocks, weather).
 
 ## Hardware Requirements
 
@@ -33,7 +33,7 @@ cd TinyLLM
 
 ### LLMserver
 
-LLMserver uses the llama-cpp-python library which has a built in OpenAI API compatible server. This can be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
+LLMserver uses the llama-cpp-python library which has a built-in OpenAI API compatible server. This will be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
 
 ```bash
 # Install Python Libraries with Nvidia GPU support
@@ -80,7 +80,12 @@ python3 ../chat.py
 
 ### Chatbot
 
-Chatbot is a simple web based python flask app that allows you to chat with a LLM using the OpenAI API. It stores conversational history in the prompt context. It also offers some RAG (Retrieval Augmented Generation) features including summarizing external websites (paste a URL to a webpage or PDF), fetching and summarizing current news, and working with vector databases and other sources (see [chatbot](chatbot) page for more details).
+Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It support multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
+
+* Summarizing external websites (just paste a URL in chat window)
+* Fetch current news (use `/news`)
+* Use a vector databases for RAG queries.
+* See [chatbot](chatbot) page for more details.
 
 ```bash
 # Move to chatbot folder
@@ -104,11 +109,23 @@ docker run \
 
 You can test the chatbot at http://localhost:5000
 
-<img width="715" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/cb6e2a53-444a-46e3-ab87-86ed9fb29839">
+### Example Session
 
-Here are examples RAG commands to pull external data, including reading a PDF, pulling latest news, and answering a question based on a dictionary stored in an attached Vector Database.
+Open http://127.0.0.1:5000 - Example session:
 
-<img width="714" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/928ae86f-fd7d-4fd6-849a-875d771acf64">
+<img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/9eef2769-a352-4cc9-9698-ce15e41c2c45">
+
+### Read URLs
+
+If a URL is pasted in the text box, the chatbot will read and summarize it.
+
+<img width="810" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/44d8a2f7-54c1-4b1c-8471-fdf13439be3b">
+
+### Current News
+
+The `/news` command will fetch the latest news and have the LLM summarize the top ten headlines. It will store the raw feed in the context prompt to allow follow-up questions.
+
+<img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
 
 You can also test the chatbot server without docker using the following.
 
