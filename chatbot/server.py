@@ -62,7 +62,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.10.1"
+VERSION = "v0.10.2"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -100,10 +100,10 @@ ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Op
 default_prompts = {}
 default_prompts["greeting"] = "Hi"
 default_prompts["agentname"] = "Jarvis"
-default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Current date is {date}. Keep your answers brief and accurate."
+default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
-default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use the following context provided by Google News to summarize the top 10 headlines for today. Include the source but do not display the pub date or timestamp. Rank headlines by most important to least important. Do not add any commentary.\nContext: {context_str}\nAnswer:"
+default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Always include the source. Rank headlines by most important to least important. Do not add any commentary.\nUse this format: Headline News Item (News Source)\nContext: {context_str}\nAnswer:"
 default_prompts["classify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["classify_prompt"] = "Examine the following statement and identify, with a single word answer if it is about a greeting, weather, stock price, news, or something else. [BEGIN] {prompt} [END]"
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. Respond in {format}."
