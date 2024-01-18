@@ -62,7 +62,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.10.2"
+VERSION = "v0.10.3"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -85,7 +85,7 @@ mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pi
 DEBUG = os.environ.get("DEBUG", "False") == "True"                          # Set to True to enable debug mode
 MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 10))                          # Maximum number of concurrent clients
 MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
-TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.7))                     # LLM temperature
+TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
 PROMPT_FILE = os.environ.get("PROMPT_FILE", "prompts.json")                 # File to store prompts
 
