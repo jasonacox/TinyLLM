@@ -375,7 +375,7 @@ def extract_text_from_blog(url):
         response = requests.get(url, allow_redirects=True)
         if response.status_code == 200:
             # Check to see if response is a PDF
-            if response.headers["Content-Type"] == "application/pdf":
+            if "application/pdf" in response.headers["Content-Type"]:
                 # Convert PDF to text
                 pdf2text = ""
                 f = io.BytesIO(response.content)
