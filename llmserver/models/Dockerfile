@@ -6,8 +6,9 @@
 #
 #   Based on: https://github.com/abetlen/llama-cpp-python/blob/main/docker/cuda_simple/Dockerfile
 
-# Use a base image
-FROM nvidia/cuda:12.3.1-devel-ubuntu22.04
+# Use a base image - Be sure to match the CUDA version on your system
+FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
+#FROM nvidia/cuda:12.3.1-devel-ubuntu22.04
 
 # Set environment variables
 ENV MODEL=models/llama-2-7b-chat.Q5_K_M.gguf
