@@ -32,6 +32,9 @@ Environmental variables:
     * TEMPERATURE - LLM temperature
     * ST_MODEL - Sentence Transformer Model to use
     * PORT - Port to listen on
+    * PROMPT_FILE - File to store prompts
+    * USE_SYSTEM - Use system in chat prompt if True
+    * DEBUG - Set to True to enable debug mode
 
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
@@ -82,12 +85,13 @@ api_key = os.environ.get("OPENAI_API_KEY", "open_api_key")                  # Re
 api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Required, use https://api.openai.com for OpenAI
 agentname = os.environ.get("AGENT_NAME", "Jarvis")                          # Set the name of your bot
 mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
-DEBUG = os.environ.get("DEBUG", "False") == "True"                          # Set to True to enable debug mode
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
 MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 10))                          # Maximum number of concurrent clients
 MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
 PROMPT_FILE = os.environ.get("PROMPT_FILE", "prompts.json")                 # File to store prompts
+USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Use system in chat prompt if True
 
 # RAG Configuration Settings
 STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")                    # Sentence Transformer Model to use
@@ -103,7 +107,7 @@ default_prompts["agentname"] = "Jarvis"
 default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
-default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Always include the source. Rank headlines by most important to least important. Do not add any commentary.\nUse this format: Headline News Item (News Source)\nContext: {context_str}\nAnswer:"
+default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format: \n1. Headline News Item - News Organization\n2. Headline News Items 2 - New Organization 2\nContext: {context_str}\nAnswer:"
 default_prompts["classify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["classify_prompt"] = "Examine the following statement and identify, with a single word answer if it is about a greeting, weather, stock price, news, or something else. [BEGIN] {prompt} [END]"
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. Respond in {format}."
@@ -126,10 +130,7 @@ while True:
             max_tokens=MAXTOKENS,
             stream=False,
             temperature=TEMPERATURE,
-            messages=[
-                {"role": "system", "content": "You are a highly intelligent assistant. Keep your answers brief and accurate."},
-                {"role": "user", "content": "Hello"}
-            ],
+            messages=[{"role": "user", "content": "Hello"}],
         )
         break
     except Exception as e:
@@ -227,7 +228,16 @@ current_date = datetime.datetime.now()
 formatted_date = current_date.strftime("%B %-d, %Y")
 values = {"agentname": agentname, "date": formatted_date}
 baseprompt = expand_prompt(prompts["baseprompt"], values)
-context = [{"role": "system", "content": baseprompt}]
+
+# Function to return base conversation prompt
+def base_prompt(content=baseprompt):
+    if USE_SYSTEM:
+        return [{"role": "system", "content": content}] 
+    else:
+        return [{"role": "user", "content": content}, {"role": "assistant", "content": "Okay, let's get started."}] 
+
+# Initialize context 
+context = base_prompt()
 
 # Function - Send user prompt to LLM for response
 def ask(prompt, sid=None):
@@ -262,7 +272,7 @@ def ask(prompt, sid=None):
                     log(f"Truncate context: {len(client[sid]['context'])}")
                 else:
                     # our context has grown too large, reset
-                    client[sid]["context"] = [{"role": "system", "content": baseprompt}]   
+                    client[sid]["context"] = base_prompt()   
                     log(f"Reset context {len(client[sid]['context'])}")
                     socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=sid)
 
@@ -274,9 +284,7 @@ def ask(prompt, sid=None):
 def classify(prompt):
     # Ask LLM to classify the prompt
     #return "something else"
-    content = [{"role": "system", 
-                "content": prompts["classify"]},
-                {"role": "user",
+    content = base_prompt(prompts["classify"]) + [{"role": "user",
                 "content": prompts["classify_prompt"].replace("{prompt}", prompt)}]
     log(f"content: {content}")
     llm = openai.OpenAI(api_key=api_key, base_url=api_base)
@@ -292,9 +300,7 @@ def classify(prompt):
     
 def clarify(prompt, format="text"):
     # Ask LLM to clarify the prompt
-    content = [{"role": "system", 
-                "content": expand_prompt(prompts["clarify"], {"format": format})},
-                {"role": "user",
+    content = base_prompt(expand_prompt(prompts["clarify"], {"format": format})) + [{"role": "user",
                 "content": f"{prompt}"}]
     log(f"content: {content}")
     llm = openai.OpenAI(api_key=api_key, base_url=api_base)
@@ -426,7 +432,7 @@ def handle_connect():
         # Create client session
         client[session_id]={}
         # Initialize context for this client
-        client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
+        client[session_id]["context"] = base_prompt()
         client[session_id]["remember"] = True
         client[session_id]["visible"] = True
         client[session_id]["prompt"] = ""
@@ -483,7 +489,7 @@ def handle_message(data):
         command = p[1:].split(" ")[0]
         if command == "reset":
             # Reset context
-            client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
+            client[session_id]["context"] = base_prompt()
             socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = prompts["greeting"]
             client[session_id]["visible"] = False
@@ -723,7 +729,7 @@ def send_update(session_id):
                 log(f"ERROR {e}")
                 socketio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'},room=session_id)
                 # Reset context
-                client[session_id]["context"] = [{"role": "system", "content": baseprompt}]
+                client[session_id]["context"] = base_prompt()
             # Signal response is done
             socketio.emit('update', {'update': '', 'voice': 'done'},room=session_id)
             client[session_id]["prompt"] = ''
