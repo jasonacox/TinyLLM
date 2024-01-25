@@ -126,12 +126,15 @@ while True:
             max_tokens=MAXTOKENS,
             stream=False,
             temperature=TEMPERATURE,
-            messages=[{"role": "system", "content": "Hello"}],
+            messages=[
+                {"role": "system", "content": "You are a highly intelligent assistant. Keep your answers brief and accurate."},
+                {"role": "user", "content": "Hello"}
+            ],
         )
         break
     except Exception as e:
         log("OpenAI API Error: %s" % e)
-        log(f"Unable to connect to OpenAI API at {openai.api_base} using model {mymodel}.")
+        log(f"Unable to connect to OpenAI API at {api_base} using model {mymodel}.")
         log("Sleeping 10 seconds...")
         time.sleep(10)
 
