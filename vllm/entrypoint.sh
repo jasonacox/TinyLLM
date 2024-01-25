@@ -11,7 +11,10 @@ then
     exit 1
 fi
 
-export NUM_GPU=$(nvidia-smi -L | wc -l)
+if [[ -z "${NUM_GPU}" ]]; then
+    export NUM_GPU=$(nvidia-smi -L | wc -l)
+fi
+
 export SERVED_MODEL_NAME=${SERVED_MODEL_NAME:-"${MODEL}"}
 
 if [[ -z "${MODEL}" ]]; then
