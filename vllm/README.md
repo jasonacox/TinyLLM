@@ -1,4 +1,4 @@
-#vLLM
+# vLLM
 
 vLLM is a fast, multithreaded LLM engine for running LLM inference on a variety of hardware. 
 The project is located at https://github.com/vllm-project/vllm.
@@ -25,7 +25,7 @@ With some minor changes, vLLM can be changed to run on Pascal hardware.
 | 11.1++  | sm_80    | 8.0 8.6 8.7 (Orin)   | Ampere       | 2020 | RTX 30xx, Axx[xx], Jetson Orin      |
 | 11.8++  | sm_89    | 8.9                  | Ada Lovelace | 2022 | RTX 4xxx, RTX 6xxx, Tesla L4x       |
 | 12++    | sm_90    | 9.0 9.0a (Thor)      | Hopper       | 2022 | Hxxx, GHxxx                         |
-| 12++    | sm_95    | 9.5                  | Blackwell    | 2023 | B1xx, GB1xx                         |
+| 12++    | sm_95    | 9.5                  | Blackwell    | 2024 | B1xx, GB1xx                         |
 
 CUDA showing maximum version that supports this architecture. (*) Fermi and Kepler are deprecated from CUDA 9 onwards. Maxwell is deprecated from CUDA 11.6 onwards. (++) The rest are still supported by latest CUDA versions. (**) Values used in TORCH_CUDA_ARCH_LIST list. [References](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/).
 
