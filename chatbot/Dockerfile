@@ -18,6 +18,7 @@ ENV DEVICE="cuda"
 ENV STMODEL="all-MiniLM-L6-v2"
 ENV QDRANT_HOST=""
 ENV RESULTS=1
+ENV USE_SYSTEM="false"
 
 # Set the working directory
 WORKDIR /app

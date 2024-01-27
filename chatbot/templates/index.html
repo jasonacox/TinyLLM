@@ -5,6 +5,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
+            overflow: hidden; /* Hide scrollbars */
         }
         #container {
             display: flex;
@@ -194,10 +195,10 @@
                     </div>
                 </form>
             </div>
-            <button class="dialogue-button" onclick="saveSettings()">Save</button>
-            <button class="dialogue-button" onclick="closeDialogue()">Cancel</button>
-            <button class="dialogue-button" onclick="resetSettings()">Reset</button>
-        </div>
+                            <button class="dialogue-button" onclick="saveSettings()">Save</button>
+                <button class="dialogue-button" onclick="closeDialogue()">Cancel</button>
+                <button class="dialogue-button" onclick="resetSettings()">Reset</button>
+                    </div>
     </div>
     <script>
         function openDialogue() {

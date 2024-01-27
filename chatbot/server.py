@@ -65,7 +65,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.10.4"
+VERSION = "v0.10.5"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -107,7 +107,7 @@ default_prompts["agentname"] = "Jarvis"
 default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
-default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format: \n1. Headline News Item - News Organization\n2. Headline News Items 2 - New Organization 2\nContext: {context_str}\nAnswer:"
+default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format: \n1. [Headline Title] - [News Organization]\n2. [Headline Title] - [News Organization]\nContext: {context_str}\nAnswer:"
 default_prompts["classify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["classify_prompt"] = "Examine the following statement and identify, with a single word answer if it is about a greeting, weather, stock price, news, or something else. [BEGIN] {prompt} [END]"
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. Respond in {format}."

@@ -8,6 +8,9 @@ docker run \
     -e QDRANT_HOST="" \
     -e DEVICE="cuda" \
     -e RESULTS=1 \
+    -e MAX_TOKENS=2048 \
+    -e USE_SYSTEM="false" \
+    -e LLM_MODEL="mistralai/Mistral-7B-Instruct-v0.1" \
     -v prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
