@@ -33,3 +33,141 @@ CUDA showing maximum version that supports this architecture. (*) Fermi and Kepl
 ## Running vLLM on Pascal
 
 You will need to build from source. Details TBD...
+
+Git Commit: 671af2b
+
+Dockerfile
+
+```
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+RUN apt-get update -y \
+     && apt-get install -y python3-pip
+WORKDIR /app
+COPY . .
+ENV CUDA_DOCKER_ARCH=all
+ENV DISABLE_CUSTOM_KERNELS=True
+ENV TORCH_USE_CUDA_DSA=True
+RUN python3 -m pip install -e .
+RUN pip install -e .
+EXPOSE 8001
+COPY entrypoint.sh /usr/local/bin/
+CMD [ "entrypoint.sh" ]
+```
+
+entrypoint.sh
+
+```
+#!/usr/bin/env bash
+#
+# From https://github.com/substratusai/vllm-docker
+
+set -x
+
+# Check if nvidia-smi is available
+if ! command -v nvidia-smi &> /dev/null
+then
+    echo "nvidia-smi could not be found. Ensure NVIDIA drivers are installed."
+    exit 1
+fi
+
+if [[ -z "${NUM_GPU}" ]]; then
+    export NUM_GPU=$(nvidia-smi -L | wc -l)
+fi
+
+export SERVED_MODEL_NAME=${SERVED_MODEL_NAME:-"${MODEL}"}
+
+if [[ -z "${MODEL}" ]]; then
+    echo "Missing required environment variable MODEL"
+    exit 1
+fi
+
+additional_args=${EXTRA_ARGS:-""}
+if [[ ! -z "${QUANTIZATION}" ]]; then
+    if [[ -z "${DTYPE}" ]]; then
+        echo "Missing required environment variable DTYPE when QUANTIZATION is set"
+        exit 1
+    else
+        additional_args="${additional_args} -q ${QUANTIZATION} --dtype ${DTYPE}"
+    fi
+fi
+
+if [[ ! -z "${GPU_MEMORY_UTILIZATION}" ]]; then
+    additional_args="${additional_args} --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION}"
+fi
+
+if [[ ! -z "${MAX_MODEL_LEN}" ]]; then
+    additional_args="${additional_args} --max-model-len ${MAX_MODEL_LEN}"
+fi
+
+python3 -m vllm.entrypoints.openai.api_server \
+    --tensor-parallel-size ${NUM_GPU} \
+    --worker-use-ray \
+    --host 0.0.0.0 \
+    --port "${PORT}" \
+    --model "${MODEL}" \
+    --served-model-name "${SERVED_MODEL_NAME}" ${additional_args}
+```
+
+setup.py (changes - patch)
+
+```
+$ diff -Naur _setup.py setup.py 
+--- _setup.py	2024-01-26 04:08:57.135430506 +0000
++++ setup.py	2024-01-27 05:12:06.469999431 +0000
+@@ -12,10 +12,10 @@
+ 
+ ROOT_DIR = os.path.dirname(__file__)
+ 
+-MAIN_CUDA_VERSION = "12.1"
++MAIN_CUDA_VERSION = "11.8"
+ 
+ # Supported NVIDIA GPU architectures.
+-NVIDIA_SUPPORTED_ARCHS = {"7.0", "7.5", "8.0", "8.6", "8.9", "9.0"}
++NVIDIA_SUPPORTED_ARCHS = {"6.0", "6.1", "6.2"}
+ ROCM_SUPPORTED_ARCHS = {"gfx90a", "gfx908", "gfx906", "gfx1030", "gfx1100"}
+ # SUPPORTED_ARCHS = NVIDIA_SUPPORTED_ARCHS.union(ROCM_SUPPORTED_ARCHS)
+ 
+@@ -146,9 +146,6 @@
+     device_count = torch.cuda.device_count()
+     for i in range(device_count):
+         major, minor = torch.cuda.get_device_capability(i)
+-        if major < 7:
+-            raise RuntimeError(
+-                "GPUs with compute capability below 7.0 are not supported.")
+         compute_capabilities.add(f"{major}.{minor}")
+ 
+ if _is_cuda():
+```
+build.sh
+
+```
+#!/bin/bash
+
+echo "Build vllm docker image from source..."
+
+nvidia-docker build -t vllm .
+```
+
+run.sh
+
+```
+#!/bin/bash
+
+# vLLM Docker Container Image
+
+echo "Starting vLLM..."
+
+nvidia-docker run -d -p 8001:8001 --gpus=all \
+  -e MODEL=mistralai/Mistral-7B-Instruct-v0.1 \
+  -e PORT=8001 \
+  -e HF_HOME=/app/models \
+  -e NUM_GPU=4 \
+  -e EXTRA_ARGS="--dtype float" \
+  -v /data/models:/app/models \
+  --name vllm \
+  vllm  
+  
+echo "Printing logs (^C to quite)..."
+
+docker logs vllm -f
+```
