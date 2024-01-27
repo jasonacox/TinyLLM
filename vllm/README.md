@@ -32,7 +32,7 @@ CUDA showing maximum version that supports this architecture. (*) Fermi and Kepl
 
 ## Running vLLM on Pascal
 
-You will need to build from source. Details TBD... Verified with Git Commit: 671af2b 
+You will need to build from source. Details TBD... Verified with current Git Commit: 220a476 
 
 ### Setup
 ```bash
@@ -132,15 +132,10 @@ python3 -m vllm.entrypoints.openai.api_server \
 setup.py (changes - patch)
 
 ```bash
-$ diff -Naur _setup.py setup.py 
---- _setup.py	2024-01-26 04:08:57.135430506 +0000
-+++ setup.py	2024-01-27 05:12:06.469999431 +0000
-@@ -12,10 +12,10 @@
- 
- ROOT_DIR = os.path.dirname(__file__)
- 
--MAIN_CUDA_VERSION = "12.1"
-+MAIN_CUDA_VERSION = "11.8"
+--- _setup.py	2024-01-27 18:44:45.509406538 +0000
++++ setup.py	2024-01-27 18:45:47.037386522 +0000
+@@ -18,7 +18,7 @@
+ MAIN_CUDA_VERSION = "12.1"
  
  # Supported NVIDIA GPU architectures.
 -NVIDIA_SUPPORTED_ARCHS = {"7.0", "7.5", "8.0", "8.6", "8.9", "9.0"}
@@ -148,7 +143,7 @@ $ diff -Naur _setup.py setup.py
  ROCM_SUPPORTED_ARCHS = {"gfx90a", "gfx908", "gfx906", "gfx1030", "gfx1100"}
  # SUPPORTED_ARCHS = NVIDIA_SUPPORTED_ARCHS.union(ROCM_SUPPORTED_ARCHS)
  
-@@ -146,9 +146,6 @@
+@@ -184,9 +184,6 @@
      device_count = torch.cuda.device_count()
      for i in range(device_count):
          major, minor = torch.cuda.get_device_capability(i)
@@ -157,7 +152,7 @@ $ diff -Naur _setup.py setup.py
 -                "GPUs with compute capability below 7.0 are not supported.")
          compute_capabilities.add(f"{major}.{minor}")
  
- if _is_cuda():
+ ext_modules = []
 ```
 build.sh
 
@@ -183,10 +178,10 @@ nvidia-docker run -d -p 8001:8001 --gpus=all \
   -e PORT=8001 \
   -e HF_HOME=/app/models \
   -e NUM_GPU=4 \
-  -e EXTRA_ARGS="--dtype float" \
+  -e EXTRA_ARGS="--dtype float --max-model-len 20000" \
   -v /data/models:/app/models \
   --name vllm \
-  vllm  
+  vllm 
   
 echo "Printing logs (^C to quite)..."
 
