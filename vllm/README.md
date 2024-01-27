@@ -32,13 +32,34 @@ CUDA showing maximum version that supports this architecture. (*) Fermi and Kepl
 
 ## Running vLLM on Pascal
 
-You will need to build from source. Details TBD...
+You will need to build from source. Details TBD... Verified with Git Commit: 671af2b 
 
-Git Commit: 671af2b
+### Setup
+```bash
+# Steps
+git clone https://github.com/vllm-project/vllm.git
+cd vllm
+mv Dockerfile Dockerfile.orig
+
+# Add or edit files below
+vi Dockerfile # create
+vi entrypoint.sh # create
+cp setup.py _setup.py
+vi setup.py # make edits below
+vi build.sh # create
+vi run.sh # create
+chmod +x *sh
+
+# Build
+./build.sh
+
+# Run
+./run.sh
+```
 
 Dockerfile
 
-```
+```bash
 FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
 RUN apt-get update -y \
      && apt-get install -y python3-pip
@@ -56,7 +77,7 @@ CMD [ "entrypoint.sh" ]
 
 entrypoint.sh
 
-```
+```bash
 #!/usr/bin/env bash
 #
 # From https://github.com/substratusai/vllm-docker
@@ -110,7 +131,7 @@ python3 -m vllm.entrypoints.openai.api_server \
 
 setup.py (changes - patch)
 
-```
+```bash
 $ diff -Naur _setup.py setup.py 
 --- _setup.py	2024-01-26 04:08:57.135430506 +0000
 +++ setup.py	2024-01-27 05:12:06.469999431 +0000
@@ -140,7 +161,7 @@ $ diff -Naur _setup.py setup.py
 ```
 build.sh
 
-```
+```bash
 #!/bin/bash
 
 echo "Build vllm docker image from source..."
@@ -150,7 +171,7 @@ nvidia-docker build -t vllm .
 
 run.sh
 
-```
+```bash
 #!/bin/bash
 
 # vLLM Docker Container Image
