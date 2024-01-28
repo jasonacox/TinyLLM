@@ -28,6 +28,11 @@ patch setup.py setup.py.patch
 echo "Building docker image..."
 ./build.sh
 
+# Make models directory
+echo "Creating models directory..."
+mkdir models
+echo "Models will be stored in ${PWD}/models."
+
 # Done
 echo "Build complete."
 echo "To run vLLM, execute: ./run.sh"
