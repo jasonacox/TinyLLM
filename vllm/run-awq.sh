@@ -10,7 +10,7 @@
 #QT=auto
 LLM=TheBloke/Mistral-7B-Instruct-v0.1-AWQ
 CONTAINER=vllm-mistral-awq
-QT=float16
+QT=auto
 
 echo "Stopping and removing any previous $CONTAINER instance..."
 docker stop $CONTAINER
