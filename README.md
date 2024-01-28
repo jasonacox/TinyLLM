@@ -33,7 +33,7 @@ cd TinyLLM
 
 ## Run Local LLM
 
-To run a local LLM, you will need a server to run inference on the model. This project recommends two options: vLLM (see below) and llama-cpp-python. Both provide a built-in OpenAI API compatible server.  
+To run a local LLM, you will need a server to run inference on the model. This project recommends two options: [vLLM](https://github.com/vllm-project/vllm) and [llama-cpp-python](https://github.com/abetlen/llama-cpp-python). Both provide a built-in OpenAI API compatible server.  
 
 ### vLLM Server (Option 1)
 
