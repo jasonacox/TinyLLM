@@ -33,7 +33,7 @@ cd TinyLLM
 
 ### LLM Server
 
-To run a local LLM, you will need a server to run inference on the model. This project recommends two options: [vLLM](./vllm/) and llama-cpp-python (see [llmserver](./llmserver/)). Both provide a built-in OpenAI API compatible server.  vLLM is recommended as it supports multiple simultaneous inference threads (session) but both work. The steps below will build the vllm server.
+To run a local LLM, you will need a server to run inference on the model. This project recommends two options: [vLLM](./vllm/) and llama-cpp-python (see [llmserver](./llmserver/)). Both provide a built-in OpenAI API compatible server.  vLLM is recommended as it supports multiple simultaneous inference threads (session) and automatically downloads the models, but both work. The steps below will build the vllm server.
 
 Note: For GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead. 
 
@@ -117,7 +117,17 @@ python3 server.py
 
 ## LLM Models
 
-Here are some suggested models that work well with TinyLLM. You can test other models and different quantization, but in my experiments, the Q5_K_M models performed the best. Below are the download links from HuggingFace as well as the model card's suggested context length size and chat prompt mode.
+Here are some suggested models that work well with vllm.
+
+| LLM | Quantized | Link to Download | Context Length |
+| --- | --- | --- | --- |
+| Mistral v0.1 7B | None | [mistralai/Mistral-7B-Instruct-v0.1](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1) | 32k |
+| Mistral v0.2 7B | None | [mistralai/Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2) | 32k |
+| Mistral v0.1 7B AWQ | AWQ | [TheBloke/Mistral-7B-Instruct-v0.1-AWQ](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-AWQ) | 32k |
+| Mixtral-8x7B | None | [mistralai/Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 32k |
+
+
+Here are some suggested models that work well with llmserver (llama-cpp-python). You can test other models and different quantization, but in my experiments, the Q5_K_M models performed the best. Below are the download links from HuggingFace as well as the model card's suggested context length size and chat prompt mode.
 
 | LLM | Quantized | Link to Download | Context Length | Chat Prompt Mode |
 | --- | --- | --- | --- | --- |
