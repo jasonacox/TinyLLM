@@ -59,17 +59,13 @@ chmod +x *sh
 
 Dockerfile
 
-```bash
+```dockerfile
 FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
 RUN apt-get update -y \
      && apt-get install -y python3-pip
 WORKDIR /app
 COPY . .
-ENV CUDA_DOCKER_ARCH=all
-ENV DISABLE_CUSTOM_KERNELS=True
-ENV TORCH_USE_CUDA_DSA=True
 RUN python3 -m pip install -e .
-RUN pip install -e .
 EXPOSE 8001
 COPY entrypoint.sh /usr/local/bin/
 CMD [ "entrypoint.sh" ]
@@ -131,25 +127,27 @@ python3 -m vllm.entrypoints.openai.api_server \
 
 setup.py (changes - patch)
 
-```bash
+```patch
 --- _setup.py	2024-01-27 18:44:45.509406538 +0000
-+++ setup.py	2024-01-27 18:45:47.037386522 +0000
++++ setup.py	2024-01-28 00:02:23.581639719 +0000
 @@ -18,7 +18,7 @@
  MAIN_CUDA_VERSION = "12.1"
  
  # Supported NVIDIA GPU architectures.
 -NVIDIA_SUPPORTED_ARCHS = {"7.0", "7.5", "8.0", "8.6", "8.9", "9.0"}
-+NVIDIA_SUPPORTED_ARCHS = {"6.0", "6.1", "6.2"}
++NVIDIA_SUPPORTED_ARCHS = {"6.0", "6.1", "6.2", "7.0", "7.5", "8.0", "8.6", "8.9", "9.0"}
  ROCM_SUPPORTED_ARCHS = {"gfx90a", "gfx908", "gfx906", "gfx1030", "gfx1100"}
  # SUPPORTED_ARCHS = NVIDIA_SUPPORTED_ARCHS.union(ROCM_SUPPORTED_ARCHS)
  
-@@ -184,9 +184,6 @@
+@@ -184,9 +184,9 @@
      device_count = torch.cuda.device_count()
      for i in range(device_count):
          major, minor = torch.cuda.get_device_capability(i)
 -        if major < 7:
--            raise RuntimeError(
++        if major < 6:
+             raise RuntimeError(
 -                "GPUs with compute capability below 7.0 are not supported.")
++                "GPUs with compute capability below 6.0 are not supported.")
          compute_capabilities.add(f"{major}.{minor}")
  
  ext_modules = []
@@ -173,7 +171,7 @@ run.sh
 
 echo "Starting vLLM..."
 
-nvidia-docker run -d -p 8001:8001 --gpus=all \
+nvidia-docker run -d -p 8001:8001 --gpus=all --shm-size=10.24gb \
   -e MODEL=mistralai/Mistral-7B-Instruct-v0.1 \
   -e PORT=8001 \
   -e HF_HOME=/app/models \
