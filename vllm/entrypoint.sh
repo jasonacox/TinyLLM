@@ -40,7 +40,6 @@ if [[ ! -z "${QUANTIZATION}" ]]; then
     else
         additional_args="${additional_args} -q ${QUANTIZATION} --dtype ${DTYPE}"
     fi
-fi
 else
     if [[ ! -z "${DTYPE}" ]]; then
         additional_args="${additional_args} --dtype ${DTYPE}"
