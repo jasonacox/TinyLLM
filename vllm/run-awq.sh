@@ -12,7 +12,11 @@ LLM=TheBloke/Mistral-7B-Instruct-v0.1-AWQ
 CONTAINER=vllm-mistral-awq
 QT=float16
 
-echo "Starting vLLM..."
+echo "Stopping and removing any previous $CONTAINER instance..."
+docker stop $CONTAINER
+docker rm $CONTAINER
+
+echo "Starting new $CONTAINER instance..."
 
 docker run -d \
   -p 8000:8000 \
