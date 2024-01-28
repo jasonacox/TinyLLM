@@ -32,26 +32,28 @@ CUDA showing maximum version that supports this architecture. (*) Fermi and Kepl
 
 ## Running vLLM on Pascal
 
-You will need to build from source. Details TBD... Verified with current Git Commit: 220a476 
+You will need to build from source. This was verified with current Git Commit: 220a476 running on a Ubuntu 22.04 systems with Pascal GPUs (e.g. GTX 1060, Tesla P100).
 
 ### Setup
 
 ```bash
-# Steps
+# Clone the source
 git clone https://github.com/vllm-project/vllm.git
 cd vllm
 mv Dockerfile Dockerfile.orig
 
 # Add or edit files below
-vi Dockerfile # create
-vi entrypoint.sh # create
-cp setup.py _setup.py
-vi setup.py # make edits below
-vi build.sh # create
-vi run.sh # create
+nano Dockerfile         # Create and copy files below
+nano entrypoint.sh 
+cp setup.py _setup.py   # Creates backup
+nano setup.py           # Existing file - make edits below
+nano build.sh 
+nano run.sh             # Edit the /path/to/models to a location to store HF models
+
+# Ensure files are executable
 chmod +x *sh
 
-# Build
+# Build the vllm container
 ./build.sh
 
 # Run
@@ -75,55 +77,14 @@ CMD [ "entrypoint.sh" ]
 entrypoint.sh ([link](./entrypoint.sh))
 
 ```bash
-#!/usr/bin/env bash
-#
-# From https://github.com/substratusai/vllm-docker
-
-set -x
-
-# Check if nvidia-smi is available
-if ! command -v nvidia-smi &> /dev/null
-then
-    echo "nvidia-smi could not be found. Ensure NVIDIA drivers are installed."
-    exit 1
-fi
-
-if [[ -z "${NUM_GPU}" ]]; then
-    export NUM_GPU=$(nvidia-smi -L | wc -l)
-fi
-
-export SERVED_MODEL_NAME=${SERVED_MODEL_NAME:-"${MODEL}"}
-
-if [[ -z "${MODEL}" ]]; then
-    echo "Missing required environment variable MODEL"
-    exit 1
-fi
-
-additional_args=${EXTRA_ARGS:-""}
-if [[ ! -z "${QUANTIZATION}" ]]; then
-    if [[ -z "${DTYPE}" ]]; then
-        echo "Missing required environment variable DTYPE when QUANTIZATION is set"
-        exit 1
-    else
-        additional_args="${additional_args} -q ${QUANTIZATION} --dtype ${DTYPE}"
-    fi
-fi
-
-if [[ ! -z "${GPU_MEMORY_UTILIZATION}" ]]; then
-    additional_args="${additional_args} --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION}"
-fi
-
-if [[ ! -z "${MAX_MODEL_LEN}" ]]; then
-    additional_args="${additional_args} --max-model-len ${MAX_MODEL_LEN}"
-fi
-
+# Start the vLLM OpenAI API compatible server
 python3 -m vllm.entrypoints.openai.api_server \
     --tensor-parallel-size ${NUM_GPU} \
     --worker-use-ray \
     --host 0.0.0.0 \
     --port "${PORT}" \
     --model "${MODEL}" \
-    --served-model-name "${SERVED_MODEL_NAME}" ${additional_args}
+    --served-model-name "${MODEL}" ${EXTRA_ARGS}
 ```
 
 setup.py (see [patch](./setup.py.patch))
@@ -179,7 +140,7 @@ nvidia-docker run -d -p 8001:8001 --gpus=all --shm-size=10.24gb \
   -e HF_HOME=/app/models \
   -e NUM_GPU=4 \
   -e EXTRA_ARGS="--dtype float --max-model-len 20000" \
-  -v /data/models:/app/models \
+  -v /path/to/models:/app/models \
   --name vllm \
   vllm 
   
