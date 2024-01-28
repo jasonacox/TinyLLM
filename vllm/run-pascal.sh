@@ -19,6 +19,8 @@ docker run -d \
   -e MODEL=$LLM \
   -e PORT=8000 \
   -e GPU_MEMORY_UTILIZATION=0.95 \
+  -e DTYPE=float \
+  -e MAX_MODEL_LEN=20000 \
   -e NUM_GPU=1 \
   -e SERVED_MODEL_NAME=tinyllm \
   -e HF_HOME=/app/models \

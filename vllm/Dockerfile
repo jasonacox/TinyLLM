@@ -1,7 +1,9 @@
 # Create vLLM docker image with CUDA 12.1.1 and Ubuntu 22.04
 # 
 # This uses pip to install vLLM from PyPI, which is a much smaller image than
-# building from source. 
+# building from source. However, if you need to run on older GPU architectures
+# like Pascal (e.g. GTX 1060, P100) you will need to build from source. See the
+# Dockerfile.source file.
 #
 # Prerequisites:
 #   - NVIDIA driver and CUDA toolkit installed on host

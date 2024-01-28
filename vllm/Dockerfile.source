@@ -5,8 +5,11 @@
 #
 # Prerequisites:
 #   - NVIDIA driver and CUDA toolkit installed on host
-#   - Install vllm source:
+#   - Install and moeidfy vllm source:
 #       git clone https://github.com/vllm-project/vllm.git
+#       cd vllm
+#       edit setup.py to add 6.0, 6.1, 6.2 o CUDA_ARCHITECTURES and
+#            change 'if major < 7:' to 'if major < 6:' 
 #
 # Author: Jason A. Cox,
 # Date: 27-Jan-2024
@@ -18,6 +21,6 @@ RUN apt-get update -y \
 WORKDIR /app
 COPY . .
 RUN python3 -m pip install -e .
-EXPOSE 8001
+EXPOSE 8000
 COPY entrypoint.sh /usr/local/bin/
 CMD [ "entrypoint.sh" ]

@@ -1,14 +1,12 @@
 #!/bin/bash
-# Run vllm docker image
+# Run vllm docker image - Quantized with AWQ
 # 
 # Author: Jason A. Cox,
 # Date: 27-Jan-2024
 # https://github.com/jasonacox/TinyLLM
 
-LLM=mistralai/Mistral-7B-Instruct-v0.1
-CONTAINER=vllm-mistral-1
-#LLM=mistralai/Mistral-7B-Instruct-v0.2
-#CONTAINER=vllm-mistral-2
+LLM=TheBloke/Mixtral-8x7B-Instruct-v0.1-AWQ
+CONTAINER=vllm-mixtral
 
 echo "Starting vLLM..."
 
@@ -19,6 +17,8 @@ docker run -d \
   -e MODEL=$LLM \
   -e PORT=8000 \
   -e GPU_MEMORY_UTILIZATION=0.95 \
+  -e QUANTIZATION=awq \
+  -e DTYPE=auto \
   -e NUM_GPU=1 \
   -e SERVED_MODEL_NAME=tinyllm \
   -e HF_HOME=/app/models \
@@ -26,7 +26,7 @@ docker run -d \
   --name $CONTAINER \
   vllm
 
-# Additional options: -e EXTRA_ARGS="" -e MAX_MODEL_LEN=xxxxx -e QUANTIZATION=awq -e DTYPE=auto 
+# Additional options: -e EXTRA_ARGS="" -e MAX_MODEL_LEN=xxxxx
 
 echo "Printing logs (^C to quit)..."
 

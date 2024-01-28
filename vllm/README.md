@@ -29,38 +29,62 @@ With some minor changes, vLLM can be changed to run on Pascal hardware.
 
 CUDA showing maximum version that supports this architecture. (*) Fermi and Kepler are deprecated from CUDA 9 onwards. Maxwell is deprecated from CUDA 11.6 onwards. (++) The rest are still supported by latest CUDA versions. (**) Values used in TORCH_CUDA_ARCH_LIST list. [References](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/).
 
+## Running vLLM
+
+For GPUs with a compute capability > 6 (anything above Pascal) you can use the following:
+
+```bash
+# Clone this Repo
+git clone https://github.com/jasonacox/TinyLLM.git
+cd TinyLLM/vllm
+
+# Build Container
+./build.sh 
+
+# Make a Directory to store Models
+mkdir models
+
+# Edit run.sh or run-awq.sh to pull the model you want to use. Mistral is set by default.
+# Run the Container - This will download the model on the first run
+./run.sh  
+
+# The trailing logs will be displayed so you can see the progress. Use ^C to exit without
+# stopping the container. 
+```
 
 ## Running vLLM on Pascal
 
-You will need to build from source. This was verified with current Git Commit: 220a476 running on a Ubuntu 22.04 systems with Pascal GPUs (e.g. GTX 1060, Tesla P100).
-
-### Setup
+You will need to build from source. This was verified with current Git Commit: 220a476 running on a Ubuntu 22.04 systems with Pascal GPUs (e.g. GTX 1060, Tesla P100). You can run the `compile.sh` script to help.
 
 ```bash
-# Clone the source
-git clone https://github.com/vllm-project/vllm.git
-cd vllm
-mv Dockerfile Dockerfile.orig
+# Clone this Repo
+git clone https://github.com/jasonacox/TinyLLM.git
+cd TinyLLM/vllm
 
-# Add or edit files below
-nano Dockerfile         # Create and copy files below
-nano entrypoint.sh 
-cp setup.py _setup.py   # Creates backup
-nano setup.py           # Existing file - make edits below
-nano build.sh 
-nano run.sh             # Edit the /path/to/models to a location to store HF models
+# Run the Compile Helper Script
+./compile.sh
 
-# Ensure files are executable
-chmod +x *sh
-
-# Build the vllm container
-./build.sh
-
-# Run
+# Run vLLM
 ./run.sh
+
+# The trailing logs will be displayed so you can see the progress. Use ^C to exit without
+# stopping the container. 
 ```
 
-Dockerfile ([link](./Dockerfile.build))
+### Manual Details 
+
+As an alternative to using the compile.sh script, you can manually clone the vLLM repo and create
+and edit the files:
+
+1. Clone Repo
+
+```bash
+# Clone vLLM
+git clone https://github.com/vllm-project/vllm.git
+cd vllm
+```
+
+2. Create Dockerfile ([link](./Dockerfile.source))
 
 ```dockerfile
 FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
@@ -69,12 +93,12 @@ RUN apt-get update -y \
 WORKDIR /app
 COPY . .
 RUN python3 -m pip install -e .
-EXPOSE 8001
+EXPOSE 8000
 COPY entrypoint.sh /usr/local/bin/
 CMD [ "entrypoint.sh" ]
 ```
 
-entrypoint.sh ([link](./entrypoint.sh))
+3. Create entrypoint.sh ([link](./entrypoint.sh))
 
 ```bash
 # Start the vLLM OpenAI API compatible server
@@ -87,7 +111,7 @@ python3 -m vllm.entrypoints.openai.api_server \
     --served-model-name "${MODEL}" ${EXTRA_ARGS}
 ```
 
-setup.py (see [patch](./setup.py.patch))
+4. Edit setup.py (see [patch](./setup.py.patch))
 
 ```patch
 --- _setup.py	2024-01-27 18:44:45.509406538 +0000
@@ -115,7 +139,7 @@ setup.py (see [patch](./setup.py.patch))
  ext_modules = []
 ```
 
-build.sh ([link](./build.sh))
+5. Create build.sh ([link](./build.sh))
 
 ```bash
 #!/bin/bash
@@ -125,7 +149,7 @@ echo "Build vllm docker image from source..."
 nvidia-docker build -t vllm .
 ```
 
-run.sh ([link](./run.sh))
+6. Create run.sh ([link](./run.sh))
 
 ```bash
 #!/bin/bash
@@ -134,9 +158,9 @@ run.sh ([link](./run.sh))
 
 echo "Starting vLLM..."
 
-nvidia-docker run -d -p 8001:8001 --gpus=all --shm-size=10.24gb \
+nvidia-docker run -d -p 8000:8000 --gpus=all --shm-size=10.24gb \
   -e MODEL=mistralai/Mistral-7B-Instruct-v0.1 \
-  -e PORT=8001 \
+  -e PORT=8000 \
   -e HF_HOME=/app/models \
   -e NUM_GPU=4 \
   -e EXTRA_ARGS="--dtype float --max-model-len 20000" \
