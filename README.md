@@ -55,7 +55,7 @@ mkdir models
 
 ### Chatbot
 
-Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It support multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
+Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It supports multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
 
 * Summarizing external websites (just paste a URL in chat window)
 * Fetch current news (use `/news`) - see [chatbot](chatbot) page for more details.
