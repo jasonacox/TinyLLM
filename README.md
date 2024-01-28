@@ -31,51 +31,26 @@ git clone https://github.com/jasonacox/TinyLLM.git
 cd TinyLLM
 ```
 
-### LLMserver
+### LLM Server
 
-LLMserver uses the llama-cpp-python library which has a built-in OpenAI API compatible server. This will be used to host your model locally and use OpenAI API tools against your self-hosted LLM.
+To run a local LLM, you will need a server to run inference on the model. This project recommends two options: [vLLM](./vllm/) and llama-cpp-python (see [llmserver](./llmserver/)). Both provide a built-in OpenAI API compatible server.  vLLM is recommended as it supports multiple simultaneous inference threads (session) but both work. The steps below will build the vllm server.
+
+Note: For GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead. 
 
 ```bash
-# Install Python Libraries with Nvidia GPU support
+# Build Container
+cd vllm
+./build.sh 
 
-# Uninstall any old version of llama-cpp-python
-pip3 uninstall llama-cpp-python -y
+# Make a Directory to store Models
+mkdir models
 
-# Linux Target with Nvidia CUDA support
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python==0.2.27 --no-cache-dir
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python[server]==0.2.27 --no-cache-dir
+# Edit run.sh or run-awq.sh to pull the model you want to use. Mistral is set by default.
+# Run the Container - This will download the model on the first run
+./run.sh  
 
-# MacOS Target with Apple Silicon M1/M2
-CMAKE_ARGS="-DLLAMA_METAL=on" pip3 install -U llama-cpp-python --no-cache-dir
-pip3 install 'llama-cpp-python[server]'
-
-# Download Models from HuggingFace
-cd llmserver/models
-
-# Get the Mistral 7B GGUF Q-5bit model Q5_K_M and Meta LLaMA-2 7B GGUF Q-5bit model Q5_K_M
-wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf
-wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
-
-# Edit the tinyllm.service to match your environment:
-cd ..
-nano tinyllm.service
-
-# Edit
-#   ExecStart - make sure path to python3 and  --n_gpu_layers (e.g. 32 if GPU VRAM is 6GB)
-#   WorkingDirectory - this is the absolute path to the gguf file downloaded above
-#   User - this is your local username
-
-# Set up the service in systemd
-sudo cp tinyllm.service /etc/systemd/system/
-sudo cp tinyllm /etc/init.d
-sudo /etc/init.d/tinyllm start
-sudo /etc/init.d/tinyllm enable
-
-# Check status and logs to make sure service is running
-sudo /etc/init.d/tinyllm status
-
-# Test server with a Command Line chat
-python3 ../chat.py
+# The trailing logs will be displayed so you can see the progress. Use ^C to exit without
+# stopping the container. 
 ```
 
 ### Chatbot
@@ -99,6 +74,7 @@ docker run \
     -p 5000:5000 \
     -e PORT=5000 \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
+    -e LLM_MODEL="tinyllm" \
     -e QDRANT_HOST="" \
     -e DEVICE="cuda" \
     -e RESULTS=1 \
