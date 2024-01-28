@@ -4,6 +4,6 @@
 # Date: 27-Jan-2024
 # https://github.com/jasonacox/TinyLLM
 
-echo "Build vllm docker image from source..."
+echo "Build vllm docker image..."
 
 nvidia-docker build -t vllm .
