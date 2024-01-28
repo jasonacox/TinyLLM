@@ -6,4 +6,4 @@
 
 echo "Build vllm docker image..."
 
-nvidia-docker build -t vllm .
+docker build -t vllm .
