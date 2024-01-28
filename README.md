@@ -37,7 +37,7 @@ To run a local LLM, you will need a server to run inference on the model. This p
 
 ### vLLM Server (Option 1)
 
-vLLM supports multiple simultaneous inference threads (session), automatically downloads the model and run wells in containers. Follow the details below to run vLLM. For GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead. 
+vLLM supports multiple simultaneous inference threads (session), automatically downloads the model and runs well in containers. Follow the details below to run vLLM. Note, for GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead. 
 
 ```bash
 # Build Container
@@ -57,7 +57,7 @@ mkdir models
 
 ### Llama-cpp-python Server (Option 2)
 
-The llama-cpp-python server is simple and runs optimized GGUF quantized models. However, it can only handle one session/prompt at a time. The steps below create an instance of llama_cpp.server which serves up a LLM with OpenAI API interface.
+The llama-cpp-python server is simple and runs optimized GGUF quantized models. However, it can only handle one session/prompt at a time. The steps below create an instance of llama_cpp.server which serves up an LLM with an OpenAI API compatible interface.
 
 ```bash
 # Uninstall any old version of llama-cpp-python
