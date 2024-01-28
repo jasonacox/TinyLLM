@@ -41,7 +41,7 @@ if [[ ! -z "${QUANTIZATION}" ]]; then
         additional_args="${additional_args} -q ${QUANTIZATION} --dtype ${DTYPE}"
     fi
 elif [[ ! -z "${DTYPE}" ]]; then
-        additional_args="${additional_args} --dtype ${DTYPE}"
+    additional_args="${additional_args} --dtype ${DTYPE}"
 fi
 if [[ ! -z "${GPU_MEMORY_UTILIZATION}" ]]; then
     additional_args="${additional_args} --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION}"
