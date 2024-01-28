@@ -127,22 +127,14 @@ python3 -m vllm.entrypoints.openai.api_server \
 5. Create build.sh ([link](./build.sh))
 
 ```bash
-#!/bin/bash
-
-echo "Build vllm docker image from source..."
-
+# Create Container
 nvidia-docker build -t vllm .
 ```
 
 6. Create run.sh ([link](./run.sh))
 
 ```bash
-#!/bin/bash
-
-# vLLM Docker Container Image
-
-echo "Starting vLLM..."
-
+# Run Container
 nvidia-docker run -d -p 8000:8000 --gpus=all --shm-size=10.24gb \
   -e MODEL=mistralai/Mistral-7B-Instruct-v0.1 \
   -e PORT=8000 \
@@ -152,9 +144,7 @@ nvidia-docker run -d -p 8000:8000 --gpus=all --shm-size=10.24gb \
   -v models:/app/models \
   --name vllm \
   vllm 
-  
-echo "Printing logs (^C to quite)..."
-
+# Print Running Logs - ^C to Stop Viewing Logs
 docker logs vllm -f
 ```
 
