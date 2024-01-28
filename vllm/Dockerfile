@@ -1,3 +1,15 @@
+# Create vLLM docker image with CUDA 12.1.1 and Ubuntu 22.04
+# 
+# This uses pip to install vLLM from PyPI, which is a much smaller image than
+# building from source. 
+#
+# Prerequisites:
+#   - NVIDIA driver and CUDA toolkit installed on host
+#
+# Author: Jason A. Cox,
+# Date: 27-Jan-2024
+# https://github.com/jasonacox/TinyLLM
+
 FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 ARG VERSION=0.2.7
 ENV PORT 8000

@@ -1,0 +1,23 @@
+# Create vLLM docker image with CUDA 12.1.0 and Ubuntu 22.04
+# 
+# This is used to build vLLM from source, which is necessary for 
+# the Pascal architecture (e.g. GTX 1060, Tesla P100).
+#
+# Prerequisites:
+#   - NVIDIA driver and CUDA toolkit installed on host
+#   - Install vllm source:
+#       git clone https://github.com/vllm-project/vllm.git
+#
+# Author: Jason A. Cox,
+# Date: 27-Jan-2024
+# https://github.com/jasonacox/TinyLLM
+
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+RUN apt-get update -y \
+     && apt-get install -y python3-pip
+WORKDIR /app
+COPY . .
+RUN python3 -m pip install -e .
+EXPOSE 8001
+COPY entrypoint.sh /usr/local/bin/
+CMD [ "entrypoint.sh" ]

@@ -35,6 +35,7 @@ CUDA showing maximum version that supports this architecture. (*) Fermi and Kepl
 You will need to build from source. Details TBD... Verified with current Git Commit: 220a476 
 
 ### Setup
+
 ```bash
 # Steps
 git clone https://github.com/vllm-project/vllm.git
@@ -57,7 +58,7 @@ chmod +x *sh
 ./run.sh
 ```
 
-Dockerfile
+Dockerfile ([link](./Dockerfile.build))
 
 ```dockerfile
 FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
@@ -71,7 +72,7 @@ COPY entrypoint.sh /usr/local/bin/
 CMD [ "entrypoint.sh" ]
 ```
 
-entrypoint.sh
+entrypoint.sh ([link](./entrypoint.sh))
 
 ```bash
 #!/usr/bin/env bash
@@ -125,7 +126,7 @@ python3 -m vllm.entrypoints.openai.api_server \
     --served-model-name "${SERVED_MODEL_NAME}" ${additional_args}
 ```
 
-setup.py (changes - patch)
+setup.py (see [patch](./setup.py.patch))
 
 ```patch
 --- _setup.py	2024-01-27 18:44:45.509406538 +0000
@@ -152,7 +153,8 @@ setup.py (changes - patch)
  
  ext_modules = []
 ```
-build.sh
+
+build.sh ([link](./build.sh))
 
 ```bash
 #!/bin/bash
@@ -162,7 +164,7 @@ echo "Build vllm docker image from source..."
 nvidia-docker build -t vllm .
 ```
 
-run.sh
+run.sh ([link](./run.sh))
 
 ```bash
 #!/bin/bash
