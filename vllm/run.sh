@@ -1,6 +1,9 @@
 #!/bin/bash
-
-# vLLM Docker Container Image
+# Run vllm docker image
+# 
+# Author: Jason A. Cox,
+# Date: 27-Jan-2024
+# https://github.com/jasonacox/TinyLLM
 
 echo "Starting vLLM..."
 
