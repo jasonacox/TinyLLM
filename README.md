@@ -31,11 +31,12 @@ git clone https://github.com/jasonacox/TinyLLM.git
 cd TinyLLM
 ```
 
-### LLM Server
+## Run Local LLM
 
-To run a local LLM, you will need a server to run inference on the model. This project recommends two options: vLLM (see below) and llama-cpp-python (see [llmserver](./llmserver/)). Both provide a built-in OpenAI API compatible server.  vLLM is recommended as it supports multiple simultaneous inference threads (session) and automatically downloads the models, but both work. The steps below will build the vllm server.
+To run a local LLM, you will need a server to run inference on the model. This project recommends two options: vLLM (see below) and llama-cpp-python (see [llmserver](./llmserver/)). Both provide a built-in OpenAI API compatible server.  
 
-Note: For GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead. 
+### vLLM Server (Option 1)
+vLLM supports multiple simultaneous inference threads (session), automatically downloads the model and run wells in containers. Follow the details below to run vLLM. For GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead. 
 
 ```bash
 # Build Container
@@ -53,7 +54,41 @@ mkdir models
 # stopping the container. 
 ```
 
-### Chatbot
+### Llama-cpp-python Server (Option 2)
+
+The llama-cpp-python server is simple and runs optimized GGUF quantized models. it can only handle one session at a time.
+
+This creates an instance of llama_cpp.server which serves up a LLM with OpenAI API interface.
+
+```bash
+# Uninstall any old version of llama-cpp-python
+pip3 uninstall llama-cpp-python -y
+
+# Linux Target with Nvidia CUDA support
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python==0.2.27 --no-cache-dir
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python[server]==0.2.27 --no-cache-dir
+
+# MacOS Target with Apple Silicon M1/M2
+CMAKE_ARGS="-DLLAMA_METAL=on" pip3 install -U llama-cpp-python --no-cache-dir
+pip3 install 'llama-cpp-python[server]'
+
+# Download Models from HuggingFace
+cd llmserver/models
+
+# Get the Mistral 7B GGUF Q-5bit model Q5_K_M and Meta LLaMA-2 7B GGUF Q-5bit model Q5_K_M
+wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q5_K_M.gguf
+wget https://huggingface.co/TheBloke/Llama-2-7b-Chat-GGUF/resolve/main/llama-2-7b-chat.Q5_K_M.gguf
+
+# Run Test - API Server
+python3 -m llama_cpp.server \
+    --model ./models/mistral-7b-instruct-v0.1.Q5_K_M.gguf \
+    --host localhost \
+    --n_gpu_layers 99 \
+    -n_ctx 2048 \
+    --chat_format llama-2
+```
+
+## Run Chatbot
 
 Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It supports multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
 
