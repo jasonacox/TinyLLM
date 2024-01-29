@@ -30,7 +30,7 @@ docker run -d \
   -e NUM_GPU=1 \
   -e SERVED_MODEL_NAME=tinyllm \
   -e HF_HOME=/app/models \
-  -v models:/app/models \
+  -v ./models:/app/models \
   --name $CONTAINER \
   vllm
 
