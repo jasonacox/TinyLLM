@@ -38,7 +38,7 @@ To run a local LLM, you will need a server to run inference on the model. This p
 
 ### Llama-cpp-python Server (Option 1)
 
-The llama-cpp-python server is simple and runs optimized GGUF quantized models. However, it can only handle one session/prompt at a time. The steps below create an instance of llama_cpp.server which serves up an LLM with an OpenAI API compatible interface.
+The llama-cpp-python server is simple and runs optimized GGUF models optimized to run on lower VRAM GPUs. However, it can only handle one session/prompt at a time. The steps below create an instance of llama_cpp.server which serves up an LLM with an OpenAI API compatible interface.
 
 ```bash
 # Uninstall any old version of llama-cpp-python
@@ -70,7 +70,7 @@ python3 -m llama_cpp.server \
 
 ### vLLM Server (Option 2)
 
-vLLM supports multiple simultaneous inference threads (session), automatically downloads the model and runs well in containers. Follow the details below to run vLLM. Note, for GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead.
+vLLM supports multiple simultaneous inference threads (sessions), automatically downloads the model and runs well in containers. vLLM will require GPUs with more VRAM since it uses non-quantized models. AWQ models are also available and more optimizations are underway in the project. Note, for GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead.
 
 ```bash
 # Build Container
@@ -152,15 +152,6 @@ python3 server.py
 
 ## LLM Models
 
-Here are some suggested models that work well with vLLM.
-
-| LLM | Quantized | Link to Download | Context Length |
-| --- | --- | --- | --- |
-| Mistral v0.1 7B | None | [mistralai/Mistral-7B-Instruct-v0.1](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1) | 32k |
-| Mistral v0.2 7B | None | [mistralai/Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2) | 32k |
-| Mistral v0.1 7B AWQ | AWQ | [TheBloke/Mistral-7B-Instruct-v0.1-AWQ](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-AWQ) | 32k |
-| Mixtral-8x7B | None | [mistralai/Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 32k |
-
 Here are some suggested models that work well with llmserver (llama-cpp-python). You can test other models and different quantization, but in my experiments, the Q5_K_M models performed the best. Below are the download links from HuggingFace as well as the model card's suggested context length size and chat prompt mode.
 
 | LLM | Quantized | Link to Download | Context Length | Chat Prompt Mode |
@@ -179,6 +170,15 @@ Here are some suggested models that work well with llmserver (llama-cpp-python).
 | Hai's Mixtral 11Bx2 MoE 19B | 5-bit | [mixtral_11bx2_moe_19b.Q5_K_M.gguf](https://huggingface.co/TheBloke/Mixtral_11Bx2_MoE_19B-GGUF/resolve/main/mixtral_11bx2_moe_19b.Q5_K_M.gguf) | 4096 | chatml |
 | Mixtral-8x7B v0.1 | 3-bit | [Mixtral-8x7B-Instruct-v0.1-GGUF](https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/mixtral-8x7b-instruct-v0.1.Q3_K_M.gguf) | 4096 | llama-2 |
 | Mixtral-8x7B v0.1 | 4-bit | [Mixtral-8x7B-Instruct-v0.1-GGUF](https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf) | 4096 | llama-2 |
+
+Here are some suggested models that work well with vLLM.
+
+| LLM | Quantized | Link to Download | Context Length |
+| --- | --- | --- | --- |
+| Mistral v0.1 7B | None | [mistralai/Mistral-7B-Instruct-v0.1](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1) | 32k |
+| Mistral v0.2 7B | None | [mistralai/Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2) | 32k |
+| Mistral v0.1 7B AWQ | AWQ | [TheBloke/Mistral-7B-Instruct-v0.1-AWQ](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-AWQ) | 32k |
+| Mixtral-8x7B | None | [mistralai/Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 32k |
 
 ## References
 
