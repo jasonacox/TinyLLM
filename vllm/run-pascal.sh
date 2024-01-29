@@ -29,6 +29,7 @@ docker run -d \
   -e SERVED_MODEL_NAME=tinyllm \
   -e HF_HOME=/app/models \
   -v ./models:/app/models \
+  --restart unless-stopped \
   --name $CONTAINER \
   vllm
 
