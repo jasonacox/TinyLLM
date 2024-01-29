@@ -31,14 +31,14 @@ git clone https://github.com/jasonacox/TinyLLM.git
 cd TinyLLM
 ```
 
-## Run Local LLM
+## Run a Local LLM
 
-To run a local LLM, you will need a server to run inference on the model. This project recommends two options: [vLLM](https://github.com/vllm-project/vllm) and [llama-cpp-python](https://github.com/abetlen/llama-cpp-python). Both provide a built-in OpenAI API compatible server.  
+To run a local LLM, you will need a server to run inference on the model. This project recommends two options: [vLLM](https://github.com/vllm-project/vllm) and [llama-cpp-python](https://github.com/abetlen/llama-cpp-python). Both provide a built-in OpenAI API compatible server tha will make it easy for you to integrate with other tools.  
 
 
 ### Llama-cpp-python Server (Option 1)
 
-The llama-cpp-python server is simple and runs optimized GGUF models optimized to run on lower VRAM GPUs. However, it can only handle one session/prompt at a time. The steps below create an instance of llama_cpp.server which serves up an LLM with an OpenAI API compatible interface.
+The llama-cpp-python's OpenAI capatible server is easy to set up and use. It runs optimized GGUF models that work well on many consumer grade GPUs with small amounts of VRAM. A downside with this server is that it can only handle one session/prompt at a time. The steps below outline how to setup and run the server via command line. Read the details in [llmserver](./llmserver/) to see how to set it up as a service or docker container on your Linux host.
 
 ```bash
 # Uninstall any old version of llama-cpp-python
@@ -70,7 +70,7 @@ python3 -m llama_cpp.server \
 
 ### vLLM Server (Option 2)
 
-vLLM supports multiple simultaneous inference threads (sessions), automatically downloads the model and runs well in containers. vLLM will require GPUs with more VRAM since it uses non-quantized models. AWQ models are also available and more optimizations are underway in the project. Note, for GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead.
+vLLM offers a robust OpenAI API compatible web server that supports multiple simultaneous inference threads (sessions). It automatically downloads the model you specifdy from HuggingFace and runs extremely well in containers. vLLM requires GPUs with more VRAM since it uses non-quantized models. AWQ models are also available and more optimizations are underway in the project to reduce the memory footprint. Note, for GPUs with a compute capability of 6 or less (e.g. Pascal, GTX 1060) follow details [here](./vllm/) instead.
 
 ```bash
 # Build Container
@@ -90,7 +90,7 @@ mkdir models
 
 ## Run Chatbot
 
-Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It supports multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
+The TinyLLM Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It supports multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
 
 * Summarizing external websites (just paste a URL in chat window)
 * Fetch current news (use `/news`) - see [chatbot](chatbot) page for more details.
