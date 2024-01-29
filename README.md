@@ -7,7 +7,7 @@ This project helps you build a small locally hosted LLM with a ChatGPT-like web 
 ## Key Features
 
 * Supports multiple LLMs (see list below)
-* Builds a local OpenAI API web service via llama-cpp-python. 
+* Builds a local OpenAI API web service via llama-cpp-python or vLLM. 
 * Serves up a Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and other sources (e.g. news, stocks, weather).
 
 ## Hardware Requirements
