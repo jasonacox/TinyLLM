@@ -279,6 +279,7 @@ def ask(prompt, sid=None):
     if not client[sid]["remember"]:
         client[sid]["remember"] =True
         client[sid]["context"].pop()
+        client[sid]["context"].append({"role": "user", "content": "Help me remember."})
     return response
 
 def classify(prompt):
@@ -474,8 +475,8 @@ def handle_message(data):
     if p.startswith("http"):
         # Summarize text at URL
         url = p
-        client[session_id]["visible"] = False
-        client[session_id]["remember"] = False # Don't add blog to context window, just summary
+        client[session_id]["visible"] = False # Don't display full document but...
+        client[session_id]["remember"] = True # Remember full content to answer questions
         blogtext = extract_text_from_blog(p.strip())
         if blogtext:
             log(f"* Reading {len(blogtext)} bytes {url}")
