@@ -184,3 +184,4 @@ Here are some suggested models that work well with vLLM.
 
 * LLaMa.cpp - https://github.com/ggerganov/llama.cpp
 * LLaMa-cpp-python - https://github.com/abetlen/llama-cpp-python
+* vLLM - https://github.com/vllm-project/vllm
