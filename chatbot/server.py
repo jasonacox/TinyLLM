@@ -65,7 +65,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.10.6"
+VERSION = "v0.10.7"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -380,35 +380,53 @@ def get_news(topic, max=10):
     response = get_top_articles(url, max)
     return response
     
-def extract_text_from_blog(url):
+def extract_text_from_url(url):
     try:
         response = requests.get(url, allow_redirects=True)
         if response.status_code == 200:
-            # Check to see if response is a PDF
-            if "application/pdf" in response.headers["Content-Type"]:
-                # Convert PDF to text
-                pdf2text = ""
-                f = io.BytesIO(response.content)
-                reader = PdfReader(f)
-                for page in reader.pages:
-                    pdf2text = pdf2text + page.extract_text() + "\n"
-                return pdf2text
-            # Check to see if response is HTML
-            soup = BeautifulSoup(response.text, 'html.parser')
-
-            # Find and extract all text within paragraph (p) tags
-            paragraphs = soup.find_all('p')
-
-            # Concatenate the text from all paragraphs
-            blog_text = '\n'.join([p.get_text() for p in paragraphs])
-
-            return blog_text
+            # Route extraction based on content type
+            if ";" in response.headers["Content-Type"]:
+                content_type = response.headers["Content-Type"].split(";")[0]
+            else:
+                content_type = response.headers["Content-Type"]
+            content_handlers = {
+                "application/pdf": extract_text_from_pdf,
+                "text/plain": extract_text_from_text,
+                "text/csv": extract_text_from_text,
+                "text/xml": extract_text_from_text,
+                "application/json": extract_text_from_text,
+                "text/html": extract_text_from_html
+            }
+            if content_type in content_handlers:
+                return content_handlers[content_type](response)
+            else:
+                return "Unsupported content type"
         else:
             m = f"Failed to fetch the webpage. Status code: {response.status_code}"
             log(m)
             return m
     except Exception as e:
         log(f"An error occurred: {str(e)}")
+
+def extract_text_from_pdf(response):
+    # Convert PDF to text
+    pdf_content = response.content
+    pdf2text = ""
+    f = io.BytesIO(pdf_content)
+    reader = PdfReader(f)
+    for page in reader.pages:
+        pdf2text = pdf2text + page.extract_text() + "\n"
+    return pdf2text
+
+def extract_text_from_text(response):
+    return response.text
+
+def extract_text_from_html(response):
+    html_content = response.text
+    soup = BeautifulSoup(html_content, 'html.parser')
+    paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
+    blog_text = '\n'.join([p.get_text() for p in paragraphs])
+    return blog_text
 
 @app.route('/')
 def index():
@@ -477,7 +495,7 @@ def handle_message(data):
         url = p
         client[session_id]["visible"] = False # Don't display full document but...
         client[session_id]["remember"] = True # Remember full content to answer questions
-        blogtext = extract_text_from_blog(p.strip())
+        blogtext = extract_text_from_url(p.strip())
         if blogtext:
             log(f"* Reading {len(blogtext)} bytes {url}")
             socketio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'},room=session_id)
