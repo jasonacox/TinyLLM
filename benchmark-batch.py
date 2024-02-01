@@ -46,6 +46,15 @@ PROMPTS = [
     "The elephant is the largest land animal. What is the largest animal in the world?",
     "What is the most precious metal?",
     "What is the most important invention in human history?",
+    "What is the best way to learn history?",
+    "Name the top 10 most important events in human history.",
+    "Who was the first person to walk on the moon?",
+    "List the top 10 most important people in history.",
+    "Define the term 'artificial intelligence'.",
+    "Count the number of words in this sentence.",
+    "Translate the following sentence into French: 'Hello, how are you?'",
+    "Summarize the plot of the movie 'TRON'.",
+    "Detail the process of photosynthesis.",
 ]
 
 # Connect to LLM
@@ -66,10 +75,13 @@ def generate_completion(user):
     ctokens = int(api_out.usage.completion_tokens)
     tps = round(ctokens / ctime, ndigits=1)
     print(f"-- completion: time {ctime}s, {ctokens} tokens, {tps} tokens/s --")
-    return tps
+    return ctokens
 
 # Create a thread pool executor
 executor = concurrent.futures.ThreadPoolExecutor()
+
+# Start counter
+stime = time.time()
 
 # Submit tasks to the executor
 futures = [executor.submit(generate_completion, user) for user in PROMPTS]
@@ -78,14 +90,15 @@ futures = [executor.submit(generate_completion, user) for user in PROMPTS]
 concurrent.futures.wait(futures)
 
 # Get the results
+ctime = round(time.time() - stime, ndigits=3)
 results = [future.result() for future in futures]
 
 # Calculate total performance metrics
-total_tps = sum(results)
-min_tps = min(results)
-max_tps = max(results)
+total_tps = round(sum(results) / ctime, ndigits=1)
+min_tps = round(min(results) / ctime, ndigits=1)
+max_tps = round(max(results) / ctime, ndigits=1)    
 
 # Report performance
 print()
-print(f"Completed {len(PROMPTS)} prompts.")
+print(f"Completed {len(PROMPTS)} prompts and produced {sum(results)} tokens in {ctime} seconds.")
 print(f"Total TPS: {total_tps}, Min TPS: {min_tps}, Max TPS: {max_tps}")
