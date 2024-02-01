@@ -18,9 +18,9 @@ import time
 from openai import OpenAI
 
 # Update for your local settings
-KEY = "RandomKey"           # OpenAI API Key if using OpenAI
-MODEL = "tinyllm"           # Model name - tinyllm, gpt-3.5-turbo, etc.
-API = "http://mc1:8000/v1"  # OpenAI https://api.openai.com/v1
+KEY = "RandomKey"                 # OpenAI API Key if using OpenAI
+MODEL = "tinyllm"                 # Model name - tinyllm, gpt-3.5-turbo, etc.
+API = "http://localhost:8000/v1"  # OpenAI https://api.openai.com/v1
 
 # Prompts used to test LLM performance
 PROMPTS = [
