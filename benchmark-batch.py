@@ -20,8 +20,8 @@ from openai import OpenAI
 
 # Update for your local settings
 KEY = "RandomKey"                 # OpenAI API Key if using OpenAI
-MODEL = "tinyllm"  # Model name
-API = "http://mc1:8000/v1"  # OpenAI https://api.openai.com/v1
+MODEL = "tinyllm"                 # Model name
+API = "http://localhost:8000/v1"  # OpenAI https://api.openai.com/v1
 
 # Prompts used to test LLM performance
 PROMPTS = [
