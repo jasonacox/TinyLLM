@@ -60,7 +60,7 @@ PROMPTS = [
 ]
 
 # Connect to LLM
-print(f"Connecting to LLM on {API} and testing {len(PROMPTS)} prompts...")
+print(f"Connecting to LLM on {API} using {THREADS} session and testing {len(PROMPTS)} prompts...")
 print()
 client = OpenAI(api_key=KEY, base_url=API)
 system = """
@@ -71,6 +71,7 @@ assistant: I am here to help. I'm capable of many human-like tasks.
 # Function to generate completions and measure time
 def generate_completion(i):
     total_tokens = 0
+    prompt_no = 1
     # Loop through all prompts
     for user in PROMPTS:
         stime = time.time()
@@ -79,8 +80,9 @@ def generate_completion(i):
         ctime = round(time.time() - stime, ndigits=3)
         ctokens = int(api_out.usage.completion_tokens)
         tps = round(ctokens / ctime, ndigits=1)
-        print(f"-- [{i}] completion: time {ctime}s, {ctokens} tokens, {tps} tokens/s --")
+        print(f"-- [Thread {i}, Prompt {prompt_no}] completion: time {ctime}s, {ctokens} tokens, {tps} tokens/s --")
         total_tokens += ctokens
+        prompt_no += 1
     return total_tokens
 
 # Create a thread pool executor
