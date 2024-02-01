@@ -20,8 +20,11 @@ from openai import OpenAI
 
 # Update for your local settings
 KEY = "RandomKey"                 # OpenAI API Key if using OpenAI
-MODEL = "tinyllm"                 # Model name
-API = "http://localhost:8000/v1"  # OpenAI https://api.openai.com/v1
+MODEL = "tinyllm"                 # Model name - tinyllm, gpt-3.5-turbo, etc.
+API = "http://localhost:8001/v1"  # OpenAI https://api.openai.com/v1
+
+# Number of simultenous sessions
+THREADS = 10
 
 # Prompts used to test LLM performance
 PROMPTS = [
@@ -53,7 +56,6 @@ PROMPTS = [
     "Define the term 'artificial intelligence'.",
     "Count the number of words in this sentence.",
     "Translate the following sentence into French: 'Hello, how are you?'",
-    "Summarize the plot of the movie 'TRON'.",
     "Detail the process of photosynthesis.",
 ]
 
@@ -67,15 +69,19 @@ assistant: I am here to help. I'm capable of many human-like tasks.
 """.strip()
 
 # Function to generate completions and measure time
-def generate_completion(user):
-    stime = time.time()
-    api_out = client.completions.create(prompt = system + "\n\nuser: " + user + "\nassistant:", 
-        model=MODEL, stream=False, max_tokens=1024, temperature=0.0)
-    ctime = round(time.time() - stime, ndigits=3)
-    ctokens = int(api_out.usage.completion_tokens)
-    tps = round(ctokens / ctime, ndigits=1)
-    print(f"-- completion: time {ctime}s, {ctokens} tokens, {tps} tokens/s --")
-    return ctokens
+def generate_completion(i):
+    total_tokens = 0
+    # Loop through all prompts
+    for user in PROMPTS:
+        stime = time.time()
+        api_out = client.completions.create(prompt = system + "\n\nuser: " + user + "\nassistant:", 
+            model=MODEL, stream=False, max_tokens=1024, temperature=0.0)
+        ctime = round(time.time() - stime, ndigits=3)
+        ctokens = int(api_out.usage.completion_tokens)
+        tps = round(ctokens / ctime, ndigits=1)
+        print(f"-- [{i}] completion: time {ctime}s, {ctokens} tokens, {tps} tokens/s --")
+        total_tokens += ctokens
+    return total_tokens
 
 # Create a thread pool executor
 executor = concurrent.futures.ThreadPoolExecutor()
@@ -84,7 +90,7 @@ executor = concurrent.futures.ThreadPoolExecutor()
 stime = time.time()
 
 # Submit tasks to the executor
-futures = [executor.submit(generate_completion, user) for user in PROMPTS]
+futures = [executor.submit(generate_completion, i) for i in range(THREADS)]
 
 # Wait for all tasks to complete
 concurrent.futures.wait(futures)
@@ -101,4 +107,4 @@ max_tps = round(max(results) / ctime, ndigits=1)
 # Report performance
 print()
 print(f"Completed {len(PROMPTS)} prompts and produced {sum(results)} tokens in {ctime} seconds.")
-print(f"Total TPS: {total_tps}, Min TPS: {min_tps}, Max TPS: {max_tps}")
+print(f"Average TPS across all {THREADS} threads: {total_tps} - Individual Threads: Min TPS: {min_tps}, Max TPS: {max_tps}")
