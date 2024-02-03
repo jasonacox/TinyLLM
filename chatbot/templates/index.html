@@ -175,7 +175,7 @@
         .rightcolumn {
             width: 100%;
         }
-    </style>
+            </style>
     <div class="dialogue-overlay" id="dialogueOverlay">
         <div class="dialogue-box" style="width: 90%;">
             <h2 class="dialogue-title">Settings</h2>
@@ -195,12 +195,12 @@
                     </div>
                 </form>
             </div>
-                            <button class="dialogue-button" onclick="saveSettings()">Save</button>
-                <button class="dialogue-button" onclick="closeDialogue()">Cancel</button>
+                            <button class="dialogue-button" onclick="saveSettings()">Save</button> 
+                <button class="dialogue-button" onclick="closeDialogue()">Cancel</button> 
                 <button class="dialogue-button" onclick="resetSettings()">Reset</button>
-                    </div>
-    </div>
-    <script>
+            </div>
+        </div>
+        <script>
         function openDialogue() {
             document.getElementById("dialogueOverlay").style.display = "flex";
             // First clear the form from any previous settings
@@ -301,9 +301,16 @@
     <script>
         // Check for user input
         function checkEnter(event) {
-            if (event.key === "Enter") {
+            // If Shift-Enter is pressed in the input field, just add a newline
+            if (event.key === "Enter" && event.shiftKey) {
                 event.preventDefault(); // Prevent form submission
-                sendMessage(); 
+                const input = event.target;
+                input.value += "\n";
+            }
+            // If Enter is pressed in the input field, send the message
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault(); // Prevent form submission
+                sendMessage();
             }
         }
 

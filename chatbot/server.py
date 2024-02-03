@@ -65,7 +65,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.10.7"
+VERSION = "v0.10.8"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
