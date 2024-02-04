@@ -65,7 +65,7 @@ import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.10.8"
+VERSION = "v0.11.0"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -105,18 +105,13 @@ default_prompts = {}
 default_prompts["greeting"] = "Hi"
 default_prompts["agentname"] = "Jarvis"
 default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Keep your answers brief and accurate."
-default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date}."
+default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
 default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format: \n1. [Headline Title] - [News Organization]\n2. [Headline Title] - [News Organization]\nContext: {context_str}\nAnswer:"
-default_prompts["classify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate."
-default_prompts["classify_prompt"] = "Examine the following statement and identify, with a single word answer if it is about a greeting, weather, stock price, news, or something else. [BEGIN] {prompt} [END]"
-default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. Respond in {format}."
-default_prompts["library"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
+default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
-default_prompts["subject"] = "What subject is specified in this prompt, state none if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
-default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
-default_prompts["summarize"] = "Consider and summarize this information:\n{context_str}\n"
+default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
 default_prompts["blog"] = "Summarize the following text:\n{blogtext}"
 
 # Test OpenAI API
@@ -124,6 +119,7 @@ while True:
     log("Testing OpenAI API...")
     try:
         log(f"Using openai library version {openai.__version__}")
+        log(f"Connecting to OpenAI API at {api_base} using model {mymodel}")
         llm = openai.OpenAI(api_key=api_key, base_url=api_base)
         llm.chat.completions.create(
             model=mymodel,
@@ -157,19 +153,23 @@ def embed_text(text):
 # Find document closely related to query
 def query_index(query, library, top_k=5):
     vector = embed_text(query)
-    results = qdrant.search(
-        collection_name=library,
-        query_vector=vector,
-        limit=top_k,
-        with_payload=True,
-    )
-    found=[]
-    for res in results:
-        found.append({"title": res.payload["title"],
-                        "text": res.payload["text"],
-                        "url": res.payload["url"],
-                        "score": res.score})
-    return found
+    try:
+        results = qdrant.search(
+            collection_name=library,
+            query_vector=vector,
+            limit=top_k,
+            with_payload=True,
+        )
+        found=[]
+        for res in results:
+            found.append({"title": res.payload["title"],
+                            "text": res.payload["text"],
+                            "url": res.payload["url"],
+                            "score": res.score})
+        return found
+    except Exception as e:
+        log(f"Error querying Qdrant: {str(e)}")
+        return None
 
 # Configure Flask App and SocketIO
 log("Starting server...")
@@ -282,28 +282,13 @@ def ask(prompt, sid=None):
         client[sid]["context"].append({"role": "user", "content": "Help me remember."})
     return response
 
-def classify(prompt):
-    # Ask LLM to classify the prompt
-    #return "something else"
-    content = base_prompt(prompts["classify"]) + [{"role": "user",
-                "content": prompts["classify_prompt"].replace("{prompt}", prompt)}]
-    log(f"content: {content}")
-    llm = openai.OpenAI(api_key=api_key, base_url=api_base)
-    response = llm.chat.completions.create(
-        model=mymodel,
-        max_tokens=MAXTOKENS,
-        stream=False,
-        temperature=TEMPERATURE,
-        messages=content,
-    )
-    log(f"classify = {response.choices[0].message.content.strip()}")
-    return response.choices[0].message.content.strip()
-    
-def clarify(prompt, format="text"):
-    # Ask LLM to clarify the prompt
+def ask_llm(query, format=""):
+    # Ask LLM a question
+    if format == "":
+        format = f"Respond in {format}."
     content = base_prompt(expand_prompt(prompts["clarify"], {"format": format})) + [{"role": "user",
-                "content": f"{prompt}"}]
-    log(f"content: {content}")
+                "content": query}]
+    log(f"ask_llm: {content}")
     llm = openai.OpenAI(api_key=api_key, base_url=api_base)
     response = llm.chat.completions.create(
         model=mymodel,
@@ -312,7 +297,7 @@ def clarify(prompt, format="text"):
         temperature=TEMPERATURE,
         messages=content,
     )
-    log(f"clarify = {response.choices[0].message.content.strip()}")
+    log(f"ask_llm -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
 # Function - Get weather for location
@@ -334,7 +319,7 @@ def get_stock(company):
     if ALPHA_KEY == "alpha_key":
         return "Unable to fetch stock price for %s - No Alpha Vantage API Key" % company
     # First try to get the ticker symbol
-    symbol = clarify(f"What is the stock symbol for {company}? Respond with symbol.")
+    symbol = ask_llm(f"What is the stock symbol for {company}? Respond with symbol.")
     if "none" in symbol.lower():
         return "Unable to fetch stock price for %s - No matching symbol" % company
     # Check to see if response has multiple words and if so, pick the last one
@@ -506,7 +491,11 @@ def handle_message(data):
     elif p.startswith("/"):
         # Handle commands
         command = p[1:].split(" ")[0]
-        if command == "reset":
+        if command == "":
+            # Display help
+            socketio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock]', 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
+        elif command == "reset":
             # Reset context
             client[session_id]["context"] = base_prompt()
             socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=session_id)
@@ -535,129 +524,80 @@ def handle_message(data):
             client[session_id]["prompt"] = (
                 expand_prompt(prompts["news"], {"context_str": context_str})
             )
-        else:
-            # Display help
-            socketio.emit('update', {'update': '[Commands: /reset /version /sessions /news]', 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-    
-    # RAG Command - IMPORT from library - Format: #library [opt:number=1] [prompt]
-    elif p.startswith("#"):
-        parts = p[1:].split()
-        library = ""
-        # Check to see if second element is a number
-        if len(parts) >= 2:
-            library = parts[0]
-            if parts[1].isdigit():
-                number = int(parts[1])
-                prompt = ' '.join(parts[2:])
+        elif command == "rag":
+             # RAG Command - IMPORT from library - Format: /rag library [opt:number=1] [prompt]
+            log("RAG requested")
+            rag = p[4:].strip()
+            parts = rag.split()
+            library = ""
+            # Check to see if second element is a number
+            if len(parts) >= 2:
+                library = parts[0]
+                if parts[1].isdigit():
+                    number = int(parts[1])
+                    prompt = ' '.join(parts[2:])
+                else:
+                    number = 1
+                    prompt = ' '.join(parts[1:])
+            if not library or not prompt:
+                socketio.emit('update', {'update': '[Usage: /rag {library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'},room=session_id)
             else:
-                number = 1
-                prompt = ' '.join(parts[1:])
-        if not library or not prompt:
-            socketio.emit('update', {'update': '[Usage: #{library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'},room=session_id)
-        else:
-            if QDRANT_HOST:
-                log(f"Pulling {number} entries from {library} with prompt {prompt}")
-                socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
-                # Query Vector Database for library
-                results = query_index(prompt, library, top_k=number)
-                context_str = ""
-                client[session_id]["visible"] = False
-                client[session_id]["remember"] = True
-                for result in results:
-                    context_str += f" <li> {result['title']}: {result['text']}\n"
-                    log(" * " + result['title'])
-                log(f" = {context_str}")
-                client[session_id]["prompt"] = (
-                    expand_prompt(prompts["summarize"], {"context_str": context_str})
-                )
-            else:
-                socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
-
-    # RAG Commands - ANSWER from Library - Format: @library [opt:number=1] [prompt]
-    elif p.startswith("@"):
-        parts = p[1:].split()
-        library = ""
-        # Check to see if second element is a number
-        if len(parts) >= 2:
-            library = parts[0]
-            if parts[1].isdigit():
-                number = int(parts[1])
-                prompt = ' '.join(parts[2:])
-            else:
-                number = 1
-                prompt = ' '.join(parts[1:])
-        if not library or not prompt:
-            socketio.emit('update', {'update': '[Usage: @{library} {opt:number} {prompt} - Answer prompt based on library]', 'voice': 'user'},room=session_id)
-        else:
-            if QDRANT_HOST:
-                log(f"Using library {library} with prompt {prompt}")
-                socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
-                # Query Vector Database for library
-                results = query_index(prompt, library, top_k=number)
-                context_str = ""
-                client[session_id]["visible"] = False # Don't show prompt
-                client[session_id]["remember"] = False # Don't add blog to context window, just summary
-                for result in results:
-                    context_str += f"{result['title']}: {result['text']}\n"
-                    log(" * " + result['title'])
-                client[session_id]["prompt"] = (
-                    expand_prompt(prompts["library"], {"prompt": prompt, "context_str": context_str})
-                )
-                # "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
-                # Alternative
-                #     "[BEGIN]\n"
-                #     f"{context_str}"
-                #     "\n[END]\n"
-                #     f"Using the text between [BEGIN] and [END] answer the question: {prompt}\n"
-                #     "Answer:"
-            else:
-                socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
-    elif p.startswith(":"):
-        # Use LLM to classify prompt and take action
-        p = p[1:] # remove :
-        context_str = ""
-        prompttype = classify(p)
-        log(f"Prompt type = {prompttype}")
-        socketio.emit('update', {'update': '%s\n[Topic: %s]' % (p,prompttype), 'voice': 'user'},room=session_id)
-        # check if prompttype string contains weather, stock, or news regardless of case
-        if "weather" in prompttype.lower():
+                if QDRANT_HOST:
+                    log(f"Pulling {number} entries from {library} with prompt {prompt}")
+                    socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
+                    # Query Vector Database for library
+                    results = query_index(prompt, library, top_k=number)
+                    if results:
+                        context_str = ""
+                        client[session_id]["visible"] = False
+                        client[session_id]["remember"] = True
+                        for result in results:
+                            context_str += f" <li> {result['title']}: {result['text']}\n"
+                            log(" * " + result['title'])
+                        log(f" = {context_str}")
+                        client[session_id]["prompt"] = (
+                            expand_prompt(prompts["rag"], {"context_str": context_str})
+                        )
+                    else:
+                        socketio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'},room=session_id)
+                else:
+                    socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
+        elif command == "weather":
             # Weather prompt
             log("Weather prompt")
+            socketio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'},room=session_id)
             # "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
-            location = clarify(expand_prompt(prompts["location"], {"prompt": p}))
+            location = ask_llm(expand_prompt(prompts["location"], {"prompt": p}))
+            # Remove any non-alpha characters
+            location = ''.join(e for e in location if e.isalnum() or e.isspace())
             if "none" in location.lower():
                 context_str = get_weather("")
             else:
                 context_str = get_weather(location)
-        elif "stock" in prompttype.lower():
-            # Stock prompt
-            log("Stock prompt")
-            company = clarify(expand_prompt(prompts["company"], {"prompt": p}))
-            context_str = get_stock(company)
-            log(f"Company = {company} - Context = {context_str}")
-            socketio.emit('update', {'update': context_str, 'voice': 'ai'},room=session_id)
-            # remember context
-            client[session_id]["context"].append({"role": "assistant", "content" : context_str})
-            return jsonify({'status': 'Message received'})
-        elif "news" in prompttype.lower():
-            # News prompt
-            log("News prompt")
-            subject = clarify(expand_prompt(prompts["subject"], {"prompt": p}))
-            context_str = get_news(subject)
-            log(f"Subject = {subject} - Context = {context_str}")
-        else:
-            # Normal prompt
-            log("Normal prompt")
-            context_str = ""
-        if context_str == "":
-            client[session_id]["prompt"] = p
-        else:
             client[session_id]["visible"] = False
             client[session_id]["remember"] = True
             client[session_id]["prompt"] = (
-                expand_prompt(prompts["qa"], {"prompt": p, "context_str": context_str})
+                expand_prompt(prompts["weather"], {"prompt": p, "context_str": context_str, "location": location})
             )
+        elif command == "stock":
+            # Stock prompt
+            log("Stock prompt")
+            socketio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'},room=session_id)
+            prompt = p[6:].strip()
+            log(f"Stock Prompt: {prompt}")
+            company = ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
+            # Remove any non-alpha characters
+            company = ''.join(e for e in company if e.isalnum() or e.isspace())
+            if "none" in company.lower():
+                context_str = "Unable to fetch stock price - Unknown company specified." 
+            else:
+                context_str = get_stock(company)
+            log(f"Company = {company} - Context = {context_str}")
+            socketio.emit('update', {'update': context_str, 'voice': 'ai'},room=session_id)
+            # remember context
+            client[session_id]["context"].append({"role": "user", "content" : "What is the stock price for %s?" % company})
+            client[session_id]["context"].append({"role": "assistant", "content" : context_str})
+            client[session_id]["prompt"] = ''
     else:
         # Normal prompt
         client[session_id]["prompt"] = p
@@ -760,6 +700,6 @@ def sigTermHandler(signum, frame):
 
 # Start server
 if __name__ == '__main__':
-    signal.signal(signal.SIGTERM, sigTermHandler);
+    signal.signal(signal.SIGTERM, sigTermHandler)
     socketio.run(app, host='0.0.0.0', port=PORT, debug=DEBUG, allow_unsafe_werkzeug=True)
 

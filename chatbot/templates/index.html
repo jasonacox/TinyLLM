@@ -101,7 +101,7 @@
             text-decoration: none; 
         }
         /* Style for the pop-up dialogue */
-        .dialogue-overlay {
+        .popup-overlay {
             position: fixed;
             top: 0;
             left: 0;
@@ -113,7 +113,7 @@
             align-items: center;
             z-index: 9999;
         }
-        .dialogue-box {
+        .popup-box {
             background-color: #fff;
             padding: 20px;
             border-radius: 5px;
@@ -121,13 +121,40 @@
             max-width: 800px;
             overflow-y: auto;
         }
-        .dialogue-title {
+        .popup-title {
             font-size: 18px;
             font-weight: bold;
             margin-bottom: 10px;
         }
-        .dialogue-content {
-            margin-bottom: 20px;
+        .popup-content {
+            margin-bottom: 0px;
+        }
+        .popup-content-text {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .popup-table-container {
+            height: 60vh; /* Set the height to 60% of the viewport height */
+            overflow-y: auto; /* Enable vertical scrolling */
+            /* add border to table */
+            border: 1px solid #868686;
+            border-radius: 5px;
+            /* center the middle of the div */
+            /* display: flex;
+            justify-content: center;
+            align-items: center; */
+        }
+        .popup-divider {
+            margin: 20px 0;
+            border-top: 1px solid #727272;
+        }
+        .popup-button-container {
+            /* set the buttons in the middle of the div */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            /* add margin to the top of the buttons */
+            margin-top: 20px;
         }
         .dialogue-button {
             padding: 10px 20px;
@@ -176,13 +203,13 @@
             width: 100%;
         }
             </style>
-    <div class="dialogue-overlay" id="dialogueOverlay">
-        <div class="dialogue-box" style="width: 90%;">
-            <h2 class="dialogue-title">Settings</h2>
-            <div class="dialogue-content">
-                <p class="dialogue-content">The TinyLLM Chatbot can be customized by changing the prompts used to generate responses.</p> 
+    <div class="popup-overlay" id="dialogueOverlay">
+        <div class="popup-box" style="width: 90%;">
+            <h2 class="popup-title">Settings</h2>
+            <div class="popup-content">
+                <p class="popup-content-text">The TinyLLM Chatbot can be customized by changing the prompts used to generate responses.</p> 
                 <form id="settingsForm">
-                    <div class="table-container">
+                    <div class="popup-table-container">
                         <table>
                             <thead>
                                 <tr>
@@ -193,14 +220,19 @@
                             <tbody></tbody>
                         </table>
                     </div>
+                    <div class="popup-divider"></div>
+                    <div class="popup-button-container">
+                        <div>
+                            <button type="button" class="dialogue-button" onclick="saveSettings()">Save</button> 
+                            <button type="button" class="dialogue-button" onclick="closeDialogue()">Cancel</button> 
+                            <button type="button" class="dialogue-button" onclick="resetSettings()">Reset</button>
+                        </div>
+                    </div>
                 </form>
             </div>
-                            <button class="dialogue-button" onclick="saveSettings()">Save</button> 
-                <button class="dialogue-button" onclick="closeDialogue()">Cancel</button> 
-                <button class="dialogue-button" onclick="resetSettings()">Reset</button>
-            </div>
         </div>
-        <script>
+    </div>
+    <script>
         function openDialogue() {
             document.getElementById("dialogueOverlay").style.display = "flex";
             // First clear the form from any previous settings
