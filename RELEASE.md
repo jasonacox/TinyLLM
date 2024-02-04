@@ -1,5 +1,15 @@
 # Releases
 
+## 0.11.0 - Chatbot Updates
+
+* Add multi-line entry to prompt input using Shift-Enter.
+* Fix HTML and CSS to support windows resize for settings dialogue box.
+* Bug fix and Simplify RAG commands using slash prompts.
+
+```
+    Commands: /reset /version /sessions /rag /news /weather /stock
+```
+
 ## 0.10.5 - vLLM Support
 
 * vLLM provides a faster inference engine capable of handling multiple session simultaneously. It also runs well in Nvidia Docker containers. The llama-cpp-python implementation suffers from being single threaded and being fragile in containers (segment faults and core dumps). TODO: vLLM does not support older Nvidia cards by default. TODO: Provide instructions on modifying vLLM to run on Pascal based GPUs (e.g. Nvidia GTX 1060, Quadro P6000 or Tesla P100).
