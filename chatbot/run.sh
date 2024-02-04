@@ -1,4 +1,8 @@
 #!/bin/bash
+# 
+# Example of running the chatbot container
+
+echo "Starting chatbot container..."
 
 docker run \
     -d \
@@ -6,14 +10,19 @@ docker run \
     -e PORT=5000 \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
     -e LLM_MODEL="tinyllm" \
-    -e QDRANT_HOST="" \
-    -e DEVICE="cuda" \
-    -e RESULTS=1 \
-    -e MAX_TOKENS=2048 \
+    -e QDRANT_HOST="localhost" \
+    -e DEVICE="cpu" \
     -e USE_SYSTEM="false" \
-    -e LLM_MODEL="mistralai/Mistral-7B-Instruct-v0.1" \
     -v prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
     --net=host \
     chatbot
+
+echo "Chatbot container started."
+
+# Logs
+echo "Viewing chatbot container logs... ^C to exit"
+echo ""
+docker logs -f chatbot
+```

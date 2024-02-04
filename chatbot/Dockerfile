@@ -5,7 +5,7 @@
 #   https://github.com/jasonacox/TinyLLM
 
 # Use a base image
-FROM python:3.10
+FROM python:3.10-slim
 
 # Setting build related env vars
 ENV PORT=5000
@@ -14,7 +14,7 @@ ENV OPENAI_API_BASE="http://localhost:8000/v1"
 ENV AGENT_NAME="Jarvis"
 ENV MY_MODEL="models/7B/gguf-model.bin"
 ENV DEBUG="False"
-ENV DEVICE="cuda"
+ENV DEVICE="cpu"
 ENV STMODEL="all-MiniLM-L6-v2"
 ENV QDRANT_HOST=""
 ENV RESULTS=1
@@ -23,18 +23,11 @@ ENV USE_SYSTEM="false"
 # Set the working directory
 WORKDIR /app
 
-# Install depencencies
-RUN pip install openai flask flask-socketio bs4 requests
-RUN pip install torch qdrant-client sentence-transformers pydantic~=2.4.2 --extra-index-url https://download.pytorch.org/whl/cpu
-RUN pip install pypdf lxml
+# Install depencencies - Mini Install - No Vector Search
+RUN pip install flask flask-socketio bs4 requests pypdf openai lxml
 
-# Install depencencies - CPU only
-# RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-# RUN pip install openai flask flask-socketio bs4 qdrant-client requests
-# RUN pip install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
-# RUN pip install --no-deps sentence-transformers
-# RUN pip install pydantic~=2.4.2
-# RUN pip install pypdf
+# Add Suport for Vector Search - CPU Only - Comment out to disable vector search
+RUN pip install torch qdrant-client sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Copy local files into container
 COPY . .
@@ -45,10 +38,18 @@ CMD ["python3", "server.py"]
 # Network
 EXPOSE $PORT
 
-# Example docker run:
+# Example docker run command
 # docker run \
 #     -d \
 #     -p 5000:5000 \
+#     -e PORT=5000 \
+#     -e OPENAI_API_BASE="http://localhost:8000/v1" \
+#     -e LLM_MODEL="tinyllm" \
+#     -e QDRANT_HOST="localhost" \
+#     -e DEVICE="cpu" \
+#     -e RESULTS=1 \
+#     -e USE_SYSTEM="false" \
+#     -v ./prompts.json:/app/prompts.json \
 #     --name chatbot \
 #     --restart unless-stopped \
-#     chatbot
+#     chatbot:0.11.0

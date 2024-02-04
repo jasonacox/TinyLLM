@@ -60,12 +60,10 @@ from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 import openai
-import qdrant_client as qc
-import qdrant_client.http.models as qmodels
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.11.0"
+VERSION = "v0.11.1"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -74,8 +72,6 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.info("TinyLLM %s" % VERSION)
-# Sentence Transformer
-from sentence_transformers import SentenceTransformer
 
 def log(text):
     logger.info(text)
@@ -96,7 +92,7 @@ USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Us
 # RAG Configuration Settings
 STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")                    # Sentence Transformer Model to use
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "")                             # Empty = disable RAG support
-DEVICE = os.environ.get("DEVICE", "cuda")                   # cuda or cpu   # Device to use for Sentence Transformer
+DEVICE = os.environ.get("DEVICE", "cpu")                   #  cuda or cpu   # Device to use for Sentence Transformer
 RESULTS = os.environ.get("RESULTS", 1)                                      # Number of results to return from RAG query
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Optional - Alpha Vantage API Key
 
@@ -112,7 +108,16 @@ default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your 
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
 default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
-default_prompts["blog"] = "Summarize the following text:\n{blogtext}"
+default_prompts["website"] = "Summarize the following text from URL {url}:\n{website_text}"
+
+# Import Qdrant and Sentence Transformer
+try:
+    from sentence_transformers import SentenceTransformer
+    import qdrant_client as qc
+    import qdrant_client.http.models as qmodels
+except:
+    logger.error("Unable to import sentence_transformers or qdrant_client - Disabling Qdrant vector DB support")
+    QDRANT_HOST = ""
 
 # Test OpenAI API
 while True:
@@ -139,7 +144,7 @@ while True:
 if QDRANT_HOST:
     log("Sentence Transformer starting...")
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-    model = SentenceTransformer(STMODEL, device=DEVICE) 
+    sent_model = SentenceTransformer(STMODEL, device=DEVICE) 
 
     # Qdrant Setup
     log("Connecting to Qdrant DB...")
@@ -147,7 +152,7 @@ if QDRANT_HOST:
 
 # Create embeddings for text
 def embed_text(text):
-    embeddings = model.encode(text, convert_to_tensor=True)
+    embeddings = sent_model.encode(text, convert_to_tensor=True)
     return embeddings
 
 # Find document closely related to query
@@ -187,9 +192,13 @@ def load_prompts():
     try:
         with open(PROMPT_FILE, "r") as f:
             prompts = json.load(f)
+        # Ensure prompts always include all keys from default_prompts
+        for k in default_prompts:
+            if k not in prompts:
+                prompts[k] = default_prompts[k]
     except:
-        log("Unable to load prompts.")
-        prompts = {}
+        log("Unable to load prompts, using defaults.")
+        reset_prompts()
 
 # Save prompts to PROMPT_FILE
 def save_prompts():
@@ -410,8 +419,8 @@ def extract_text_from_html(response):
     html_content = response.text
     soup = BeautifulSoup(html_content, 'html.parser')
     paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
-    blog_text = '\n'.join([p.get_text() for p in paragraphs])
-    return blog_text
+    website_text = '\n'.join([p.get_text() for p in paragraphs])
+    return website_text
 
 @app.route('/')
 def index():
@@ -480,11 +489,12 @@ def handle_message(data):
         url = p
         client[session_id]["visible"] = False # Don't display full document but...
         client[session_id]["remember"] = True # Remember full content to answer questions
-        blogtext = extract_text_from_url(p.strip())
-        if blogtext:
-            log(f"* Reading {len(blogtext)} bytes {url}")
+        website_text = extract_text_from_url(p.strip())
+        if website_text:
+            log(f"* Reading {len(website_text)} bytes {url}")
             socketio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = expand_prompt(prompts["blog"], {"blogtext": blogtext})
+            url_encoded = requests.utils.quote(url)
+            client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
         else:
             socketio.emit('update', {'update': '[Unable to read URL]', 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''

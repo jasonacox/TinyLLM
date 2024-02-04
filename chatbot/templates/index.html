@@ -268,11 +268,20 @@
                 return;
             }
             // Reset the settings to the default values
+            // First clear the form from any previous settings
+            document.querySelector('tbody').innerHTML = '';
             fetch('/resetprompts')
                 .then(response => response.json())
                 .then(data => {
                     Object.entries(data).forEach(([name, value]) => {
-                        document.getElementById(name).value = value;
+                        document.querySelector('tbody').innerHTML += `
+                            <tr>
+                                <td>${name}</td>
+                                <td>
+                                    <textarea id="${name}" class="prompt-value" oninput="highlightTextarea(this)">${value}</textarea>
+                                </td>
+                            </tr>
+                        `;
                     });
                 });
         }
