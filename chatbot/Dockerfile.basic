@@ -1,5 +1,5 @@
 # Dockerfile for chatbot - OpenAI API ChatBot
-# - Full Version: WITH Vector Search Support for RAG
+# - Basic Version: NO Vector Search Support
 #
 #   Author: Jason A. Cox
 #   23 Sept 2023
@@ -28,7 +28,7 @@ WORKDIR /app
 RUN pip install flask flask-socketio bs4 requests pypdf openai lxml
 
 # Add Suport for Vector Search - CPU Only - Comment out to disable vector search
-RUN pip install torch qdrant-client sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu
+# RUN pip install torch qdrant-client sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Copy local files into container
 COPY server.py /app/server.py

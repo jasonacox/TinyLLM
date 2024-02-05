@@ -63,7 +63,7 @@ import openai
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.11.1"
+VERSION = "v0.11.2"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -211,6 +211,10 @@ def save_prompts():
 
 # Expand variables in prompt to values
 def expand_prompt(prompt, values):
+    # Always use current {date} and {time}
+    current_date = datetime.datetime.now()
+    values["date"] = current_date.strftime("%B %-d, %Y")
+    values["time"] = current_date.strftime("%-I:%M %p")
     for k in values:
         prompt = prompt.replace(f"{{{k}}}", values[k])
     return prompt
@@ -656,6 +660,17 @@ def version():
         return jsonify({'version': "%s DEBUG MODE" % VERSION})
     return jsonify({'version': VERSION})
 
+# On app shutdown - close all sessions
+def remove_sessions(exception):
+    global client
+    log("Shutting down sessions...")
+    for session_id in client:
+        log(f"Shutting down session {session_id}")
+        socketio.emit('update', {'update': '[Shutting Down]', 'voice': 'user'},room=session_id)
+        client[session_id]["stop_thread_flag"] = True
+        client[session_id]["thread"].join()
+    log("Shutdown complete.")
+
 # Convert each character to its hex representation
 def string_to_hex(input_string):
     hex_values = [hex(ord(char)) for char in input_string]
@@ -706,10 +721,13 @@ def send_update(session_id):
                 print(f"AI: {completion_text}")
 
 def sigTermHandler(signum, frame):
-    raise SystemExit
+    # Shutdown all threads
+    remove_sessions(None)
+    raise SystemExit(f"Signal {signum} received - Shutting down.")
 
-# Start server
+# Start server - Dev Mode
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, sigTermHandler)
+    signal.signal(signal.SIGINT, sigTermHandler) 
     socketio.run(app, host='0.0.0.0', port=PORT, debug=DEBUG, allow_unsafe_werkzeug=True)
 
