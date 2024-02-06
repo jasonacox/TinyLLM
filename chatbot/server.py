@@ -35,11 +35,17 @@ Environmental variables:
     * DEVICE - cuda or cpu - only used for Sentence Transformer
     * RESULTS - Number of results to return from RAG query
     * ST_MODEL - Sentence Transformer Model to use
+    * TOKEN - TinyLLM token for admin functions
 
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
     * pip install llama-cpp-python[server]
     * python3 -m llama_cpp.server --model models/7B/ggml-model.bin
+
+Web APIs:
+    * GET / - Chatbot HTML main page
+    * GET /version - Get version
+    * POST /alert - Send alert to all clients
 
 Author: Jason A. Cox
 23 Sept 2023
@@ -63,7 +69,7 @@ import openai
 from pypdf import PdfReader
 
 # Constants
-VERSION = "v0.11.2"
+VERSION = "v0.11.3"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -79,7 +85,7 @@ def log(text):
 # Configuration Settings
 api_key = os.environ.get("OPENAI_API_KEY", "open_api_key")                  # Required, use bogus string for Llama.cpp
 api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Required, use https://api.openai.com for OpenAI
-agentname = os.environ.get("AGENT_NAME", "Jarvis")                          # Set the name of your bot
+agentname = os.environ.get("AGENT_NAME", "")                                # Set the name of your bot
 mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
 MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Maximum number of concurrent clients
@@ -88,6 +94,7 @@ TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LL
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
 PROMPT_FILE = os.environ.get("PROMPT_FILE", "prompts.json")                 # File to store prompts
 USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Use system in chat prompt if True
+TOKEN = os.environ.get("TOKEN", "secret")                                   # Secret TinyLLM token for admin functions
 
 # RAG Configuration Settings
 STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")                    # Sentence Transformer Model to use
@@ -107,7 +114,7 @@ default_prompts["news"] = "You are a newscaster who specializes in providing hea
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
-default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\nQuestion: {prompt}\nContext: {context_str}\nAnswer:"
+default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\nContext: {context_str}\nQuestion: {prompt}\nAnswer:"
 default_prompts["website"] = "Summarize the following text from URL {url}:\n{website_text}"
 
 # Import Qdrant and Sentence Transformer
@@ -206,6 +213,7 @@ def save_prompts():
     try:
         with open(PROMPT_FILE, "w") as f:
             json.dump(prompts, f)
+            log(f"Saved {len(prompts)} prompts.")
     except:
         log("Unable to save prompts.")
 
@@ -237,13 +245,18 @@ else:
     log(f"Loaded {len(prompts)} prompts.")
 
 # Set base prompt and initialize the context array for conversation dialogue
+if agentname == "":
+    agentname = prompts["agentname"]
 current_date = datetime.datetime.now()
 formatted_date = current_date.strftime("%B %-d, %Y")
 values = {"agentname": agentname, "date": formatted_date}
 baseprompt = expand_prompt(prompts["baseprompt"], values)
 
 # Function to return base conversation prompt
-def base_prompt(content=baseprompt):
+def base_prompt(content=None):
+    global baseprompt
+    if not content:
+        content = baseprompt
     if USE_SYSTEM:
         return [{"role": "system", "content": content}] 
     else:
@@ -500,7 +513,7 @@ def handle_message(data):
             url_encoded = requests.utils.quote(url)
             client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
         else:
-            socketio.emit('update', {'update': '[Unable to read URL]', 'voice': 'user'},room=session_id)
+            socketio.emit('update', {'update': '%s [ERROR: Unable to read URL]' % url, 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
     elif p.startswith("/"):
         # Handle commands
@@ -644,7 +657,7 @@ def update_prompts():
         baseprompt = expand_prompt(prompts["baseprompt"], values)
     # Notify all clients of update
     log("Base prompt updated - notifying users")
-    socketio.emit('update', {'update': '[Prompts Updated]', 'voice': 'user'})
+    socketio.emit('update', {'update': '[Prompts Updated - Refresh to reload]', 'voice': 'user'})
     return jsonify({"Result": "Prompts updated"})
 
 @app.route('/resetprompts')
@@ -659,6 +672,19 @@ def version():
     if DEBUG:
         return jsonify({'version': "%s DEBUG MODE" % VERSION})
     return jsonify({'version': VERSION})
+
+@app.route('/alert', methods=['POST'])
+def alert():
+    # Send an alert to all clients
+    data = request.get_json(force=True)
+    # Make sure TOKEN is set and matches
+    if "token" in data and "message" in data and data["token"] == TOKEN:
+        log(f"Received alert: {data}")
+        socketio.emit('update', {'update': data["message"], 'voice': 'user'})
+        return jsonify({'status': 'Alert sent'})
+    else:
+        log(f"Invalid token or missing message: {data}")
+        return jsonify({'status': 'Invalid Token or missing message'})
 
 # On app shutdown - close all sessions
 def remove_sessions(exception):

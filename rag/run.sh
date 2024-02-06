@@ -1,6 +1,6 @@
 #!/bin/bash
 # 
-# Run the chatbot container
+# Run the chatbot container with Qdrant support
 #
 # Author: Jason A. Cox
 # 6 Feb 2024
@@ -46,10 +46,13 @@ docker run \
     -e MAXTOKENS=16384 \
     -e TEMPERATURE=0.0 \
     -e QDRANT_HOST="localhost" \
+    -e RESULTS=1 \
+    -e SENTENCE_TRANSFORMERS_HOME=/app/models \
+    -v ./models:/app/models \
     -v ./prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
-    jasonacox/chatbot
+    jasonacox/chatbot:latest-rag
 echo "Chatbot container started."
 echo ""
 

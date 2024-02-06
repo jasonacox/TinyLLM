@@ -52,13 +52,83 @@ pip install sentence-transformers chromadb
 
 The example script `chroma.py` demonstrates how to embed text documents into a vector database. This example uses blog posts, embeds the articles using a sentence transformer and stores them in the qdrant database.
 
-## TinyLLM Integration
+## TinyLLM Chatbot Integration
 
-External text files are processed, embedded and stored in the vector database. When a user query comes in for TinyLLM, it will first search the vector database and will present that as context in the prompt to the LLM. This will allow the LLM to have relevant local data to answer. The system prompt can guide the LLM to only answer based on the context or to use its extended model knowledge to fill in answer.
+External text files need to be processed, embedded and stored in the vector database. An example script on how to do that is in [qdrant-single.py](./qdrant-single.py), with a snip below:
 
-1. Embed text documents into vector database.
-2. Build chatbot to augment user prompts with relevant context.
-3. Call LLM for text generation.
+```python
+# Create embeddings for text
+def embed_text(text):
+    embeddings = model.encode(text, convert_to_tensor=True)
+    return embeddings
+
+# Creates vector for content with attributes
+def create_vector(content, title, page_url, doc_type="text"):
+    vector = embed_text(content)
+    uid = str(uuid.uuid1().int)[:32]
+    # Document attributes
+    payload = {
+        "text": content,
+        "title": title,
+        "url": page_url,
+        "doc_type": doc_type
+    }
+    return uid, vector, payload
+
+# Adds document vector to qdrant database
+def add_doc_to_index(text, title, url, doc_type="text"):
+    ids = []
+    vectors = []
+    payloads = []
+    uid, vector, payload = create_vector(text,title,url, doc_type)
+    ids.append(uid)
+    vectors.append(vector)
+    payloads.append(payload)
+    ## Add vectors to collection
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=qmodels.Batch(
+            ids = ids,
+            vectors=vectors,
+            payloads=payloads
+        ),
+    )
+```
+
+Once those documents are embedded and stored in the Qdrant vector database, the TinyLLM Chatbot can be set up to use that for `/rag <library> <prompt>` command responses.
+
+### TinyLLM Chatbot with Qdrant Support
+
+Run `jasonacox/chatbot:latest-rag` which includes the Sentance-Transformer and Qdrant client code.
+
+```bash
+# Start the chatbot container
+docker run \
+    -d \
+    -p 5000:5000 \
+    -e PORT=5000 \
+    -e OPENAI_API_BASE="http://localhost:8000/v1" \
+    -e LLM_MODEL="tinyllm" \
+    -e USE_SYSTEM="false" \
+    -e QDRANT_HOST="localhost" \
+    -e RESULTS=1 \
+    -e SENTENCE_TRANSFORMERS_HOME=/app/models \
+    -v ./models:/app/models \
+    -v ./prompts.json:/app/prompts.json \
+    --name chatbot \
+    --restart unless-stopped \
+    jasonacox/chatbot:latest-rag
+```
+
+When a user runs a command like, `/rag mylibrary List some facts about solar`, the Chatbot will first search the vector database for semantically similar documents and will present the top `RESULTS` of those as context for the prompt to the LLM. This will allow the LLM to have relevant local data to answer. The RAG prompt can guide the LLM to only answer based on the context or to use its extended model knowledge to fill in answer. By default it will use the following RAG prompt to structure the response:
+
+
+```
+You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.
+Context: {context_str}
+Question: {prompt}
+Answer:
+```
 
 ```python
   context_str = ""

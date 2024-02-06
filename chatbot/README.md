@@ -1,20 +1,29 @@
-# Web Based Chatbot
+# TinyLLM Web Based Chatbot
 
-This is a web based python flask app that allows you to chat with a LLM using the OpenAI API.
+The TinyLLM Chatbot is a web based python flask app that allows you to chat with a LLM using the OpenAI API.
 
-The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. The examples below use a Llama 2 7B model served up with the OpenAI API compatible [llmserver](https://github.com/jasonacox/TinyLLM/tree/main/llmserver) on an Intel i5 systems with an Nvidia GeForce GTX 1060 GPU.
+The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. With the Chatbot, we explore stitching context through conversational threads, rendering responses via realtime token streaming from LLM, and using external data to provide context for the LLM response (Retrieval Augemented Generation).
 
-# Docker
+The Chatbot can be launched as a Docker container or via command line.
+
+## Docker
 
 ```bash
-# Build container
-./build.sh
-
-# Run container
-./run.sh
+# Run Chatbot via Container - see run.sh
+docker run \
+    -d \
+    -p 5000:5000 \
+    -e PORT=5000 \
+    -e OPENAI_API_BASE="http://localhost:8000/v1" \
+    -e LLM_MODEL="tinyllm" \
+    -e USE_SYSTEM="false" \
+    -v ./prompts.json:/app/prompts.json \
+    --name chatbot \
+    --restart unless-stopped \
+    jasonacox/chatbot
 ```
 
-# Manual
+## Command Line
 
 ```bash
 # Install required packages
@@ -26,32 +35,41 @@ OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 
 ## Chat Commands and Retrieval Augmented Generation (RAG)
 
-* Summarize External Site - If a URL is pasted in the prompt, the chatbot will read and summarize it.
-* RAG - If a Qdrant host is specified, the chatbot will use the vector database information to respond.
-* Command - There are information commands using `/`.
+Some RAG (Retrieval Augmented Generation) features including:
+
+* Summarizing external websites and PDFs (paste a URL in chat window)
+* If a Qdrant host is specified, the chatbot can use the vector database information to respond.
+* Command - There are information commands using `/`
 
 ```
-@library [opt:number] [prompt] # RAG - answer prompt based on response from qdrant library
-#library [opt:number] [prompt] # RAG - import from qdrant library and summarize
-/reset                         # Reset session
-/version                       # Display chatbot version
-/sessions                      # Display nmber of sessions
-/news                          # Fetch and summarize latest news
+/reset                                  # Reset session
+/version                                # Display chatbot version
+/sessions                               # Display current sessions
+/news                                   # List top 10 headlines from current new
+/stock [company]                        # Display stock symbol and current price
+/weather [location]                     # Provide current weather conditions
+/rag [library] [opt:number] [prompt]    # Answer prompt based on response from Qdrant collection
 ```
+
+See the [rag](../rag/) for more details about RAG.
 
 ## Example Session
+
+The examples below use a Llama 2 7B model served up with the OpenAI API compatible [llmserver](https://github.com/jasonacox/TinyLLM/tree/main/llmserver) on an Intel i5 systems with an Nvidia GeForce GTX 1060 GPU.
+
+### Chatbot
 
 Open http://127.0.0.1:5000 - Example session:
 
 <img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
 
-## Read URL
+### Read URL
 
 If a URL is pasted in the text box, the chatbot will read and summarize it.
 
 <img width="810" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/44d8a2f7-54c1-4b1c-8471-fdf13439be3b">
 
-## Current News
+### Current News
 
 The `/news` command will fetch the latest news and have the LLM summarize the top ten headlines. It will store the raw feed in the context prompt to allow follow-up questions.
 

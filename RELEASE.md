@@ -1,5 +1,10 @@
 # Releases
 
+## 0.11.3 - Optimize for Docker
+
+* Improve Chatbot for Docker
+* Added admin alert broadcast feature (`POST /alert`)
+
 ## 0.11.0 - Chatbot Updates
 
 * Add multi-line entry to prompt input using Shift-Enter.

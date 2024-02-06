@@ -92,32 +92,28 @@ mkdir models
 
 The TinyLLM Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It supports multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
 
-* Summarizing external websites (just paste a URL in chat window)
-* Fetch current news (use `/news`) - see [chatbot](chatbot) page for more details.
+* Summarizing external websites and PDFs (paste a URL in chat window)
+* List top 10 headlines from current news (use `/news`)
+* Display company stock symbol and current stock price (use `/stock <company>`)
+* Provide current weather conditions (use `/weather <location>`)
 * Use a vector databases for RAG queries - see [RAG](rag) page for details
 
 ```bash
 # Move to chatbot folder
 cd ../chatbot
 
-# Build Docker container
-docker build -t chatbot .
-
-# Run container as a service on port 5000
+# Pull and run latest container - see run.sh
 docker run \
     -d \
     -p 5000:5000 \
     -e PORT=5000 \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
     -e LLM_MODEL="tinyllm" \
-    -e QDRANT_HOST="" \
-    -e DEVICE="cuda" \
-    -e RESULTS=1 \
-    -v prompts.json:/app/prompts.json \
+    -e USE_SYSTEM="false" \
+    -v ./prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
-    --net=host \
-    chatbot
+    jasonacox/chatbot
 ```
 
 ### Example Session
