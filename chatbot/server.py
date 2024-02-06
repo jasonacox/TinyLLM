@@ -19,22 +19,22 @@ Requirements:
     * pip install qdrant-client sentence-transformers pydantic~=2.4.2
 
 Environmental variables:
+    * PORT - Port that Chatbot will listen on
+    * PROMPT_FILE - File to store prompts
+    * DEBUG - Set to True to enable debug mode
     * OPENAI_API_KEY - Required only for OpenAI
     * OPENAI_API_BASE - URL to OpenAI API Server or locally hosted version
-    * AGENT_NAME - Name for Bot
-    * AGENT_NAME - LLM Model to Use
-    * ALPHA_KEY - Alpha Vantage API Key for Stocks (Optional) - https://www.alphavantage.co/support/#api-key
-    * QDRANT_HOST - URL to Qdrant Vector Database (Optional) - https://qdrant.tech/
-    * DEVICE - cuda or cpu
-    * RESULTS - Number of results to return from RAG query
+    * LLM_MODEL - LLM Model to Use
+    * USE_SYSTEM - Use system in chat prompt if True
     * MAXCLIENTS - Maximum number of clients to allow
     * MAXTOKENS - Maximum number of tokens to send to LLM
     * TEMPERATURE - LLM temperature
+    * AGENT_NAME - Name for Bot
+    * ALPHA_KEY - Alpha Vantage API Key for Stocks (Optional) - https://www.alphavantage.co/support/#api-key
+    * QDRANT_HOST - URL to Qdrant Vector Database (Optional) - https://qdrant.tech/
+    * DEVICE - cuda or cpu - only used for Sentence Transformer
+    * RESULTS - Number of results to return from RAG query
     * ST_MODEL - Sentence Transformer Model to use
-    * PORT - Port to listen on
-    * PROMPT_FILE - File to store prompts
-    * USE_SYSTEM - Use system in chat prompt if True
-    * DEBUG - Set to True to enable debug mode
 
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
@@ -82,7 +82,7 @@ api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Re
 agentname = os.environ.get("AGENT_NAME", "Jarvis")                          # Set the name of your bot
 mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
-MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 10))                          # Maximum number of concurrent clients
+MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Maximum number of concurrent clients
 MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
