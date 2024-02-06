@@ -101,6 +101,7 @@ The TinyLLM Chatbot is a simple web based python flask app that allows you to ch
 ```bash
 # Move to chatbot folder
 cd ../chatbot
+touch prompts.json
 
 # Pull and run latest container - see run.sh
 docker run \
