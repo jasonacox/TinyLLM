@@ -102,6 +102,9 @@ Once those documents are embedded and stored in the Qdrant vector database, the 
 Run `jasonacox/chatbot:latest-rag` which includes the Sentance-Transformer and Qdrant client code.
 
 ```bash
+# Create placeholder prompts.json
+touch prompts.json
+
 # Start the chatbot container
 docker run \
     -d \

@@ -34,6 +34,10 @@ fi
 
 # Start the chatbot container
 echo "Starting chatbot container..."
+if [ ! -f "./prompts.json" ]; then
+    echo "Creating prompts.json file..."
+    touch ./prompts.json
+fi
 docker run \
     -d \
     -p 5000:5000 \

@@ -9,6 +9,9 @@ The Chatbot can be launched as a Docker container or via command line.
 ## Docker
 
 ```bash
+# Create placeholder prompts.json
+touch prompts.json
+
 # Run Chatbot via Container - see run.sh
 docker run \
     -d \
