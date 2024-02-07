@@ -111,7 +111,7 @@ docker run \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
     -e LLM_MODEL="tinyllm" \
     -e USE_SYSTEM="false" \
-    -v ./prompts.json:/app/prompts.json \
+    -v $PWD/prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot
