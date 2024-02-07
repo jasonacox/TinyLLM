@@ -52,6 +52,7 @@ docker run \
     -e TEMPERATURE=0.0 \
     -e QDRANT_HOST="localhost" \
     -v $PWD/prompts.json:/app/prompts.json \
+    --network="host" \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot
