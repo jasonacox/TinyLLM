@@ -141,7 +141,7 @@ nvidia-docker run -d -p 8000:8000 --gpus=all --shm-size=10.24gb \
   -e HF_HOME=/app/models \
   -e NUM_GPU=4 \
   -e EXTRA_ARGS="--dtype float --max-model-len 20000" \
-  -v models:/app/models \
+  -v $PWD/models:/app/models \
   --name vllm \
   vllm 
 # Print Running Logs - ^C to Stop Viewing Logs

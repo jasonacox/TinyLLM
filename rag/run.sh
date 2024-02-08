@@ -52,8 +52,8 @@ docker run \
     -e QDRANT_HOST="localhost" \
     -e RESULTS=1 \
     -e SENTENCE_TRANSFORMERS_HOME=/app/models \
-    -v ./models:/app/models \
-    -v ./prompts.json:/app/prompts.json \
+    -v $PWD/models:/app/models \
+    -v $PWD/prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot:latest-rag

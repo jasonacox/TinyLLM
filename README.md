@@ -64,7 +64,7 @@ python3 -m llama_cpp.server \
     --model ./models/mistral-7b-instruct-v0.1.Q5_K_M.gguf \
     --host localhost \
     --n_gpu_layers 99 \
-    -n_ctx 2048 \
+    --n_ctx 2048 \
     --chat_format llama-2
 ```
 
@@ -111,7 +111,7 @@ docker run \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
     -e LLM_MODEL="tinyllm" \
     -e USE_SYSTEM="false" \
-    -v ./prompts.json:/app/prompts.json \
+    -v $PWD/prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot

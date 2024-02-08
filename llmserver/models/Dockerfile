@@ -56,7 +56,7 @@ EXPOSE $PORT
 #    docker run -d \
 #     --runtime=nvidia --gpus all \
 #     -p $PORT:$PORT \
-#     -v .:/app/models \
+#     -v $PWD:/app/models \
 #     -e MODEL=$MODEL \
 #     -e N_CTX=$CONTEXT_SIZE \
 #     -e CHAT_FORMAT=$CHAT_FORMAT \

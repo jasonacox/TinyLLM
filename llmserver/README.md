@@ -35,7 +35,7 @@ python3 -m llama_cpp.server \
     --model ./models/mistral-7b-instruct-v0.1.Q5_K_M.gguf \
     --host localhost \
     --n_gpu_layers 99 \
-    -n_ctx 2048 \
+    --n_ctx 2048 \
     --chat_format llama-2
 
 ```
@@ -119,7 +119,7 @@ docker run \
     --runtime=nvidia --gpus all \
     -d \
     -p 8000:8000 \
-    -v ./models:/app/models \
+    -v $PWD/models:/app/models \
     -e MODEL=models/llama-2-7b-chat.Q5_K_M.gguf \
     -e N_GPU_LAYERS=32 \
     -e HOST=0.0.0.0 \
