@@ -481,6 +481,9 @@
             notification.className = isError ? 'notification error' : 'notification';
             notification.textContent = message;
             document.body.appendChild(notification);
+            // Change focus back to the input field
+            var textInput = document.getElementById("messageInput");
+            textInput.focus();
 
             // Automatically remove the notification after a certain time (e.g., 3 seconds)
             setTimeout(() => {
@@ -512,6 +515,12 @@
 
             // Fetch version and update footer
             getVersion();
+        };
+
+        // Set focus on the text input field when the window is focused
+        window.onfocus = function() {
+            var textInput = document.getElementById("messageInput"); 
+            textInput.focus();
         };
     </script>
 </body>
