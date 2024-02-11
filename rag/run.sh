@@ -52,7 +52,6 @@ docker run \
     -e QDRANT_HOST="localhost" \
     -e RESULTS=1 \
     -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
-    -v $PWD/models:/app/models \
     -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \
