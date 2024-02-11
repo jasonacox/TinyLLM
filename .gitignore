@@ -169,3 +169,8 @@ chatbot/test.sh
 chatbot/test8080.sh
 chatbot/llamafile.sh
 chatbot/prompts.json
+chatbot/.tinyllm
+chatbot/uploadtest.sh
+chatbot/f.sh
+chatbot/main.sh
+chatbot/r
