@@ -45,7 +45,6 @@ CMD uvicorn server:app --host 0.0.0.0 --port $PORT
 #     -d \
 #     -p 5000:5000 \
 #     -e PORT=5000 \
-#     -e UVICORN_PORT=5000 \
 #     -e OPENAI_API_BASE="http://localhost:8000/v1" \
 #     -e LLM_MODEL="tinyllm" \
 #     -e QDRANT_HOST="localhost" \

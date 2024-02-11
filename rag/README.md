@@ -117,7 +117,6 @@ docker run \
     -e RESULTS=1 \
     -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
     -v $PWD/.tinyllm:/app/.tinyllm \
-    -v $PWD/prompts.json:/app/prompts.json \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot:latest-rag
