@@ -34,9 +34,9 @@ fi
 
 # Start the chatbot container
 echo "Starting chatbot container..."
-if [ ! -f "./prompts.json" ]; then
-    echo "Creating prompts.json file..."
-    touch ./prompts.json
+if [ ! -d "./.tinyllm" ]; then
+    echo "Creating .tinyllm directory..."
+    mkdir .tinyllm
 fi
 docker run \
     -d \
@@ -51,9 +51,9 @@ docker run \
     -e TEMPERATURE=0.0 \
     -e QDRANT_HOST="localhost" \
     -e RESULTS=1 \
-    -e SENTENCE_TRANSFORMERS_HOME=/app/models \
+    -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
     -v $PWD/models:/app/models \
-    -v $PWD/prompts.json:/app/prompts.json \
+    -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot:latest-rag

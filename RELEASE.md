@@ -1,5 +1,12 @@
 # Releases
 
+## 0.12.0 - FastAPI and Uvicorn
+
+* Ported Chatbot to the async FastAPI and Uvicorn ASGI high speed web server implementation (#1).
+* Added /stats page to display configuration settings and current stats (optional `?format=json`)
+* UI updated to help enforce focus on text entry box.
+* Moved `prompts.json` and Sentence Transformer model location to a `./.tinyllm` for Docker support. 
+
 ## 0.11.3 - Optimize for Docker
 
 * Improve Chatbot for Docker

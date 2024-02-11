@@ -34,9 +34,9 @@ fi
 
 # Start the chatbot container
 echo "Starting chatbot container..."
-if [ ! -f "./prompts.json" ]; then
-    echo "Creating prompts.json file..."
-    touch ./prompts.json
+if [ ! -d "./.tinyllm" ]; then
+    echo "Creating .tinyllm directory..."
+    mkdir .tinyllm
 fi
 
 docker run \
@@ -51,8 +51,8 @@ docker run \
     -e MAXTOKENS=16384 \
     -e TEMPERATURE=0.0 \
     -e QDRANT_HOST="localhost" \
-    -v $PWD/prompts.json:/app/prompts.json \
-    --network="host" \
+    -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
+    -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot
