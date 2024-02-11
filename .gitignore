@@ -171,6 +171,6 @@ chatbot/llamafile.sh
 chatbot/prompts.json
 chatbot/.tinyllm
 chatbot/uploadtest.sh
-chatbot/r
 chatbot/f.sh
 chatbot/main.sh
+chatbot/r
