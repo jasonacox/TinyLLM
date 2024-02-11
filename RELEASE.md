@@ -7,6 +7,12 @@
 * UI updated to help enforce focus on text entry box.
 * Moved `prompts.json` and Sentence Transformer model location to a `./.tinyllm` for Docker support. 
 
+## 0.11.4 - Stats Page
+
+* Add `/stats` URL to Chatbot for settings and current status information.
+* Update Chatbot HTML to set focus on user textbox.
+* Move `prompts.json` and Sentence Transformer models into `.tinyllm` directory.
+
 ## 0.11.3 - Optimize for Docker
 
 * Improve Chatbot for Docker
