@@ -52,7 +52,6 @@ EXPOSE $PORT
 #     -e RESULTS=1 \
 #     -e USE_SYSTEM="false" \
 #     -v $PWD/prompts.json:/app/prompts.json \
-#     --network="host" \
 #     --name chatbot \
 #     --restart unless-stopped \
 #     chatbot:0.11.0

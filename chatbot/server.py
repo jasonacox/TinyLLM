@@ -68,8 +68,8 @@ from flask_socketio import SocketIO
 import openai
 from pypdf import PdfReader
 
-# Constants
-VERSION = "v0.11.3"
+# TinyLLM Version
+VERSION = "v0.11.4"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -92,7 +92,7 @@ MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Ma
 MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
-PROMPT_FILE = os.environ.get("PROMPT_FILE", "prompts.json")                 # File to store prompts
+PROMPT_FILE = os.environ.get("PROMPT_FILE", f".tinyllm/prompts.json")       # File to store system prompts
 USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Use system in chat prompt if True
 TOKEN = os.environ.get("TOKEN", "secret")                                   # Secret TinyLLM token for admin functions
 
@@ -114,14 +114,13 @@ default_prompts["news"] = "You are a newscaster who specializes in providing hea
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
-default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\nContext: {context_str}\nQuestion: {prompt}\nAnswer:"
+default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question or concern {prompt}. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\n[BEGIN]\n{context_str}\n[END]\n"
 default_prompts["website"] = "Summarize the following text from URL {url}:\n{website_text}"
 
 # Import Qdrant and Sentence Transformer
 try:
     from sentence_transformers import SentenceTransformer
     import qdrant_client as qc
-    import qdrant_client.http.models as qmodels
 except:
     logger.error("Unable to import sentence_transformers or qdrant_client - Disabling Qdrant vector DB support")
     QDRANT_HOST = ""
@@ -153,9 +152,9 @@ if QDRANT_HOST:
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     sent_model = SentenceTransformer(STMODEL, device=DEVICE) 
 
-    # Qdrant Setup
+    # Qdrant Connection
     log("Connecting to Qdrant DB...")
-    qdrant = qc.QdrantClient(url=QDRANT_HOST)
+    qdrant = qc.QdrantClient(url=QDRANT_HOST, timeout=60)
 
 # Create embeddings for text
 def embed_text(text):
@@ -191,9 +190,14 @@ socketio = SocketIO(app)
 # Globals
 client = {}
 prompts = {}
+stats = {
+    "start_time": time.time(),
+    "errors": 0,
+    "ask": 0,
+    "ask_llm": 0,
+}
 
-# Functions to mange prompts and PROMPT_FILE
-# Load prompts from PROMPT_FILE
+# Load system prompts from PROMPT_FILE
 def load_prompts():
     global prompts
     try:
@@ -204,13 +208,15 @@ def load_prompts():
             if k not in prompts:
                 prompts[k] = default_prompts[k]
     except:
-        log("Unable to load prompts, using defaults.")
+        log(f"Unable to load system prompts file {PROMPT_FILE}, creating with defaults.")
         reset_prompts()
+        save_prompts()
 
 # Save prompts to PROMPT_FILE
 def save_prompts():
     global prompts
     try:
+        os.makedirs(os.path.dirname(PROMPT_FILE), exist_ok=True)  # Create path if it doesn't exist
         with open(PROMPT_FILE, "w") as f:
             json.dump(prompts, f)
             log(f"Saved {len(prompts)} prompts.")
@@ -236,13 +242,7 @@ def reset_prompts():
 
 # Load prompts
 load_prompts()
-if len(prompts) == 0:
-    # Add default prompts
-    reset_prompts()
-    save_prompts()
-    log(f"Setting defaults for {len(prompts)} prompts.")
-else:
-    log(f"Loaded {len(prompts)} prompts.")
+log(f"Loaded {len(prompts)} prompts.")
 
 # Set base prompt and initialize the context array for conversation dialogue
 if agentname == "":
@@ -268,7 +268,7 @@ context = base_prompt()
 # Function - Send user prompt to LLM for response
 def ask(prompt, sid=None):
     global client
-
+    stats["ask"] += 1
     response = False
     log(f"Context size = {len(context)}")
     while not response:
@@ -285,7 +285,7 @@ def ask(prompt, sid=None):
                 messages=client[sid]["context"],
             )
         except openai.OpenAIError as e:
-            log(f"ERROR {e}")
+            # If we get an error, try to recover
             client[sid]["context"].pop()
             if "maximum context length" in str(e):
                 if len(prompt) > 1000:
@@ -301,6 +301,10 @@ def ask(prompt, sid=None):
                     client[sid]["context"] = base_prompt()   
                     log(f"Reset context {len(client[sid]['context'])}")
                     socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=sid)
+            else:
+                log(f"ERROR: {e}")
+                stats["errors"] += 1
+                socketio.emit('update', {'update': e, 'voice': 'user'},room=sid)
 
     if not client[sid]["remember"]:
         client[sid]["remember"] =True
@@ -310,6 +314,8 @@ def ask(prompt, sid=None):
 
 def ask_llm(query, format=""):
     # Ask LLM a question
+    global stats
+    stats["ask_llm"] += 1
     if format == "":
         format = f"Respond in {format}."
     content = base_prompt(expand_prompt(prompts["clarify"], {"format": format})) + [{"role": "user",
@@ -380,8 +386,8 @@ def get_top_articles(url, max=10):
             break
     return articles
 
+# Function - Fetch news for topic
 def get_news(topic, max=10):
-    # Look up news for topic
     if "none" in topic.lower() or "current" in topic.lower():
         url = "https://news.google.com/rss/"
     else:
@@ -391,6 +397,7 @@ def get_news(topic, max=10):
     response = get_top_articles(url, max)
     return response
     
+# Function - Extract text from URL
 def extract_text_from_url(url):
     try:
         response = requests.get(url, allow_redirects=True)
@@ -419,6 +426,7 @@ def extract_text_from_url(url):
     except Exception as e:
         log(f"An error occurred: {str(e)}")
 
+# Function - Extract text from PDF
 def extract_text_from_pdf(response):
     # Convert PDF to text
     pdf_content = response.content
@@ -429,9 +437,11 @@ def extract_text_from_pdf(response):
         pdf2text = pdf2text + page.extract_text() + "\n"
     return pdf2text
 
+# Function - Extract text from text
 def extract_text_from_text(response):
     return response.text
 
+# Function - Extract text from HTML
 def extract_text_from_html(response):
     html_content = response.text
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -685,6 +695,51 @@ def alert():
     else:
         log(f"Invalid token or missing message: {data}")
         return jsonify({'status': 'Invalid Token or missing message'})
+
+# Display settings and stats
+@app.route("/stats")
+def statspage():
+    global client, stats
+    format = request.args.get("format", "html")
+    # Create a simple status page
+    data = {
+        "TinyLLM Chatbot Version": VERSION,
+        "Start Time": datetime.datetime.fromtimestamp(stats["start_time"]).strftime("%Y-%m-%d %H:%M:%S"),
+        "Uptime": str(datetime.timedelta(seconds=int(time.time() - stats["start_time"]))),
+        "Errors": stats["errors"],
+        "User Queries": stats["ask"],
+        "LLM Queries": stats["ask_llm"],
+        "OpenAI API Key (OPENAI_API_KEY)": "************" if api_key != "" else "Not Set",
+        "OpenAI API URL (OPENAI_API_URL)": api_base,
+        "Agent Name (AGENT_NAME)": agentname,
+        "LLM Model (LLM_MODEL)": mymodel,
+        "Debug Mode (DEBUG)": DEBUG,
+        "Current Clients (MAXCLIENTS)": f"{len(client)} of {MAXCLIENTS}",
+        "LLM Max tokens Limit (MAXTOKENS)": MAXTOKENS,
+        "LLM Temperature (TEMPERATURE)": TEMPERATURE,
+        "Server Port (PORT)": PORT,
+        "Saved Prompts (PROMPT_FILE)": PROMPT_FILE,
+        "LLM System Tags in Prompts (USE_SYSTEM)": USE_SYSTEM,
+        "RAG: Sentence Transformer (STMODEL)": STMODEL,
+        "RAG: Qdrant (QDRANT_HOST)": QDRANT_HOST,
+        "RAG: Embedding (DEVICE)": DEVICE,
+        "RAG: Default Results Retrieved (RESULTS)": RESULTS,
+    }
+    if format == "json":
+        return jsonify(data)
+    # Build a simple HTML page based on data facets
+    html = "<html><head><title>TinyLLM Chatbot Status</title></head><body>"
+    html += "<h1>TinyLLM Chatbot Status</h1>"
+    # Provide link to project
+    html += "<p>Settings and Current Status for <a href='https://github.com/jasonacox/TinyLLM/tree/main/chatbot'>TinyLLM Chatbot</a></p>"
+    html += "<table>"
+    for key in data:
+        html += f"<tr><td>{key}</td><td>{data[key]}</td></tr>"
+    html += "</table>"
+    # Add JS to refresh page every 5 seconds
+    html += "<script>setTimeout(function(){location.reload()},5000);</script>"
+    html += "</body></html>"
+    return html
 
 # On app shutdown - close all sessions
 def remove_sessions(exception):
