@@ -1,13 +1,13 @@
 #!/bin/bash
 # 
-# Run the chatbot container
+# Run the TinyLLM Chatbot using OpenAI GPT-3.5
 #
 # Author: Jason A. Cox
-# 6 Feb 2024
+# 11 Feb 2024
 # https://github.com/jasonacox/TinyLLM
 
-echo "Run TinyLLM Chatbot - Local Model"
-echo "---------------------------------"
+echo "Run TinyLLM Chatbot - OpenAI GPT-3.5"
+echo "------------------------------------"
 
 # Stop and remove the chatbot container
 echo "Removing old chatbot container..."
@@ -25,12 +25,12 @@ docker run \
     -d \
     -p 5000:5000 \
     -e PORT=5000 \
-    -e OPENAI_API_KEY="Asimov-3-Laws" \
-    -e OPENAI_API_BASE="http://localhost:8000/v1" \
-    -e LLM_MODEL="tinyllm" \
+    -e OPENAI_API_KEY="YOUR_OPENAI_KEY" \
+    -e OPENAI_API_BASE="https://api.openai.com/v1" \
+    -e LLM_MODEL="gpt-3.5-turbo" \
     -e USE_SYSTEM="false" \
     -e MAXCLIENTS=1000 \
-    -e MAXTOKENS=16384 \
+    -e MAXTOKENS=4000 \
     -e TEMPERATURE=0.0 \
     -e QDRANT_HOST="localhost" \
     -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
