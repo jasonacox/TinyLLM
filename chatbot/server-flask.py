@@ -269,6 +269,7 @@ context = base_prompt()
 def ask(prompt, sid=None):
     global client
     stats["ask"] += 1
+
     response = False
     log(f"Context size = {len(context)}")
     while not response:
@@ -396,7 +397,7 @@ def get_news(topic, max=10):
     log(f"Fetching news for {topic} from {url}")
     response = get_top_articles(url, max)
     return response
-    
+
 # Function - Extract text from URL
 def extract_text_from_url(url):
     try:

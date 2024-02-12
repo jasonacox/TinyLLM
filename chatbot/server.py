@@ -3,19 +3,20 @@
 Web based ChatBot Example
 
 Web chat client for OpenAI and the llama-cpp-python[server] OpenAI API Compatible 
-Python Flask based Web Server. Provides a simple web based chat session.
+Python FastAPI / socket.io based Web Server. Provides a simple web based chat session.
 
 Features:
-    * Uses OpenAI API
-    * Works with local hosted OpenAI compatible llama-cpp-python[server]
+    * Uses OpenAI API to talk to LLM
+    * Works with local hosted OpenAI API compatible LLMs, e.g. llama-cpp-python[server]
     * Retains conversational context for LLM
     * Uses response stream to render LLM chunks instead of waiting for full response
-    * Multithreaded to support multiple clients
+    * Supports multiple concurrent client sessions
     * Supports commands to reset context, get version, etc.
-    * Supports RAG prompts (BETA)
+    * Uses FastAPI and Uvicorn ASGI high speed web server implementation
+    * (Optional) Supports RAG prompts using Qdrant Vector Database
 
 Requirements:
-    * pip install openai flask flask-socketio bs4 pypdf
+    * pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml
     * pip install qdrant-client sentence-transformers pydantic~=2.4.2
 
 Environmental variables:
@@ -36,6 +37,7 @@ Environmental variables:
     * RESULTS - Number of results to return from RAG query
     * ST_MODEL - Sentence Transformer Model to use
     * TOKEN - TinyLLM token for admin functions
+    * PROMPT_FILE - File to store system prompts
 
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
@@ -53,23 +55,25 @@ https://github.com/jasonacox/TinyLLM
 
 """
 # Import Libraries
-import os
-import io
-import time
+import asyncio
 import datetime
-import threading
-import signal
-import requests
-import logging
+import io
 import json
-from bs4 import BeautifulSoup
-from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO
+import logging
+import os
+import time
 import openai
+import requests
+import socketio
+import uvicorn
+from bs4 import BeautifulSoup
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pypdf import PdfReader
 
 # TinyLLM Version
-VERSION = "v0.11.4"
+VERSION = "v0.12.0"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -182,11 +186,6 @@ def query_index(query, library, top_k=5):
         log(f"Error querying Qdrant: {str(e)}")
         return None
 
-# Configure Flask App and SocketIO
-log("Starting server...")
-app = Flask(__name__)
-socketio = SocketIO(app)
-
 # Globals
 client = {}
 prompts = {}
@@ -196,6 +195,15 @@ stats = {
     "ask": 0,
     "ask_llm": 0,
 }
+
+#
+# Configure FastAPI App and SocketIO
+#
+
+log("Starting server...")
+sio = socketio.AsyncServer(async_mode="asgi")
+socket_app = socketio.ASGIApp(sio)
+app = FastAPI()
 
 # Load system prompts from PROMPT_FILE
 def load_prompts():
@@ -266,8 +274,8 @@ def base_prompt(content=None):
 context = base_prompt()
 
 # Function - Send user prompt to LLM for response
-def ask(prompt, sid=None):
-    global client
+async def ask(prompt, sid=None):
+    global client, stats
     stats["ask"] += 1
     response = False
     log(f"Context size = {len(context)}")
@@ -300,11 +308,11 @@ def ask(prompt, sid=None):
                     # our context has grown too large, reset
                     client[sid]["context"] = base_prompt()   
                     log(f"Reset context {len(client[sid]['context'])}")
-                    socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=sid)
+                    await sio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=sid)
             else:
                 log(f"ERROR: {e}")
                 stats["errors"] += 1
-                socketio.emit('update', {'update': e, 'voice': 'user'},room=sid)
+                await sio.emit('update', {'update': e, 'voice': 'user'},room=sid)
 
     if not client[sid]["remember"]:
         client[sid]["remember"] =True
@@ -449,258 +457,21 @@ def extract_text_from_html(response):
     website_text = '\n'.join([p.get_text() for p in paragraphs])
     return website_text
 
-@app.route('/')
-def index():
-    # Send the user the chatbot HTML page
-    return render_template('index.html')
+#
+# FastAPI Routes
+#
 
-@socketio.on('connect')
-def handle_connect():
-    session_id = request.sid
-    if session_id in client:
-        # Client reconnected - restart thread
-        client[session_id]["thread"].join()
-        log(f"Client reconnected: {session_id}")
-    else:
-        # New client connected
-        log(f"Client connected: {session_id}")
-        # Limit number of clients
-        if len(client) > MAXCLIENTS:
-            log(f"Too many clients connected: {len(client)}")
-            socketio.emit('update', {'update': 'Too many clients connected. Try again later.', 'voice': 'user'},room=session_id)
-            return
-        # Create client session
-        client[session_id]={}
-        # Initialize context for this client
-        client[session_id]["context"] = base_prompt()
-        client[session_id]["remember"] = True
-        client[session_id]["visible"] = True
-        client[session_id]["prompt"] = ""
-        client[session_id]["stop_thread_flag"] = False
-        # Create a background thread to send updates
-        update_thread = threading.Thread(target=send_update, args=(session_id,))
-        update_thread.daemon = True  # Thread will terminate when the main program exits
-        update_thread.start()
-        client[session_id]["thread"] = update_thread
+templates = Jinja2Templates(directory="templates")
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    session_id = request.sid
-    log(f"Client disconnected: {session_id}")
-    # Remove client
-    if session_id in client:
-        # shutdown thread
-        client[session_id]["stop_thread_flag"] = True
-        client[session_id]["thread"].join()
-        client.pop(session_id)
-
-@socketio.on('message')
-def handle_message(data):
-    global client
-    session_id = request.sid
-    # Handle incoming user prompts and store them
-    log(f'Received message from {session_id}')
-    log(f"Received Data: {data}")
-    if session_id not in client:
-        log(f"Invalid session {session_id}")
-        socketio.emit('update', {'update': '[Session Unrecognized - Try Refresh]', 'voice': 'user'},room=session_id)
-        return
-    p = data["prompt"]
-    client[session_id]["visible"] = data["show"]
-    # Did we get a start command? Use greeting prompt.
-    if p == "{start}":
-        p = prompts["greeting"]
-    # Did we get asked to fetch a URL?
-    if p.startswith("http"):
-        # Summarize text at URL
-        url = p
-        client[session_id]["visible"] = False # Don't display full document but...
-        client[session_id]["remember"] = True # Remember full content to answer questions
-        website_text = extract_text_from_url(p.strip())
-        if website_text:
-            log(f"* Reading {len(website_text)} bytes {url}")
-            socketio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'},room=session_id)
-            url_encoded = requests.utils.quote(url)
-            client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
-        else:
-            socketio.emit('update', {'update': '%s [ERROR: Unable to read URL]' % url, 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-    elif p.startswith("/"):
-        # Handle commands
-        command = p[1:].split(" ")[0]
-        if command == "":
-            # Display help
-            socketio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock]', 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-        elif command == "reset":
-            # Reset context
-            client[session_id]["context"] = base_prompt()
-            socketio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = prompts["greeting"]
-            client[session_id]["visible"] = False
-        elif command == "version":
-            # Display version
-            socketio.emit('update', {'update': '[TinyLLM Version: %s - Session: %s]' % ( VERSION, session_id ), 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-        elif command == "sessions":
-            # Display sessions
-            result = ""
-            x = 1
-            for s in client:
-                result += f"<br> * {x}: {s}\n"
-                x += 1
-            socketio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-        elif command == "news":
-            log("News requested")
-            socketio.emit('update', {'update': '/news [Fetching News]', 'voice': 'user'},room=session_id)
-            context_str = get_news("none", 25)
-            log(f"News Raw Context = {context_str}")
-            client[session_id]["visible"] = False
-            client[session_id]["remember"] = True
-            client[session_id]["prompt"] = (
-                expand_prompt(prompts["news"], {"context_str": context_str})
-            )
-        elif command == "rag":
-             # RAG Command - IMPORT from library - Format: /rag library [opt:number=1] [prompt]
-            log("RAG requested")
-            rag = p[4:].strip()
-            parts = rag.split()
-            library = ""
-            # Check to see if second element is a number
-            if len(parts) >= 2:
-                library = parts[0]
-                if parts[1].isdigit():
-                    number = int(parts[1])
-                    prompt = ' '.join(parts[2:])
-                else:
-                    number = 1
-                    prompt = ' '.join(parts[1:])
-            if not library or not prompt:
-                socketio.emit('update', {'update': '[Usage: /rag {library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'},room=session_id)
-            else:
-                if QDRANT_HOST:
-                    log(f"Pulling {number} entries from {library} with prompt {prompt}")
-                    socketio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
-                    # Query Vector Database for library
-                    results = query_index(prompt, library, top_k=number)
-                    if results:
-                        context_str = ""
-                        client[session_id]["visible"] = False
-                        client[session_id]["remember"] = True
-                        for result in results:
-                            context_str += f" <li> {result['title']}: {result['text']}\n"
-                            log(" * " + result['title'])
-                        log(f" = {context_str}")
-                        client[session_id]["prompt"] = (
-                            expand_prompt(prompts["rag"], {"context_str": context_str})
-                        )
-                    else:
-                        socketio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'},room=session_id)
-                else:
-                    socketio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
-        elif command == "weather":
-            # Weather prompt
-            log("Weather prompt")
-            socketio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'},room=session_id)
-            # "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
-            location = ask_llm(expand_prompt(prompts["location"], {"prompt": p}))
-            # Remove any non-alpha characters
-            location = ''.join(e for e in location if e.isalnum() or e.isspace())
-            if "none" in location.lower():
-                context_str = get_weather("")
-            else:
-                context_str = get_weather(location)
-            client[session_id]["visible"] = False
-            client[session_id]["remember"] = True
-            client[session_id]["prompt"] = (
-                expand_prompt(prompts["weather"], {"prompt": p, "context_str": context_str, "location": location})
-            )
-        elif command == "stock":
-            # Stock prompt
-            log("Stock prompt")
-            socketio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'},room=session_id)
-            prompt = p[6:].strip()
-            log(f"Stock Prompt: {prompt}")
-            company = ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
-            # Remove any non-alpha characters
-            company = ''.join(e for e in company if e.isalnum() or e.isspace())
-            if "none" in company.lower():
-                context_str = "Unable to fetch stock price - Unknown company specified." 
-            else:
-                context_str = get_stock(company)
-            log(f"Company = {company} - Context = {context_str}")
-            socketio.emit('update', {'update': context_str, 'voice': 'ai'},room=session_id)
-            # remember context
-            client[session_id]["context"].append({"role": "user", "content" : "What is the stock price for %s?" % company})
-            client[session_id]["context"].append({"role": "assistant", "content" : context_str})
-            client[session_id]["prompt"] = ''
-    else:
-        # Normal prompt
-        client[session_id]["prompt"] = p
-    return jsonify({'status': 'Message received'})
-
-@app.route('/prompts')
-def get_prompts():
-    global prompts
-    return jsonify(prompts)
-
-# Add a route for POST requests to update prompts
-@app.route('/saveprompts', methods=['POST'])
-def update_prompts():
-    global prompts, baseprompt, socketio
-    oldbaseprompt = prompts["baseprompt"]
-    oldagentname = prompts["agentname"]
-    # Get the JSON data sent from the client
-    data = request.get_json(force=True)
-    log(f"Received prompts: {data}")
-    # Update prompts
-    for key in data:
-        prompts[key] = data[key]
-    save_prompts()
-    if oldbaseprompt != prompts["baseprompt"] or oldagentname != prompts["agentname"]:
-        # Update baseprompt
-        agentname = prompts["agentname"]
-        current_date = datetime.datetime.now()
-        formatted_date = current_date.strftime("%B %-d, %Y")
-        values = {"agentname": agentname, "date": formatted_date}
-        baseprompt = expand_prompt(prompts["baseprompt"], values)
-    # Notify all clients of update
-    log("Base prompt updated - notifying users")
-    socketio.emit('update', {'update': '[Prompts Updated - Refresh to reload]', 'voice': 'user'})
-    return jsonify({"Result": "Prompts updated"})
-
-@app.route('/resetprompts')
-def reset_prompts_route():
-    # Send the user the default prompts
-    global default_prompts
-    return jsonify(default_prompts)
-
-@app.route('/version')
-def version():
-    global VERSION, DEBUG
-    if DEBUG:
-        return jsonify({'version': "%s DEBUG MODE" % VERSION})
-    return jsonify({'version': VERSION})
-
-@app.route('/alert', methods=['POST'])
-def alert():
-    # Send an alert to all clients
-    data = request.get_json(force=True)
-    # Make sure TOKEN is set and matches
-    if "token" in data and "message" in data and data["token"] == TOKEN:
-        log(f"Received alert: {data}")
-        socketio.emit('update', {'update': data["message"], 'voice': 'user'})
-        return jsonify({'status': 'Alert sent'})
-    else:
-        log(f"Invalid token or missing message: {data}")
-        return jsonify({'status': 'Invalid Token or missing message'})
+# Display the main chatbot page
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 # Display settings and stats
-@app.route("/stats")
-def statspage():
+@app.get("/stats")
+def home(format: str = None):
     global client, stats
-    format = request.args.get("format", "html")
     # Create a simple status page
     data = {
         "TinyLLM Chatbot Version": VERSION,
@@ -726,7 +497,7 @@ def statspage():
         "RAG: Default Results Retrieved (RESULTS)": RESULTS,
     }
     if format == "json":
-        return jsonify(data)
+        return data
     # Build a simple HTML page based on data facets
     html = "<html><head><title>TinyLLM Chatbot Status</title></head><body>"
     html += "<h1>TinyLLM Chatbot Status</h1>"
@@ -739,76 +510,316 @@ def statspage():
     # Add JS to refresh page every 5 seconds
     html += "<script>setTimeout(function(){location.reload()},5000);</script>"
     html += "</body></html>"
-    return html
+    return HTMLResponse(content=html, status_code=200)
 
-# On app shutdown - close all sessions
-def remove_sessions(exception):
-    global client
-    log("Shutting down sessions...")
-    for session_id in client:
-        log(f"Shutting down session {session_id}")
-        socketio.emit('update', {'update': '[Shutting Down]', 'voice': 'user'},room=session_id)
+# Return the current prompts
+@app.get('/prompts')
+def get_prompts():
+    global prompts
+    return (prompts)
+
+# POST requests to update prompts
+@app.post('/saveprompts')
+async def update_prompts(data: dict):
+    global prompts, baseprompt, sio
+    oldbaseprompt = prompts["baseprompt"]
+    oldagentname = prompts["agentname"]
+    log(f"Received prompts: {data}")
+    # Update prompts
+    for key in data:
+        prompts[key] = data[key]
+    save_prompts()
+    if oldbaseprompt != prompts["baseprompt"] or oldagentname != prompts["agentname"]:
+        # Update baseprompt
+        agentname = prompts["agentname"]
+        current_date = datetime.datetime.now()
+        formatted_date = current_date.strftime("%B %-d, %Y")
+        values = {"agentname": agentname, "date": formatted_date}
+        baseprompt = expand_prompt(prompts["baseprompt"], values)
+    # Notify all clients of update
+    log("Base prompt updated - notifying users")
+    await sio.emit('update', {'update': '[Prompts Updated - Refresh to reload]', 'voice': 'user'})
+    return ({"Result": "Prompts updated"})
+
+# Reset prompts to default
+@app.get('/resetprompts')
+def reset_prompts_route():
+    # Send the user the default prompts
+    global default_prompts
+    return (default_prompts)
+
+# Return the current version
+@app.get('/version')
+def show_version():
+    global VERSION, DEBUG
+    log(f"Version requested - DEBUG={DEBUG}")
+    if DEBUG:
+        return {'version': "%s DEBUG MODE" % VERSION}
+    return {'version': VERSION}
+
+# Send an alert to all clients
+@app.post('/alert')
+async def alert(data: dict):
+    # Send an alert to all clients
+    # Make sure TOKEN is set and matches
+    if "token" in data and "message" in data and data["token"] == TOKEN:
+        log(f"Received alert: {data}")
+        await sio.emit('update', {'update': data["message"], 'voice': 'user'})
+        return ({'status': 'Alert sent'})
+    else:
+        log(f"Invalid token or missing message: {data}")
+        return ({'status': 'Invalid Token or missing message'})
+
+#
+# SocketIO Events
+#
+
+app.mount("/", socket_app)  # Here we mount socket app to main fastapi app
+
+# Client connected - start thread to send updates
+@sio.on('connect')
+async def handle_connect(session_id, env):
+    log(f"Client connected: {session_id}")
+
+    # Convert each character to its hex representation
+    def string_to_hex(input_string):
+        hex_values = [hex(ord(char)) for char in input_string]
+        return hex_values
+
+    # Continuous thread to send updates to connected clients
+    async def send_update(session_id): 
+        global client
+        log(f"Starting send_update thread for {session_id}")
+
+        # Verify session is valid
+        if session_id not in client:
+            log(f"Invalid session {session_id}")
+            return
+        try:
+            while not client[session_id]["stop_thread_flag"]:
+                if client[session_id]["prompt"] == "":
+                    await asyncio.sleep(0.1)
+                else:
+                    update_text = client[session_id]["prompt"] 
+                    if client[session_id]["visible"] :
+                        await sio.emit('update', {'update': update_text, 'voice': 'user'},room=session_id)
+                    try:
+                        # Ask LLM for answers
+                        response= await ask(client[session_id]["prompt"],session_id)
+                        completion_text = ''
+                        # iterate through the stream of events and print it
+                        for event in response:
+                            event_text = event.choices[0].delta.content
+                            if event_text:
+                                chunk = event_text
+                                completion_text += chunk
+                                if DEBUG:
+                                    print(string_to_hex(chunk), end="")
+                                    print(f" = [{chunk}]")
+                                await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
+                        # remember context
+                        client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
+                    except Exception as e:
+                        # Unable to process prompt, give error
+                        log(f"ERROR {e}")
+                        await sio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'},room=session_id)
+                        # Reset context
+                        client[session_id]["context"] = base_prompt()
+                    # Signal response is done
+                    await sio.emit('update', {'update': '', 'voice': 'done'},room=session_id)
+                    client[session_id]["prompt"] = ''
+                    if DEBUG:
+                        print(f"AI: {completion_text}")
+        except KeyError:
+            log(f"Thread ended: {session_id}")
+        except Exception as e:
+            log(f"Thread error: {e}")
+
+    if session_id in client:
+        # Client reconnected - restart thread
+        #client[session_id]["thread"].join()
+        log(f"Client reconnected: {session_id}")
+    else:
+        # New client connected
+        log(f"Client connected: {session_id}")
+        # Limit number of clients
+        if len(client) > MAXCLIENTS:
+            log(f"Too many clients connected: {len(client)}")
+            await sio.emit('update', {'update': 'Too many clients connected. Try again later.', 'voice': 'user'},room=session_id)
+            return
+        # Create client session
+        client[session_id]={}
+        # Initialize context for this client
+        client[session_id]["context"] = base_prompt()
+        client[session_id]["remember"] = True
+        client[session_id]["visible"] = True
+        client[session_id]["prompt"] = ""
+        client[session_id]["stop_thread_flag"] = False
+        # Start continuous task to send updates
+        asyncio.create_task(send_update(session_id))
+
+# Client disconnected
+@sio.on('disconnect')
+async def handle_disconnect(session_id):
+    log(f"Client disconnected: {session_id}")
+    # Remove client
+    if session_id in client:
+        # shutdown thread
         client[session_id]["stop_thread_flag"] = True
-        client[session_id]["thread"].join()
-    log("Shutdown complete.")
+        client.pop(session_id)
 
-# Convert each character to its hex representation
-def string_to_hex(input_string):
-    hex_values = [hex(ord(char)) for char in input_string]
-    return hex_values
-
-# Continuous thread to send updates to connected clients
-def send_update(session_id): 
+# Client sent a message - handle it
+@sio.on('message')
+async def handle_message(session_id, data):
     global client
-    log(f"Starting send_update thread for {session_id}")
-
-    # Verify session is valid
+    # Handle incoming user prompts and store them
+    log(f'Received message from {session_id}')
+    log(f"Received Data: {data}")
     if session_id not in client:
         log(f"Invalid session {session_id}")
+        await sio.emit('update', {'update': '[Session Unrecognized - Try Refresh]', 'voice': 'user'},room=session_id)
         return
-    while not client[session_id]["stop_thread_flag"]:
-        if client[session_id]["prompt"] == "":
-            time.sleep(.5)
+    p = data["prompt"]
+    client[session_id]["visible"] = data["show"]
+    # Did we get a start command? Use greeting prompt.
+    if p == "{start}":
+        p = prompts["greeting"]
+    # Did we get asked to fetch a URL?
+    if p.startswith("http"):
+        # Summarize text at URL
+        url = p
+        client[session_id]["visible"] = False # Don't display full document but...
+        client[session_id]["remember"] = True # Remember full content to answer questions
+        website_text = extract_text_from_url(p.strip())
+        if website_text:
+            log(f"* Reading {len(website_text)} bytes {url}")
+            await sio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'},room=session_id)
+            url_encoded = requests.utils.quote(url)
+            client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
         else:
-            update_text = client[session_id]["prompt"] 
-            if client[session_id]["visible"] :
-                socketio.emit('update', {'update': update_text, 'voice': 'user'},room=session_id)
-            try:
-                # Ask LLM for answers
-                response=ask(client[session_id]["prompt"],session_id)
-                completion_text = ''
-                # iterate through the stream of events and print it
-                for event in response:
-                    event_text = event.choices[0].delta.content
-                    if event_text:
-                        chunk = event_text
-                        completion_text += chunk
-                        if DEBUG:
-                            print(string_to_hex(chunk), end="")
-                            print(f" = [{chunk}]")
-                        socketio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
-                # remember context
-                client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
-            except Exception as e:
-                # Unable to process prompt, give error
-                log(f"ERROR {e}")
-                socketio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'},room=session_id)
-                # Reset context
-                client[session_id]["context"] = base_prompt()
-            # Signal response is done
-            socketio.emit('update', {'update': '', 'voice': 'done'},room=session_id)
+            await sio.emit('update', {'update': '%s [ERROR: Unable to read URL]' % url, 'voice': 'user'},room=session_id)
             client[session_id]["prompt"] = ''
-            if DEBUG:
-                print(f"AI: {completion_text}")
+    elif p.startswith("/"):
+        # Handle commands
+        command = p[1:].split(" ")[0]
+        if command == "":
+            # Display help
+            await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock]', 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
+        elif command == "reset":
+            # Reset context
+            client[session_id]["context"] = base_prompt()
+            await sio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = prompts["greeting"]
+            client[session_id]["visible"] = False
+        elif command == "version":
+            # Display version
+            await sio.emit('update', {'update': '[TinyLLM Version: %s - Session: %s]' % ( VERSION, session_id ), 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
+        elif command == "sessions":
+            # Display sessions
+            result = ""
+            x = 1
+            for s in client:
+                result += f"<br> * {x}: {s}\n"
+                x += 1
+            await sio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'},room=session_id)
+            client[session_id]["prompt"] = ''
+        elif command == "news":
+            log("News requested")
+            await sio.emit('update', {'update': '/news [Fetching News]', 'voice': 'user'},room=session_id)
+            context_str = get_news("none", 25)
+            log(f"News Raw Context = {context_str}")
+            client[session_id]["visible"] = False
+            client[session_id]["remember"] = True
+            client[session_id]["prompt"] = (
+                expand_prompt(prompts["news"], {"context_str": context_str})
+            )
+        elif command == "rag":
+             # RAG Command - IMPORT from library - Format: /rag library [opt:number=1] [prompt]
+            log("RAG requested")
+            rag = p[4:].strip()
+            parts = rag.split()
+            library = ""
+            # Check to see if second element is a number
+            if len(parts) >= 2:
+                library = parts[0]
+                if parts[1].isdigit():
+                    number = int(parts[1])
+                    prompt = ' '.join(parts[2:])
+                else:
+                    number = 1
+                    prompt = ' '.join(parts[1:])
+            if not library or not prompt:
+                await sio.emit('update', {'update': '[Usage: /rag {library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'},room=session_id)
+            else:
+                if QDRANT_HOST:
+                    log(f"Pulling {number} entries from {library} with prompt {prompt}")
+                    await sio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
+                    # Query Vector Database for library
+                    results = query_index(prompt, library, top_k=number)
+                    if results:
+                        context_str = ""
+                        client[session_id]["visible"] = False
+                        client[session_id]["remember"] = True
+                        for result in results:
+                            context_str += f" <li> {result['title']}: {result['text']}\n"
+                            log(" * " + result['title'])
+                        log(f" = {context_str}")
+                        client[session_id]["prompt"] = (
+                            expand_prompt(prompts["rag"], {"context_str": context_str})
+                        )
+                    else:
+                        await sio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'},room=session_id)
+                else:
+                    await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
+        elif command == "weather":
+            # Weather prompt
+            log("Weather prompt")
+            await sio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'},room=session_id)
+            # "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
+            location = ask_llm(expand_prompt(prompts["location"], {"prompt": p}))
+            # Remove any non-alpha characters
+            location = ''.join(e for e in location if e.isalnum() or e.isspace())
+            if "none" in location.lower():
+                context_str = get_weather("")
+            else:
+                context_str = get_weather(location)
+            client[session_id]["visible"] = False
+            client[session_id]["remember"] = True
+            client[session_id]["prompt"] = (
+                expand_prompt(prompts["weather"], {"prompt": p, "context_str": context_str, "location": location})
+            )
+        elif command == "stock":
+            # Stock prompt
+            log("Stock prompt")
+            await sio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'},room=session_id)
+            prompt = p[6:].strip()
+            log(f"Stock Prompt: {prompt}")
+            company = ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
+            # Remove any non-alpha characters
+            company = ''.join(e for e in company if e.isalnum() or e.isspace())
+            if "none" in company.lower():
+                context_str = "Unable to fetch stock price - Unknown company specified." 
+            else:
+                context_str = get_stock(company)
+            log(f"Company = {company} - Context = {context_str}")
+            await sio.emit('update', {'update': context_str, 'voice': 'ai'},room=session_id)
+            # remember context
+            client[session_id]["context"].append({"role": "user", "content" : "What is the stock price for %s?" % company})
+            client[session_id]["context"].append({"role": "assistant", "content" : context_str})
+            client[session_id]["prompt"] = ''
+    else:
+        # Normal prompt
+        client[session_id]["prompt"] = p
+    return ({'status': 'Message received'})
 
-def sigTermHandler(signum, frame):
-    # Shutdown all threads
-    remove_sessions(None)
-    raise SystemExit(f"Signal {signum} received - Shutting down.")
 
-# Start server - Dev Mode
+#
+# Start dev server and listen for connections
+#
+
 if __name__ == '__main__':
-    signal.signal(signal.SIGTERM, sigTermHandler)
-    signal.signal(signal.SIGINT, sigTermHandler) 
-    socketio.run(app, host='0.0.0.0', port=PORT, debug=DEBUG, allow_unsafe_werkzeug=True)
-
+    log(f"DEV MODE - Starting server on port {PORT}. Use uvicorn server:app for PROD mode.")
+    kwargs = {"host": "0.0.0.0", "port": PORT}
+    uvicorn.run("server:app", **kwargs)

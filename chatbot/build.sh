@@ -8,3 +8,5 @@ version=$(echo $string | awk '{print $NF}' | sed 's/v//' | sed 's/"//g')
 # Create Container
 docker build -t chatbot:$version .
 
+# Done
+echo "Built: chatbot:$version"

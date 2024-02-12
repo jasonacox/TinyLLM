@@ -6,37 +6,19 @@
 # 6 Feb 2024
 # https://github.com/jasonacox/TinyLLM
 
-# Check to see if container name exists already
-EXISTING=$(docker ps -a --format '{{.Names}}' | grep chatbot)
-if [ ! -z "$EXISTING" ]; then
-    echo "Existing chatbot container found: $EXISTING"
-    echo ""
-    # Ask if we should stop and remove the existing container
-    read -p "Would you like to stop and remove the existing container? (y/N) " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        # Check if container is in running state
-        RUNNING=$(docker inspect --format="{{.State.Running}}" chatbot 2>/dev/null)
-        if [ "$RUNNING" == "true" ]; then
-            # Send restarting alert message to chatbot users
-            curl -s -X POST -H "Content-Type: application/json" -d '{"token": "secret", "message": "Restarting"}' http://localhost:5000/alert > /dev/null 2>&1
-            echo "Stopping chatbot container..."
-            docker stop chatbot
-        fi
-        echo "Removing existing chatbot container..."
-        docker rm chatbot
-    else
-        echo "Exiting..."
-        exit 1
-    fi
-    echo ""
-fi
+echo "Run TinyLLM Chatbot - Local Model with RAG"
+echo "------------------------------------------"
+
+# Stop and remove the chatbot container
+echo "Removing old chatbot container..."
+docker stop chatbot
+docker rm chatbot
 
 # Start the chatbot container
 echo "Starting chatbot container..."
-if [ ! -f "./prompts.json" ]; then
-    echo "Creating prompts.json file..."
-    touch ./prompts.json
+if [ ! -d "./.tinyllm" ]; then
+    echo "Creating .tinyllm directory..."
+    mkdir .tinyllm
 fi
 docker run \
     -d \
@@ -51,9 +33,8 @@ docker run \
     -e TEMPERATURE=0.0 \
     -e QDRANT_HOST="localhost" \
     -e RESULTS=1 \
-    -e SENTENCE_TRANSFORMERS_HOME=/app/models \
-    -v $PWD/models:/app/models \
-    -v $PWD/prompts.json:/app/prompts.json \
+    -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
+    -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot:latest-rag

@@ -165,12 +165,6 @@ cython_debug/
 # Exclude sandbox
 sandbox/
 .DS_Store
-chatbot/test.sh
-chatbot/test8080.sh
-chatbot/llamafile.sh
 chatbot/prompts.json
 chatbot/.tinyllm
-chatbot/uploadtest.sh
-chatbot/f.sh
-chatbot/main.sh
-chatbot/r
+chatbot/local

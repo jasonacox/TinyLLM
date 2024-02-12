@@ -115,9 +115,8 @@ docker run \
     -e USE_SYSTEM="false" \
     -e QDRANT_HOST="localhost" \
     -e RESULTS=1 \
-    -e SENTENCE_TRANSFORMERS_HOME=/app/models \
-    -v $PWD/models:/app/models \
-    -v $PWD/prompts.json:/app/prompts.json \
+    -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
+    -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \
     jasonacox/chatbot:latest-rag
