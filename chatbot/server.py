@@ -73,7 +73,7 @@ from fastapi.templating import Jinja2Templates
 from pypdf import PdfReader
 
 # TinyLLM Version
-VERSION = "v0.12.0"
+VERSION = "v0.12.1"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -598,11 +598,8 @@ async def handle_connect(session_id, env):
         try:
             while not client[session_id]["stop_thread_flag"]:
                 if client[session_id]["prompt"] == "":
-                    await asyncio.sleep(0.1)
+                    await sio.sleep(0.1)
                 else:
-                    update_text = client[session_id]["prompt"] 
-                    if client[session_id]["visible"] :
-                        await sio.emit('update', {'update': update_text, 'voice': 'user'},room=session_id)
                     try:
                         # Ask LLM for answers
                         response= await ask(client[session_id]["prompt"],session_id)
@@ -811,6 +808,8 @@ async def handle_message(session_id, data):
             client[session_id]["prompt"] = ''
     else:
         # Normal prompt
+        if client[session_id]["visible"]:
+            await sio.emit('update', {'update': p, 'voice': 'user'},room=session_id)
         client[session_id]["prompt"] = p
     return ({'status': 'Message received'})
 

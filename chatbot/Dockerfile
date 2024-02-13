@@ -51,7 +51,8 @@ CMD uvicorn server:app --host 0.0.0.0 --port $PORT
 #     -e DEVICE="cpu" \
 #     -e RESULTS=1 \
 #     -e USE_SYSTEM="false" \
-#     -v $PWD/prompts.json:/app/prompts.json \
+#     -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
+#     -v $PWD/.tinyllm:/app/.tinyllm \
 #     --name chatbot \
 #     --restart unless-stopped \
 #     chatbot:0.12.0
