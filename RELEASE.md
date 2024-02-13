@@ -1,8 +1,10 @@
 # Releases
 
-## 0.12.1 - Prompt Echo
+## 0.12.1 - Performance Improvements
 
 * Speed up user prompt echo. Immediately send to chat windows instead of waiting for LLM stream to start.
+* Optimize message handling dispatching using async.
+* Use AsyncOpenAI for non-streamed queries.
 
 ## 0.12.0 - FastAPI and Uvicorn
 

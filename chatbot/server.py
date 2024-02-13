@@ -114,7 +114,7 @@ default_prompts["agentname"] = "Jarvis"
 default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
-default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format: \n1. [Headline Title] - [News Organization]\n2. [Headline Title] - [News Organization]\nContext: {context_str}\nAnswer:"
+default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source]\nHere are some examples: \n1. The World is Round - Science\n2. The Election is over and Children have won - US News\n3. Storms Hit the Southern Coast - ABC\nContext: {context_str}\nAnswer:"
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
@@ -320,7 +320,7 @@ async def ask(prompt, sid=None):
         client[sid]["context"].append({"role": "user", "content": "Help me remember."})
     return response
 
-def ask_llm(query, format=""):
+async def ask_llm(query, format=""):
     # Ask LLM a question
     global stats
     stats["ask_llm"] += 1
@@ -329,8 +329,8 @@ def ask_llm(query, format=""):
     content = base_prompt(expand_prompt(prompts["clarify"], {"format": format})) + [{"role": "user",
                 "content": query}]
     log(f"ask_llm: {content}")
-    llm = openai.OpenAI(api_key=api_key, base_url=api_base)
-    response = llm.chat.completions.create(
+    llm = openai.AsyncOpenAI(api_key=api_key, base_url=api_base)
+    response = await llm.chat.completions.create(
         model=mymodel,
         max_tokens=MAXTOKENS,
         stream=False,
@@ -341,10 +341,10 @@ def ask_llm(query, format=""):
     return response.choices[0].message.content.strip()
 
 # Function - Get weather for location
-def get_weather(location):
+async def get_weather(location):
     # Look up weather for location
     if location == "":
-        location = "New York"
+        location = "Los Angeles"
     location = location.replace(" ", "+")
     url = "https://wttr.in/%s?format=j2" % location
     log(f"Fetching weather for {location} from {url}")
@@ -355,11 +355,11 @@ def get_weather(location):
         return "Unable to fetch weather for %s" % location
     
 # Function - Get stock price for company
-def get_stock(company):
+async def get_stock(company):
     if ALPHA_KEY == "alpha_key":
         return "Unable to fetch stock price for %s - No Alpha Vantage API Key" % company
     # First try to get the ticker symbol
-    symbol = ask_llm(f"What is the stock symbol for {company}? Respond with symbol.")
+    symbol = await ask_llm(f"What is the stock symbol for {company}? Respond with symbol.")
     if "none" in symbol.lower():
         return "Unable to fetch stock price for %s - No matching symbol" % company
     # Check to see if response has multiple words and if so, pick the last one
@@ -465,12 +465,12 @@ templates = Jinja2Templates(directory="templates")
 
 # Display the main chatbot page
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
+async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # Display settings and stats
 @app.get("/stats")
-def home(format: str = None):
+async def home(format: str = None):
     global client, stats
     # Create a simple status page
     data = {
@@ -499,7 +499,9 @@ def home(format: str = None):
     if format == "json":
         return data
     # Build a simple HTML page based on data facets
-    html = "<html><head><title>TinyLLM Chatbot Status</title></head><body>"
+    html = "<html><head><title>TinyLLM Chatbot Status</title>"
+    html += "<style>body { font-family: Helvetica, Arial, sans-serif; }</style>"
+    html += "</head><body>"
     html += "<h1>TinyLLM Chatbot Status</h1>"
     # Provide link to project
     html += "<p>Settings and Current Status for <a href='https://github.com/jasonacox/TinyLLM/tree/main/chatbot'>TinyLLM Chatbot</a></p>"
@@ -514,9 +516,9 @@ def home(format: str = None):
 
 # Return the current prompts
 @app.get('/prompts')
-def get_prompts():
+async def get_prompts():
     global prompts
-    return (prompts)
+    return prompts
 
 # POST requests to update prompts
 @app.post('/saveprompts')
@@ -543,14 +545,14 @@ async def update_prompts(data: dict):
 
 # Reset prompts to default
 @app.get('/resetprompts')
-def reset_prompts_route():
+async def reset_prompts_route():
     # Send the user the default prompts
     global default_prompts
     return (default_prompts)
 
 # Return the current version
 @app.get('/version')
-def show_version():
+async def show_version():
     global VERSION, DEBUG
     log(f"Version requested - DEBUG={DEBUG}")
     if DEBUG:
@@ -674,7 +676,7 @@ async def handle_message(session_id, data):
     log(f"Received Data: {data}")
     if session_id not in client:
         log(f"Invalid session {session_id}")
-        await sio.emit('update', {'update': '[Session Unrecognized - Try Refresh]', 'voice': 'user'},room=session_id)
+        await handle_invalid_session(session_id)
         return
     p = data["prompt"]
     client[session_id]["visible"] = data["show"]
@@ -683,136 +685,148 @@ async def handle_message(session_id, data):
         p = prompts["greeting"]
     # Did we get asked to fetch a URL?
     if p.startswith("http"):
-        # Summarize text at URL
-        url = p
-        client[session_id]["visible"] = False # Don't display full document but...
-        client[session_id]["remember"] = True # Remember full content to answer questions
-        website_text = extract_text_from_url(p.strip())
-        if website_text:
-            log(f"* Reading {len(website_text)} bytes {url}")
-            await sio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'},room=session_id)
-            url_encoded = requests.utils.quote(url)
-            client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
-        else:
-            await sio.emit('update', {'update': '%s [ERROR: Unable to read URL]' % url, 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
+        await handle_url_prompt(session_id, p)
     elif p.startswith("/"):
-        # Handle commands
-        command = p[1:].split(" ")[0]
-        if command == "":
-            # Display help
-            await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock]', 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-        elif command == "reset":
-            # Reset context
-            client[session_id]["context"] = base_prompt()
-            await sio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = prompts["greeting"]
-            client[session_id]["visible"] = False
-        elif command == "version":
-            # Display version
-            await sio.emit('update', {'update': '[TinyLLM Version: %s - Session: %s]' % ( VERSION, session_id ), 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-        elif command == "sessions":
-            # Display sessions
-            result = ""
-            x = 1
-            for s in client:
-                result += f"<br> * {x}: {s}\n"
-                x += 1
-            await sio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'},room=session_id)
-            client[session_id]["prompt"] = ''
-        elif command == "news":
-            log("News requested")
-            await sio.emit('update', {'update': '/news [Fetching News]', 'voice': 'user'},room=session_id)
-            context_str = get_news("none", 25)
-            log(f"News Raw Context = {context_str}")
-            client[session_id]["visible"] = False
-            client[session_id]["remember"] = True
-            client[session_id]["prompt"] = (
-                expand_prompt(prompts["news"], {"context_str": context_str})
-            )
-        elif command == "rag":
-             # RAG Command - IMPORT from library - Format: /rag library [opt:number=1] [prompt]
-            log("RAG requested")
-            rag = p[4:].strip()
-            parts = rag.split()
-            library = ""
-            # Check to see if second element is a number
-            if len(parts) >= 2:
-                library = parts[0]
-                if parts[1].isdigit():
-                    number = int(parts[1])
-                    prompt = ' '.join(parts[2:])
-                else:
-                    number = 1
-                    prompt = ' '.join(parts[1:])
-            if not library or not prompt:
-                await sio.emit('update', {'update': '[Usage: /rag {library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'},room=session_id)
-            else:
-                if QDRANT_HOST:
-                    log(f"Pulling {number} entries from {library} with prompt {prompt}")
-                    await sio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'},room=session_id)
-                    # Query Vector Database for library
-                    results = query_index(prompt, library, top_k=number)
-                    if results:
-                        context_str = ""
-                        client[session_id]["visible"] = False
-                        client[session_id]["remember"] = True
-                        for result in results:
-                            context_str += f" <li> {result['title']}: {result['text']}\n"
-                            log(" * " + result['title'])
-                        log(f" = {context_str}")
-                        client[session_id]["prompt"] = (
-                            expand_prompt(prompts["rag"], {"context_str": context_str})
-                        )
-                    else:
-                        await sio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'},room=session_id)
-                else:
-                    await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'},room=session_id)
-        elif command == "weather":
-            # Weather prompt
-            log("Weather prompt")
-            await sio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'},room=session_id)
-            # "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
-            location = ask_llm(expand_prompt(prompts["location"], {"prompt": p}))
-            # Remove any non-alpha characters
-            location = ''.join(e for e in location if e.isalnum() or e.isspace())
-            if "none" in location.lower():
-                context_str = get_weather("")
-            else:
-                context_str = get_weather(location)
-            client[session_id]["visible"] = False
-            client[session_id]["remember"] = True
-            client[session_id]["prompt"] = (
-                expand_prompt(prompts["weather"], {"prompt": p, "context_str": context_str, "location": location})
-            )
-        elif command == "stock":
-            # Stock prompt
-            log("Stock prompt")
-            await sio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'},room=session_id)
-            prompt = p[6:].strip()
-            log(f"Stock Prompt: {prompt}")
-            company = ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
-            # Remove any non-alpha characters
-            company = ''.join(e for e in company if e.isalnum() or e.isspace())
-            if "none" in company.lower():
-                context_str = "Unable to fetch stock price - Unknown company specified." 
-            else:
-                context_str = get_stock(company)
-            log(f"Company = {company} - Context = {context_str}")
-            await sio.emit('update', {'update': context_str, 'voice': 'ai'},room=session_id)
-            # remember context
-            client[session_id]["context"].append({"role": "user", "content" : "What is the stock price for %s?" % company})
-            client[session_id]["context"].append({"role": "assistant", "content" : context_str})
-            client[session_id]["prompt"] = ''
+        await handle_command(session_id, p)
     else:
-        # Normal prompt
-        if client[session_id]["visible"]:
-            await sio.emit('update', {'update': p, 'voice': 'user'},room=session_id)
-        client[session_id]["prompt"] = p
-    return ({'status': 'Message received'})
+        await handle_normal_prompt(session_id, p)
+    return {'status': 'Message received'}
 
+async def handle_invalid_session(session_id):
+    await sio.emit('update', {'update': '[Session Unrecognized - Try Refresh]', 'voice': 'user'}, room=session_id)
+
+async def handle_url_prompt(session_id, p):
+    url = p.strip()
+    client[session_id]["visible"] = False
+    client[session_id]["remember"] = True
+    website_text = extract_text_from_url(url)
+    if website_text:
+        log(f"* Reading {len(website_text)} bytes {url}")
+        await sio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'}, room=session_id)
+        url_encoded = requests.utils.quote(url)
+        client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
+    else:
+        await sio.emit('update', {'update': '%s [ERROR: Unable to read URL]' % url, 'voice': 'user'}, room=session_id)
+        client[session_id]["prompt"] = ''
+
+async def handle_command(session_id, p):
+    command = p[1:].split(" ")[0]
+    if command == "":
+        await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock]', 'voice': 'user'}, room=session_id)
+        client[session_id]["prompt"] = ''
+    elif command == "reset":
+        await reset_context(session_id)
+    elif command == "version":
+        await show_version(session_id)
+    elif command == "sessions":
+        await show_sessions(session_id)
+    elif command == "news":
+        await fetch_news(session_id)
+    elif command == "rag":
+        await handle_rag_command(session_id, p)
+    elif command == "weather":
+        await handle_weather_command(session_id, p)
+    elif command == "stock":
+        await handle_stock_command(session_id, p)
+    else:
+        await sio.emit('update', {'update': '[Invalid command]', 'voice': 'user'}, room=session_id)
+        client[session_id]["prompt"] = ''
+
+async def reset_context(session_id):
+    client[session_id]["context"] = base_prompt()
+    await sio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'}, room=session_id)
+    client[session_id]["prompt"] = prompts["greeting"]
+    client[session_id]["visible"] = False
+
+async def show_version(session_id):
+    await sio.emit('update', {'update': '[TinyLLM Version: %s - Session: %s]' % (VERSION, session_id), 'voice': 'user'}, room=session_id)
+    client[session_id]["prompt"] = ''
+
+async def show_sessions(session_id):
+    result = ""
+    x = 1
+    for s in client:
+        result += f"<br> * {x}: {s}\n"
+        x += 1
+    await sio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'}, room=session_id)
+    client[session_id]["prompt"] = ''
+
+async def fetch_news(session_id):
+    log("News requested")
+    await sio.emit('update', {'update': '/news [Fetching News]', 'voice': 'user'}, room=session_id)
+    context_str = get_news("none", 25)
+    log(f"News Raw Context = {context_str}")
+    client[session_id]["visible"] = False
+    client[session_id]["remember"] = True
+    client[session_id]["prompt"] = expand_prompt(prompts["news"], {"context_str": context_str})
+
+async def handle_rag_command(session_id, p):
+    rag = p[4:].strip()
+    parts = rag.split()
+    library = ""
+    if len(parts) >= 2:
+        library = parts[0]
+        if parts[1].isdigit():
+            number = int(parts[1])
+            prompt = ' '.join(parts[2:])
+        else:
+            number = 1
+            prompt = ' '.join(parts[1:])
+    if not library or not prompt:
+        await sio.emit('update', {'update': '[Usage: /rag {library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'}, room=session_id)
+    else:
+        if QDRANT_HOST:
+            log(f"Pulling {number} entries from {library} with prompt {prompt}")
+            await sio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'}, room=session_id)
+            results = query_index(prompt, library, top_k=number)
+            if results:
+                context_str = ""
+                client[session_id]["visible"] = False
+                client[session_id]["remember"] = True
+                for result in results:
+                    context_str += f" <li> {result['title']}: {result['text']}\n"
+                    log(" * " + result['title'])
+                log(f" = {context_str}")
+                client[session_id]["prompt"] = expand_prompt(prompts["rag"], {"context_str": context_str})
+            else:
+                await sio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'}, room=session_id)
+        else:
+            await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'}, room=session_id)
+
+async def handle_weather_command(session_id, p):
+    log("Weather prompt")
+    await sio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'}, room=session_id)
+    location = await ask_llm(expand_prompt(prompts["location"], {"prompt": p}))
+    location = ''.join(e for e in location if e.isalnum() or e.isspace())
+    if "none" in location.lower():
+        context_str = await get_weather("")
+    else:
+        context_str = await get_weather(location)
+    client[session_id]["visible"] = False
+    client[session_id]["remember"] = True
+    client[session_id]["prompt"] = expand_prompt(prompts["weather"], {"prompt": p, "context_str": context_str, "location": location})
+
+async def handle_stock_command(session_id, p):
+    log("Stock prompt")
+    await sio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'}, room=session_id)
+    prompt = p[6:].strip()
+    log(f"Stock Prompt: {prompt}")
+    company = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
+    company = ''.join(e for e in company if e.isalnum() or e.isspace())
+    if "none" in company.lower():
+        context_str = "Unable to fetch stock price - Unknown company specified." 
+    else:
+        context_str = await get_stock(company)
+    log(f"Company = {company} - Context = {context_str}")
+    await sio.emit('update', {'update': context_str, 'voice': 'ai'}, room=session_id)
+    client[session_id]["context"].append({"role": "user", "content" : "What is the stock price for %s?" % company})
+    client[session_id]["context"].append({"role": "assistant", "content" : context_str})
+    client[session_id]["prompt"] = ''
+
+async def handle_normal_prompt(session_id, p):
+    if client[session_id]["visible"]:
+        await sio.emit('update', {'update': p, 'voice': 'user'}, room=session_id)
+    client[session_id]["prompt"] = p
 
 #
 # Start dev server and listen for connections
