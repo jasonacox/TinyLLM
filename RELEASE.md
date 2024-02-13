@@ -1,5 +1,9 @@
 # Releases
 
+## 0.12.1 - Prompt Echo
+
+* Speed up user prompt echo. Immediately send to chat windows instead of waiting for LLM stream to start.
+
 ## 0.12.0 - FastAPI and Uvicorn
 
 * Ported Chatbot to the async FastAPI and Uvicorn ASGI high speed web server implementation (https://github.com/jasonacox/TinyLLM/issues/3).
