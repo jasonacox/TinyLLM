@@ -1,5 +1,11 @@
 # Releases
 
+## 0.12.2 - Misc Improvements 
+
+* Speed up command functions using async, using `aiohttp`. 
+* Fix prompt_expand for rag command.
+* Added topic option to `/news` command.
+
 ## 0.12.1 - Performance Improvements
 
 * Speed up user prompt echo. Immediately send to chat windows instead of waiting for LLM stream to start.

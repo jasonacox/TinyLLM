@@ -25,7 +25,7 @@ ENV USE_SYSTEM "false"
 WORKDIR /app
 
 # Install depencencies - Mini Install - No Vector Search
-RUN pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml
+RUN pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
 
 # Add Suport for Vector Search - CPU Only - Comment out to disable vector search
 RUN pip install torch qdrant-client sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu

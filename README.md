@@ -142,7 +142,7 @@ You can also test the chatbot server without docker using the following.
 
 ```bash
 # Install required packages
-pip install openai flask flask-socketio bs4
+pip3 install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
 
 # Run the chatbot web server
 python3 server.py

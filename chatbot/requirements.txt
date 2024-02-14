@@ -1,0 +1,19 @@
+# TinyLLM Chatbot Requirements
+
+# Required Packages
+fastapi 
+uvicorn
+python-socketio
+jinja2
+openai
+bs4
+pypdf
+requests
+lxml
+aiohttp
+
+# Optional Packages for RAG
+torch
+qdrant-client
+sentence-transformers
+--extra-index-url https://download.pytorch.org/whl/cpu

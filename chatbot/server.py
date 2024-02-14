@@ -16,7 +16,7 @@ Features:
     * (Optional) Supports RAG prompts using Qdrant Vector Database
 
 Requirements:
-    * pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml
+    * pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
     * pip install qdrant-client sentence-transformers pydantic~=2.4.2
 
 Environmental variables:
@@ -62,6 +62,7 @@ import json
 import logging
 import os
 import time
+
 import openai
 import requests
 import socketio
@@ -71,9 +72,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pypdf import PdfReader
+import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.12.1"
+VERSION = "v0.12.2"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -119,7 +121,7 @@ default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your 
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
 default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question or concern {prompt}. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\n[BEGIN]\n{context_str}\n[END]\n"
-default_prompts["website"] = "Summarize the following text from URL {url}:\n{website_text}"
+default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nThe above article is about:"
 
 # Import Qdrant and Sentence Transformer
 try:
@@ -379,65 +381,68 @@ async def get_stock(company):
             return "Unable to fetch stock price for %s - No data available." % company
     
 # Function - Get news for topic
-def get_top_articles(url, max=10):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'xml')
-    items = soup.findAll('item')
-    articles = ""
-    count = 0
-    for item in items:
-        title = item.find('title').string.strip()
-        pubdate = item.find('pubDate').string.strip()
-        articles += f"Headline: {title} - Pub Date: {pubdate}\n"
-        count += 1
-        if count >= max:
-            break
-    return articles
+async def get_top_articles(url, max=10):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            soup = BeautifulSoup(await response.text(), 'xml')
+            items = soup.findAll('item')
+            articles = ""
+            count = 0
+            for item in items:
+                title = item.find('title').string.strip()
+                pubdate = item.find('pubDate').string.strip()
+                articles += f"Headline: {title} - Pub Date: {pubdate}\n"
+                count += 1
+                if count >= max:
+                    break
+            return articles
 
 # Function - Fetch news for topic
-def get_news(topic, max=10):
+async def get_news(topic, max=10):
     if "none" in topic.lower() or "current" in topic.lower():
         url = "https://news.google.com/rss/"
     else:
         topic = topic.replace(" ", "+")
         url = "https://news.google.com/rss/search?q=%s" % topic
     log(f"Fetching news for {topic} from {url}")
-    response = get_top_articles(url, max)
-    return response
+    async with aiohttp.ClientSession() as session:
+        response = await get_top_articles(url, max)
+        return response
     
 # Function - Extract text from URL
-def extract_text_from_url(url):
+async def extract_text_from_url(url):
     try:
-        response = requests.get(url, allow_redirects=True)
-        if response.status_code == 200:
-            # Route extraction based on content type
-            if ";" in response.headers["Content-Type"]:
-                content_type = response.headers["Content-Type"].split(";")[0]
-            else:
-                content_type = response.headers["Content-Type"]
-            content_handlers = {
-                "application/pdf": extract_text_from_pdf,
-                "text/plain": extract_text_from_text,
-                "text/csv": extract_text_from_text,
-                "text/xml": extract_text_from_text,
-                "application/json": extract_text_from_text,
-                "text/html": extract_text_from_html
-            }
-            if content_type in content_handlers:
-                return content_handlers[content_type](response)
-            else:
-                return "Unsupported content type"
-        else:
-            m = f"Failed to fetch the webpage. Status code: {response.status_code}"
-            log(m)
-            return m
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, allow_redirects=True) as response:
+                if response.status == 200:
+                    # Route extraction based on content type
+                    if ";" in response.headers["Content-Type"]:
+                        content_type = response.headers["Content-Type"].split(";")[0]
+                    else:
+                        content_type = response.headers["Content-Type"]
+                    content_handlers = {
+                        "application/pdf": extract_text_from_pdf,
+                        "text/plain": extract_text_from_text,
+                        "text/csv": extract_text_from_text,
+                        "text/xml": extract_text_from_text,
+                        "application/json": extract_text_from_text,
+                        "text/html": extract_text_from_html
+                    }
+                    if content_type in content_handlers:
+                        return await content_handlers[content_type](response)
+                    else:
+                        return "Unsupported content type"
+                else:
+                    m = f"Failed to fetch the webpage. Status code: {response.status}"
+                    log(m)
+                    return m
     except Exception as e:
         log(f"An error occurred: {str(e)}")
 
 # Function - Extract text from PDF
-def extract_text_from_pdf(response):
+async def extract_text_from_pdf(response):
     # Convert PDF to text
-    pdf_content = response.content
+    pdf_content = await response.read()
     pdf2text = ""
     f = io.BytesIO(pdf_content)
     reader = PdfReader(f)
@@ -446,12 +451,12 @@ def extract_text_from_pdf(response):
     return pdf2text
 
 # Function - Extract text from text
-def extract_text_from_text(response):
-    return response.text
+async def extract_text_from_text(response):
+    return await response.text()
 
 # Function - Extract text from HTML
-def extract_text_from_html(response):
-    html_content = response.text
+async def extract_text_from_html(response):
+    html_content = await response.text()
     soup = BeautifulSoup(html_content, 'html.parser')
     paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
     website_text = '\n'.join([p.get_text() for p in paragraphs])
@@ -721,7 +726,7 @@ async def handle_command(session_id, p):
     elif command == "sessions":
         await show_sessions(session_id)
     elif command == "news":
-        await fetch_news(session_id)
+        await fetch_news(session_id, p)
     elif command == "rag":
         await handle_rag_command(session_id, p)
     elif command == "weather":
@@ -746,15 +751,16 @@ async def show_sessions(session_id):
     result = ""
     x = 1
     for s in client:
-        result += f"<br> * {x}: {s}\n"
+        result += f"* {x}: {s}\n"
         x += 1
     await sio.emit('update', {'update': '[Sessions: %s]\n%s' % (len(client), result), 'voice': 'user'}, room=session_id)
     client[session_id]["prompt"] = ''
 
-async def fetch_news(session_id):
+async def fetch_news(session_id, p):
     log("News requested")
-    await sio.emit('update', {'update': '/news [Fetching News]', 'voice': 'user'}, room=session_id)
-    context_str = get_news("none", 25)
+    topic = p[5:].strip() or "none"
+    await sio.emit('update', {'update': '%s [Fetching News]' % p, 'voice': 'user'}, room=session_id)
+    context_str = await get_news(topic, 25)
     log(f"News Raw Context = {context_str}")
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
@@ -787,7 +793,7 @@ async def handle_rag_command(session_id, p):
                     context_str += f" <li> {result['title']}: {result['text']}\n"
                     log(" * " + result['title'])
                 log(f" = {context_str}")
-                client[session_id]["prompt"] = expand_prompt(prompts["rag"], {"context_str": context_str})
+                client[session_id]["prompt"] = expand_prompt(prompts["rag"], {"context_str": context_str, "prompt": prompt})
             else:
                 await sio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'}, room=session_id)
         else:
