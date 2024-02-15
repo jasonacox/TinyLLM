@@ -75,7 +75,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.12.2"
+VERSION = "v0.12.3"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -704,7 +704,7 @@ async def handle_url_prompt(session_id, p):
     url = p.strip()
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
-    website_text = extract_text_from_url(url)
+    website_text = await extract_text_from_url(url)
     if website_text:
         log(f"* Reading {len(website_text)} bytes {url}")
         await sio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'}, room=session_id)

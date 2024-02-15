@@ -1,5 +1,9 @@
 # Releases
 
+## 0.12.3 - Extract from URL
+
+* Bug fix for `handle_url_prompt()` to extract text from URL.
+
 ## 0.12.2 - Misc Improvements 
 
 * Speed up command functions using async, using `aiohttp`. 
