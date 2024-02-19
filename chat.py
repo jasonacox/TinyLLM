@@ -31,14 +31,18 @@ import datetime
 api_key = "OPENAI_API_KEY"                       # Required, use bogus string for Llama.cpp
 api_base = "http://localhost:8000/v1"            # Use API endpoint or comment out for OpenAI
 agentname = "Jarvis"                             # Set the name of your bot
-mymodel  ="models/7B/gguf-model.bin"             # Pick model to use e.g. gpt-3.5-turbo for OpenAI
+mymodel  ="tinyllm"                              # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 TESTMODE = False                                 # Uses test prompts
+USE_SYSTEM = False                               # Use system prompt for first message
 
 # Set base prompt and initialize the context array for conversation dialogue
 current_date = datetime.datetime.now()
 formatted_date = current_date.strftime("%m/%d/%Y")
 baseprompt = "You are %s, a highly intelligent assistant. Keep your answers brief and accurate. Current date is %s." % (agentname, formatted_date)
-context = [{"role": "system", "content": baseprompt}]
+if USE_SYSTEM:
+    context = [{"role": "system", "content": baseprompt}] 
+else:
+    context = [{"role": "user", "content": baseprompt}, {"role": "assistant", "content": "Okay, let's get started."}] 
 
 # Function - Send prompt to LLM for response
 def ask(prompt):

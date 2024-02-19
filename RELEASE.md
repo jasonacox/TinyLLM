@@ -1,5 +1,10 @@
 # Releases
 
+## 0.12.4 - Chatbot Fixes
+
+* Add encoding user prompts to correctly display html code in Chatbot.
+* Fix `chat.py` CLI chatbot to handle user/assistant prompts for vLLM.
+
 ## 0.12.3 - Extract from URL
 
 * Bug fix for `handle_url_prompt()` to extract text from URL.

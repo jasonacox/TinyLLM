@@ -14,7 +14,7 @@
         }
         #messageContainer {
             flex-grow: 1;
-            overflow-y: scroll; /* Enable vertical scrolling if needed */
+            overflow-y: scroll; /* Enable vertical scrolling */
             border-bottom: 1px solid #ccc;
             padding: 10px;
         }
@@ -24,7 +24,7 @@
             margin-bottom: 10px; /* Add margin for spacing */
         }
         #messageInput {
-            flex: 1; /* Takes up all available space */
+            flex: 1; /* Take up all available space */
             padding: 5px;
             margin-right: 10px; /* Add margin for spacing */
         }
@@ -139,10 +139,6 @@
             /* add border to table */
             border: 1px solid #868686;
             border-radius: 5px;
-            /* center the middle of the div */
-            /* display: flex;
-            justify-content: center;
-            align-items: center; */
         }
         .popup-divider {
             margin: 20px 0;
@@ -202,7 +198,7 @@
         .rightcolumn {
             width: 100%;
         }
-            </style>
+    </style>
     <div class="popup-overlay" id="dialogueOverlay">
         <div class="popup-box" style="width: 90%;">
             <h2 class="popup-title">System Settings</h2>
@@ -370,11 +366,6 @@
                 });
                 // Clear the input field
                 document.getElementById('messageInput').value = "";
-                // Add the message to the message container
-                // const updateContainer = document.getElementById('messageContainer');
-                // updateContainer.innerHTML += "<p class='user-text'>" + message + "</p>";
-                // ensure we always show latest
-                // updateContainer.scrollTop = updateContainer.scrollHeight;
             }
         }
 
@@ -423,15 +414,13 @@
                 });
 
                 // Convert newline and carriage return characters outside the code-box to <br>
-                //updateContainer.innerHTML = updateContainer.innerHTML.replace(/([^`])\n/g, '$1<br>');
-                //updateContainer.innerHTML = updateContainer.innerHTML.replace(/([^`])\r/g, '$1<br>');
-                
                 updateContainer.innerHTML = updateContainer.innerHTML.replace(/`([\s\S]*?)`/g, '<code>$1</code>');
-            
             }
 
             if (data.voice === "user") {
-                updateContainer.innerHTML += "<p class='user-text'>" + data.update.replace(/[\n\r]/g, "<br>") + "</p>";
+                // Encode html tags and newlines
+                data.update = data.update.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/[\n\r]/g, "<br>");
+                updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
             }
 
             if (data.voice === "ai") {
