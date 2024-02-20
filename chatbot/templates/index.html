@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>TinyLLM Chatbot</title>
+    <meta name="viewport" content="width=device-width, height=device-height, maximum-scale=1.0">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -197,6 +198,33 @@
         }
         .rightcolumn {
             width: 100%;
+        }
+        @media only screen and (max-width: 430px) {
+            /* Styles for iPhone or devices with smaller screens */
+            body {
+                font-family: Arial, sans-serif;
+                overflow: hidden; /* Hide scrollbars */
+                font-size: 16px;
+            }
+            #container {
+                display: flex;
+                flex-direction: column;
+                height: 90vh;
+            }
+            #messageContainer {
+                flex-grow: 1;
+                overflow-y: scroll; /* Enable vertical scrolling */
+                border-bottom: 1px solid #ccc;
+                box-sizing: border-box;
+                padding: 10px;
+                padding-top: 30px;
+            }
+            #inputContainer {
+                border-top: 1px solid #ccc;
+                padding: 10px;
+                margin-bottom: 10px; /* Add margin for spacing */
+                box-sizing: border-box;
+            }
         }
     </style>
     <div class="popup-overlay" id="dialogueOverlay">
@@ -486,7 +514,9 @@
                 .then(response => response.json())
                 .then(data => {
                 const version = data.version;
-                document.getElementById('footer').innerHTML = 'TinyLLM Chatbot ' + version + ' - <a href="https://github.com/jasonacox/TinyLLM">https://github.com/jasonacox/TinyLLM</a>';
+                const model = data.model;
+                document.getElementById('footer').innerHTML = '<a href="https://github.com/jasonacox/TinyLLM">' + 
+                    'TinyLLM Chatbot</a> ' + version + ' - ' + model;
                 })
                 .catch(error => {
                 console.error('Error fetching version:', error);
@@ -504,6 +534,12 @@
 
             // Fetch version and update footer
             getVersion();
+        };
+
+        // On window resize, scroll to the bottom of the message container
+        window.onresize = function() {
+            var messageContainer = document.getElementById("messageContainer");
+            messageContainer.scrollTop = messageContainer.scrollHeight;
         };
 
         // Set focus on the text input field when the window is focused

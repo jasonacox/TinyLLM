@@ -1,6 +1,9 @@
 # Releases
 
-## 0.12.4 - Chatbot Fixes
+## 0.12.5 - Chatbot LLM Model
+
+* Added logic to poll LLM for model list. If only one model is available, use that. Otherwise verify the user requested model is available.
+* Chatbot UI now shows model name and adds responsive elements to better display on mobile devices.
 
 * Add encoding user prompts to correctly display html code in Chatbot.
 * Fix `chat.py` CLI chatbot to handle user/assistant prompts for vLLM.
