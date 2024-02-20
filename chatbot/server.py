@@ -75,7 +75,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.12.4"
+VERSION = "v0.12.5"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -138,6 +138,27 @@ while True:
         log(f"Using openai library version {openai.__version__}")
         log(f"Connecting to OpenAI API at {api_base} using model {mymodel}")
         llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+        # Get models
+        models = llm.models.list()
+        """
+        models = SyncPage[Model](data=[Model(id='gpt-4-vision-preview', created=1698894917, object='model', owned_by='system'), Model(id='dall-e-3', created=1698785189, object='model', owned_by='system'), Model(id='text-embedding-3-large', created=1705953180, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-instruct-0914', created=1694122472, object='model', owned_by='system'), Model(id='dall-e-2', created=1698798177, object='model', owned_by='system'), Model(id='whisper-1', created=1677532384, object='model', owned_by='openai-internal'), Model(id='gpt-3.5-turbo-16k-0613', created=1685474247, object='model', owned_by='openai'), Model(id='babbage-002', created=1692634615, object='model', owned_by='system'), Model(id='text-embedding-ada-002', created=1671217299, object='model', owned_by='openai-internal'), Model(id='gpt-3.5-turbo-16k', created=1683758102, object='model', owned_by='openai-internal'), Model(id='gpt-3.5-turbo-0125', created=1706048358, object='model', owned_by='system'), Model(id='gpt-3.5-turbo', created=1677610602, object='model', owned_by='openai'), Model(id='text-embedding-3-small', created=1705948997, object='model', owned_by='system'), Model(id='tts-1-hd', created=1699046015, object='model', owned_by='system'), Model(id='tts-1-hd-1106', created=1699053533, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-0301', created=1677649963, object='model', owned_by='openai'), Model(id='gpt-4-0613', created=1686588896, object='model', owned_by='openai'), Model(id='gpt-3.5-turbo-instruct', created=1692901427, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-0613', created=1686587434, object='model', owned_by='openai'), Model(id='gpt-4-turbo-preview', created=1706037777, object='model', owned_by='system'), Model(id='gpt-4-0125-preview', created=1706037612, object='model', owned_by='system'), Model(id='gpt-4', created=1687882411, object='model', owned_by='openai'), Model(id='tts-1', created=1681940951, object='model', owned_by='openai-internal'), Model(id='tts-1-1106', created=1699053241, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-1106', created=1698959748, object='model', owned_by='system'), Model(id='gpt-4-1106-preview', created=1698957206, object='model', owned_by='system'), Model(id='davinci-002', created=1692634301, object='model', owned_by='system')], object='list')
+        """
+        # build list of models
+        model_list = [model.id for model in models.data]
+        log(f"LLM Models available: {model_list}")
+        if len(models.data) == 0:
+            log("LLM: No models available - check your API key and endpoint.")
+            raise Exception("No models available")
+        if not mymodel in model_list:
+            log(f"LLM: Model {mymodel} not found in models list.")
+            if len(model_list) == 1:
+                log("LLM: Switching to default model")
+                mymodel = model_list[0]
+            else:
+                log(f"LLM: Unable to find model {mymodel} in models list.")
+                raise Exception(f"Model {mymodel} not found")
+        log(f"LLM: Using model {mymodel}")
+        # Test LLM
         llm.chat.completions.create(
             model=mymodel,
             max_tokens=MAXTOKENS,
@@ -555,14 +576,14 @@ async def reset_prompts_route():
     global default_prompts
     return (default_prompts)
 
-# Return the current version
+# Return the current version and LLM model
 @app.get('/version')
 async def show_version():
     global VERSION, DEBUG
     log(f"Version requested - DEBUG={DEBUG}")
     if DEBUG:
         return {'version': "%s DEBUG MODE" % VERSION}
-    return {'version': VERSION}
+    return {'version': VERSION, 'model': mymodel}
 
 # Send an alert to all clients
 @app.post('/alert')
