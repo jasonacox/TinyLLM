@@ -75,7 +75,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.12.5"
+VERSION = "v0.12.6"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -478,9 +478,12 @@ async def extract_text_from_text(response):
 # Function - Extract text from HTML
 async def extract_text_from_html(response):
     html_content = await response.text()
+    # get title of page from html
+    source = "Document Source: " + str(response.url)
     soup = BeautifulSoup(html_content, 'html.parser')
+    title = ("Document Title: " + soup.title.string + "\n") if soup.title else ""
     paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
-    website_text = '\n'.join([p.get_text() for p in paragraphs])
+    website_text = f"{title}{source}\nDocument Content:\n" + '\n\n'.join([p.get_text() for p in paragraphs])
     return website_text
 
 #

@@ -1,5 +1,11 @@
 # Releases
 
+## 0.12.6 - CUDA Support
+
+* Add CUDA support for sentence transformers.
+* Improve web page import function `extract_text_from_html()` for better RAG formatting.
+* Add RAG instructions for Weaviate Vector DB
+
 ## 0.12.5 - Chatbot LLM Model
 
 * Added logic to poll LLM for model list. If only one model is available, use that. Otherwise verify the user requested model is available.

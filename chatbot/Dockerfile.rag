@@ -28,7 +28,8 @@ WORKDIR /app
 RUN pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
 
 # Add Suport for Vector Search - CPU Only - Comment out to disable vector search
-RUN pip install torch qdrant-client sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu
+#RUN pip install torch qdrant-client sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install torch qdrant-client sentence-transformers 
 
 # Copy local files into container
 COPY server.py /app/server.py
