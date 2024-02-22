@@ -1,16 +1,15 @@
-# Weaviate
+#!/usr/bin/python3
+"""
+Fetch blog data from jasonacox.com and embed into a weaviate vector database. 
+This uses a built in sentence transformer for the embedding calculations.
 
-Weaviate is an open source, AI-native vector database that includes the option of having an embedded tex2vec sentence transformer.
+Author: Jason A. Cox
+21 February 2024
+https://github.com/jasonacox/TinyLLM/
 
-## docker-compose.yml
-
-```bash
-docker compose up -d
-```
-
-## Test Weaviate
-
-```python
+Requirements:
+    * pip install weaviate-client
+"""
 import requests 
 import json
 import weaviate
@@ -76,5 +75,3 @@ finally:
     client.close()  # Close client gracefully
     print()
     print("Done.")
-
-```

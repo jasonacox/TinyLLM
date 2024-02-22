@@ -25,7 +25,7 @@ services:
       ENABLE_MODULES: 'text2vec-transformers'
       CLUSTER_HOSTNAME: 'node1'
   t2v-transformers:
-    image: semitechnologies/transformers-inference:sentence-transformers-multi-qa-MiniLM-L6-cos-v1
+    image: semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L12-v2
     environment:
       ENABLE_CUDA: '1'
       NVIDIA_VISIBLE_DEVICES: 'all'
