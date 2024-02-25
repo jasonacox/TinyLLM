@@ -4,8 +4,9 @@
 
 * Moved from Qdrant to Weaviate - This externalizes the sentence transformation work and lets the chatbot run as a smaller service. Activate by setting `WEAVIATE_HOST` to the address of the DB.
 * Added "References" text to output from `/rag` queries.
-* Added `ONESHOT` environmental variable that if `True` will remove conversation threading allow each query to be answered as a standalone sessions.
-* Added `RAG_ONLY` environmental variable that if `True` will assume all queries should be direct to the default RAG database as set by `WEAVIATE_LIBRARY`.
+* Added `ONESHOT` environmental variable that if `True` will remove conversation threading allowing each query to be answered as a standalone sessions.
+* Added `RAG_ONLY` environmental variable that if `True` will assume all queries should be directed to the default RAG database as set by `WEAVIATE_LIBRARY`.
+* See https://github.com/jasonacox/TinyLLM/pull/5
 
 ```bash
 docker run \

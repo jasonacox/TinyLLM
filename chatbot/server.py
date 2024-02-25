@@ -531,6 +531,7 @@ async def home(format: str = None):
         "Saved Prompts (PROMPT_FILE)": PROMPT_FILE,
         "LLM System Tags in Prompts (USE_SYSTEM)": USE_SYSTEM,
         "Run without conversation context (ONESHOT).": ONESHOT,
+        "RAG: Run in RAG Only Mode (RAG_ONLY)": RAG_ONLY,
         "RAG: Weaviate (WEAVIATE_HOST)": WEAVIATE_HOST,
         "RAG: default Library (WEAVIATE_LIBRARY)": WEAVIATE_LIBRARY,
         "RAG: Default Results Retrieved (RESULTS)": RESULTS,
