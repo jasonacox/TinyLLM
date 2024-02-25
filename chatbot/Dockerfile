@@ -14,21 +14,20 @@ ENV OPENAI_API_KEY "DEFAULT_API_KEY"
 ENV OPENAI_API_BASE "http://localhost:8000/v1"
 ENV AGENT_NAME "Jarvis"
 ENV MY_MODEL "models/7B/gguf-model.bin"
-ENV DEBUG "False"
-ENV DEVICE "cpu"
-ENV STMODEL "all-MiniLM-L6-v2"
-ENV QDRANT_HOST ""
+ENV DEBUG "false"
+ENV WEAVIATE_HOST "localhsot"
+ENV WEAVIATE_LIBRARY "tinyllm"
 ENV RESULTS 1
+ENV ONESHOT "false"
+ENV RAG_ONLY "false"
 ENV USE_SYSTEM "false"
 
 # Set the working directory
 WORKDIR /app
 
-# Install depencencies - Mini Install - No Vector Search
+# Install depencencies - Mini Install - Weaviate Vector Search
 RUN pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
-
-# Add Suport for Vector Search - CPU Only - Comment out to disable vector search
-# RUN pip install torch qdrant-client sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install weaviate-client
 
 # Copy local files into container
 COPY server.py /app/server.py
@@ -39,20 +38,3 @@ EXPOSE $PORT
 
 # Run the server
 CMD uvicorn server:app --host 0.0.0.0 --port $PORT
-
-# Example docker run command
-# docker run \
-#     -d \
-#     -p 5000:5000 \
-#     -e PORT=5000 \
-#     -e OPENAI_API_BASE="http://localhost:8000/v1" \
-#     -e LLM_MODEL="tinyllm" \
-#     -e QDRANT_HOST="localhost" \
-#     -e DEVICE="cpu" \
-#     -e RESULTS=1 \
-#     -e USE_SYSTEM="false" \
-#     -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
-#     -v $PWD/.tinyllm:/app/.tinyllm \
-#     --name chatbot \
-#     --restart unless-stopped \
-#     chatbot:0.12.0

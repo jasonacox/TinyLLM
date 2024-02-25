@@ -1,5 +1,29 @@
 # Releases
 
+## 0.13.0 - Use Weaviate for RAG
+
+* Moved from Qdrant to Weaviate - This externalizes the sentence transformation work and lets the chatbot run as a smaller service. Activate by setting `WEAVIATE_HOST` to the address of the DB.
+* Added "References" text to output from `/rag` queries.
+* Added `ONESHOT` environmental variable that if `True` will remove conversation threading allowing each query to be answered as a standalone sessions.
+* Added `RAG_ONLY` environmental variable that if `True` will assume all queries should be directed to the default RAG database as set by `WEAVIATE_LIBRARY`.
+* See https://github.com/jasonacox/TinyLLM/pull/5
+
+```bash
+docker run \
+    -d \
+    -p 5000:5000 \
+    -e PORT=5000 \
+    -e OPENAI_API_BASE="http://localhost:8000/v1" \
+    -e ONESHOT="true" \
+    -e RAG_ONLY="false" \
+    -e WEAVIATE_HOST="localhost" \
+    -e WEAVIATE_LIBRARY="tinyllm" \
+    -v $PWD/.tinyllm:/app/.tinyllm \
+    --name chatbot \
+    --restart unless-stopped \
+    jasonacox/chatbot
+```
+
 ## 0.12.6 - CUDA Support
 
 * Add CUDA support for sentence transformers.

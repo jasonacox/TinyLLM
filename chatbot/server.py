@@ -17,7 +17,7 @@ Features:
 
 Requirements:
     * pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
-    * pip install qdrant-client sentence-transformers pydantic~=2.4.2
+    * pip install weaviate-client
 
 Environmental variables:
     * PORT - Port that Chatbot will listen on
@@ -32,10 +32,11 @@ Environmental variables:
     * TEMPERATURE - LLM temperature
     * AGENT_NAME - Name for Bot
     * ALPHA_KEY - Alpha Vantage API Key for Stocks (Optional) - https://www.alphavantage.co/support/#api-key
-    * QDRANT_HOST - URL to Qdrant Vector Database (Optional) - https://qdrant.tech/
-    * DEVICE - cuda or cpu - only used for Sentence Transformer
+    * WEAVIATE_HOST - Weaviate Host for RAG (Optional)
+    * WEAVIATE_LIBRARY - Weaviate Library for RAG (Optional)
     * RESULTS - Number of results to return from RAG query
-    * ST_MODEL - Sentence Transformer Model to use
+    * ONESHOT - Set to True to enable one-shot mode
+    * RAG_ONLY - Set to True to enable RAG only mode
     * TOKEN - TinyLLM token for admin functions
     * PROMPT_FILE - File to store system prompts
 
@@ -75,7 +76,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.12.6"
+VERSION = "v0.13.0"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -101,12 +102,13 @@ PORT = int(os.environ.get("PORT", 5000))                                    # Po
 PROMPT_FILE = os.environ.get("PROMPT_FILE", f".tinyllm/prompts.json")       # File to store system prompts
 USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Use system in chat prompt if True
 TOKEN = os.environ.get("TOKEN", "secret")                                   # Secret TinyLLM token for admin functions
+ONESHOT = os.environ.get("ONESHOT", "false").lower() == "true"              # Set to True to enable one-shot mode
+RAG_ONLY = os.environ.get("RAG_ONLY", "false").lower() == "true"            # Set to True to enable RAG only mode
 
 # RAG Configuration Settings
-STMODEL = os.environ.get("ST_MODEL", "all-MiniLM-L6-v2")                    # Sentence Transformer Model to use
-QDRANT_HOST = os.environ.get("QDRANT_HOST", "")                             # Empty = disable RAG support
-DEVICE = os.environ.get("DEVICE", "cpu")                   #  cuda or cpu   # Device to use for Sentence Transformer
-RESULTS = os.environ.get("RESULTS", 1)                                      # Number of results to return from RAG query
+WEAVIATE_HOST = os.environ.get("WEAVIATE_HOST", "")                         # Empty = no Weaviate support
+WEAVIATE_LIBRARY = os.environ.get("WEAVIATE_LIBRARY", "tinyllm")            # Weaviate library to use
+RESULTS = int(os.environ.get("RESULTS", 1))                                 # Number of results to return from RAG query
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Optional - Alpha Vantage API Key
 
 # Prompt Defaults
@@ -120,16 +122,12 @@ default_prompts["news"] = "You are a newscaster who specializes in providing hea
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
-default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question or concern {prompt}. If you don't know the answer, just say that you don't know. Back up your answer using bullet points and facts from the context.\n[BEGIN]\n{context_str}\n[END]\n"
+default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context.\\nContext: {context_str}\\nQuestion: {prompt}\\nAnswer:"
 default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nThe above article is about:"
 
-# Import Qdrant and Sentence Transformer
-try:
-    from sentence_transformers import SentenceTransformer
-    import qdrant_client as qc
-except:
-    logger.error("Unable to import sentence_transformers or qdrant_client - Disabling Qdrant vector DB support")
-    QDRANT_HOST = ""
+# Log ONE_SHOT mode
+if ONESHOT:
+    log("ONESHOT mode enabled.")
 
 # Test OpenAI API
 while True:
@@ -145,7 +143,7 @@ while True:
         """
         # build list of models
         model_list = [model.id for model in models.data]
-        log(f"LLM Models available: {model_list}")
+        log(f"LLM: Models available: {model_list}")
         if len(models.data) == 0:
             log("LLM: No models available - check your API key and endpoint.")
             raise Exception("No models available")
@@ -173,41 +171,51 @@ while True:
         log("Sleeping 10 seconds...")
         time.sleep(10)
 
-# Sentence Transformer Setup
-if QDRANT_HOST:
-    log("Sentence Transformer starting...")
-    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-    sent_model = SentenceTransformer(STMODEL, device=DEVICE) 
-
-    # Qdrant Connection
-    log("Connecting to Qdrant DB...")
-    qdrant = qc.QdrantClient(url=QDRANT_HOST, timeout=60)
-
-# Create embeddings for text
-def embed_text(text):
-    embeddings = sent_model.encode(text, convert_to_tensor=True)
-    return embeddings
+# Test Weaviate Connection
+if WEAVIATE_HOST != "":
+    import weaviate
+    import weaviate.classes as wvc
+    try:
+        client = weaviate.connect_to_local(
+            host=WEAVIATE_HOST,
+            port=8080,
+            grpc_port=50051,
+            additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
+        )
+        log(f"RAG: Connected to Weaviate at {WEAVIATE_HOST}")
+        client.close()
+    except Exception as e:
+        log(f"RAG: Unable to connect to Weaviate at {WEAVIATE_HOST}: {str(e)}")
+        WEAVIATE_HOST = "" # Disable RAG support
+        log("RAG: RAG support disabled.")
 
 # Find document closely related to query
-def query_index(query, library, top_k=5):
-    vector = embed_text(query)
+def query_index(query, library, num_results=RESULTS):
+    references = "References:"
+    content = ""
     try:
-        results = qdrant.search(
-            collection_name=library,
-            query_vector=vector,
-            limit=top_k,
-            with_payload=True,
+        client = weaviate.connect_to_local(
+            host=WEAVIATE_HOST,
+            port=8080,
+            grpc_port=50051,
+            additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
         )
-        found=[]
-        for res in results:
-            found.append({"title": res.payload["title"],
-                            "text": res.payload["text"],
-                            "url": res.payload["url"],
-                            "score": res.score})
-        return found
+        hr = client.collections.get(library)
+        results = hr.query.near_text(
+            query=query,
+            limit=num_results
+        )
+        for ans in results.objects:
+            references = references + f"\n - {ans.properties['title']} - {ans.properties['file']}"
+            content = content + f"Document: {ans.properties['title']}\nDocument Source: {ans.properties['file']}\nContent: {ans.properties['content']}\n---\n"
+            if (len(content)/4) > MAXTOKENS/2:
+                break
+        client.close()
+        log(f"RAG: Retrieved: {references}")
+        return content, references
     except Exception as e:
-        log(f"Error querying Qdrant: {str(e)}")
-        return None
+        log(f"Error querying Weaviate: {str(e)}")
+        return None, None
 
 # Globals
 client = {}
@@ -305,6 +313,8 @@ async def ask(prompt, sid=None):
     while not response:
         try:
             # remember context
+            if ONESHOT:
+                client[sid]["context"] = base_prompt()
             client[sid]["context"].append({"role": "user", "content": prompt})
             log(f"messages = {client[sid]['context']} - model = {mymodel}")
             llm = openai.OpenAI(api_key=api_key, base_url=api_base)
@@ -317,21 +327,21 @@ async def ask(prompt, sid=None):
             )
         except openai.OpenAIError as e:
             # If we get an error, try to recover
+            await sio.emit('update', {'update': '[Context Truncated]', 'voice': 'user'},room=sid)
             client[sid]["context"].pop()
             if "maximum context length" in str(e):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
-                    log(f"Reduce prompt size - now {len(prompt)}")
+                    log(f"Reduce prompt size - now ~{len(prompt)/4}")
                 elif len(client[sid]["context"]) > 4:
                     # our context has grown too large, truncate the top
                     client[sid]["context"] = client[sid]["context"][:1] + client[sid]["context"][3:]
-                    log(f"Truncate context: {len(client[sid]['context'])}")
+                    log(f"Truncate context: ~{len(client[sid]['context'])/4}")
                 else:
                     # our context has grown too large, reset
                     client[sid]["context"] = base_prompt()   
-                    log(f"Reset context {len(client[sid]['context'])}")
-                    await sio.emit('update', {'update': '[Memory Reset]', 'voice': 'user'},room=sid)
+                    log(f"Reset context ~{len(client[sid]['context'])/4}")
             else:
                 log(f"ERROR: {e}")
                 stats["errors"] += 1
@@ -520,9 +530,10 @@ async def home(format: str = None):
         "Server Port (PORT)": PORT,
         "Saved Prompts (PROMPT_FILE)": PROMPT_FILE,
         "LLM System Tags in Prompts (USE_SYSTEM)": USE_SYSTEM,
-        "RAG: Sentence Transformer (STMODEL)": STMODEL,
-        "RAG: Qdrant (QDRANT_HOST)": QDRANT_HOST,
-        "RAG: Embedding (DEVICE)": DEVICE,
+        "Run without conversation context (ONESHOT).": ONESHOT,
+        "RAG: Run in RAG Only Mode (RAG_ONLY)": RAG_ONLY,
+        "RAG: Weaviate (WEAVIATE_HOST)": WEAVIATE_HOST,
+        "RAG: default Library (WEAVIATE_LIBRARY)": WEAVIATE_LIBRARY,
         "RAG: Default Results Retrieved (RESULTS)": RESULTS,
     }
     if format == "json":
@@ -645,8 +656,13 @@ async def handle_connect(session_id, env):
                                     print(string_to_hex(chunk), end="")
                                     print(f" = [{chunk}]")
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
-                        # remember context
-                        client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
+                        # Check for references
+                        if client[session_id]["references"]:
+                            await sio.emit('update', {'update': client[session_id]["references"], 'voice': 'ref'},room=session_id)
+                            client[session_id]["references"] = ""
+                        else:
+                            # remember context
+                            client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
                     except Exception as e:
                         # Unable to process prompt, give error
                         log(f"ERROR {e}")
@@ -683,6 +699,7 @@ async def handle_connect(session_id, env):
         client[session_id]["visible"] = True
         client[session_id]["prompt"] = ""
         client[session_id]["stop_thread_flag"] = False
+        client[session_id]["references"] = ""
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -800,23 +817,23 @@ async def handle_rag_command(session_id, p):
             number = int(parts[1])
             prompt = ' '.join(parts[2:])
         else:
-            number = 1
+            number = RESULTS
             prompt = ' '.join(parts[1:])
     if not library or not prompt:
         await sio.emit('update', {'update': '[Usage: /rag {library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'}, room=session_id)
     else:
-        if QDRANT_HOST:
+        if WEAVIATE_HOST:
             log(f"Pulling {number} entries from {library} with prompt {prompt}")
-            await sio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'}, room=session_id)
-            results = query_index(prompt, library, top_k=number)
+            if not ONESHOT:
+                await sio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'}, room=session_id)
+            results, references = query_index(prompt, library, number)
             if results:
                 context_str = ""
                 client[session_id]["visible"] = False
                 client[session_id]["remember"] = True
-                for result in results:
-                    context_str += f" <li> {result['title']}: {result['text']}\n"
-                    log(" * " + result['title'])
-                log(f" = {context_str}")
+                context_str = results
+                log(f" = {references}")
+                client[session_id]["references"] = references
                 client[session_id]["prompt"] = expand_prompt(prompts["rag"], {"context_str": context_str, "prompt": prompt})
             else:
                 await sio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'}, room=session_id)
@@ -856,7 +873,11 @@ async def handle_stock_command(session_id, p):
 async def handle_normal_prompt(session_id, p):
     if client[session_id]["visible"]:
         await sio.emit('update', {'update': p, 'voice': 'user'}, room=session_id)
-    client[session_id]["prompt"] = p
+    if WEAVIATE_HOST and RAG_ONLY and p is not prompts["greeting"]:
+        # Activate RAG every time
+        await handle_rag_command(session_id, f"/rag {WEAVIATE_LIBRARY} {RESULTS} {p}")
+    else:
+        client[session_id]["prompt"] = p
 
 #
 # Start dev server and listen for connections

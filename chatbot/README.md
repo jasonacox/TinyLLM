@@ -12,14 +12,12 @@ The Chatbot can be launched as a Docker container or via command line.
 # Create placeholder prompts.json
 touch prompts.json
 
-# Run Chatbot via Container - see run.sh
+# Run Chatbot via Container - see run.sh for additional settings
 docker run \
     -d \
     -p 5000:5000 \
     -e PORT=5000 \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
-    -e LLM_MODEL="tinyllm" \
-    -e USE_SYSTEM="false" \
     -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \
@@ -30,7 +28,7 @@ docker run \
 
 ```bash
 # Install required packages
-pip install openai flask flask-socketio bs4
+pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp weaviate-client
 
 # Run the chatbot web server - change the base URL to be where you host your llmserver
 OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
@@ -41,7 +39,7 @@ OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 Some RAG (Retrieval Augmented Generation) features including:
 
 * Summarizing external websites and PDFs (paste a URL in chat window)
-* If a Qdrant host is specified, the chatbot can use the vector database information to respond.
+* If a Weaviate host is specified, the chatbot can use the vector database information to respond. See [rag](../rag/weaviate/) for details on how to set up Weaviate.
 * Command - There are information commands using `/`
 
 ```

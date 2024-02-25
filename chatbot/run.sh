@@ -30,10 +30,12 @@ docker run \
     -e LLM_MODEL="tinyllm" \
     -e USE_SYSTEM="false" \
     -e MAXCLIENTS=1000 \
-    -e MAXTOKENS=16384 \
+    -e MAXTOKENS=8192 \
     -e TEMPERATURE=0.0 \
-    -e QDRANT_HOST="localhost" \
-    -e SENTENCE_TRANSFORMERS_HOME=/app/.tinyllm \
+    -e ONESHOT="false" \
+    -e RAG_ONLY="false" \
+    -e WEAVIATE_HOST="" \
+    -e WEAVIATE_LIBRARY="tinyllm" \
     -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \

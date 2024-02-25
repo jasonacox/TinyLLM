@@ -12,8 +12,6 @@ requests
 lxml
 aiohttp
 
-# Optional Packages for RAG
-torch
-qdrant-client
-sentence-transformers
---extra-index-url https://download.pytorch.org/whl/cpu
+# RAG Support - Weaviate Vector Database
+weaviate-client
+
