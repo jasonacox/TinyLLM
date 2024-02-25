@@ -9,7 +9,7 @@ echo "Chatbot Version: $VER"
 echo ""
 
 # Build jasonacox/chatbot:x.y.z
-echo "* BUILD jasonacox/chatbot:${VER} - BASIC VERSION (no qdrant)"
+echo "* BUILD jasonacox/chatbot:${VER}"
 docker buildx build --no-cache --platform linux/amd64,linux/arm64 --push -t jasonacox/chatbot:${VER} .
 echo ""
 
@@ -17,7 +17,3 @@ echo ""
 echo "* VERIFY jasonacox/chatbot:${VER}"
 docker buildx imagetools inspect jasonacox/chatbot:${VER} | grep Platform
 echo ""
-
-# Cleanup
-cp Dockerfile.basic Dockerfile
-

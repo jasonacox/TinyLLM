@@ -24,7 +24,3 @@ echo ""
 echo "* VERIFY jasonacox/chatbot:latest"
 docker buildx imagetools inspect jasonacox/chatbot | grep Platform
 echo ""
-
-# Cleanup
-cp Dockerfile.basic Dockerfile
-
