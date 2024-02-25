@@ -33,8 +33,8 @@ try:
         print(d["title"])
         question_objs.append({
             "title": d["title"],
-            "url": d["url"],
-            "content_text": d["content_text"],
+            "file": d["url"],
+            "content": d["content_text"],
         })
 
     # Delete collection
@@ -69,7 +69,7 @@ try:
         print(query)
         print("------------------")
         for i in response.objects:
-            print(f"{i.properties['title']} - {i.properties['url']}")
+            print(f"{i.properties['title']} - {i.properties['file']}")
 
 finally:
     client.close()  # Close client gracefully
