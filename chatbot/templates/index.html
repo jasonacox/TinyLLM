@@ -40,6 +40,11 @@
         .user-text {
             color: red;
         }
+        .ref-text {
+            color: rgb(191, 191, 191);
+            /* indent */
+            padding-left: 20px;
+        }
         .user-input {
             display: flex;
             justify-content: space-between;
@@ -453,6 +458,10 @@
 
             if (data.voice === "ai") {
                 updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>\n");
+            }
+
+            if (data.voice === "ref") {
+                updateContainer.innerHTML += "<p class='ref-text'>" + data.update.replace(/[\n\r]/g, "<br>\n") + "</p>";
             }
 
             // Ensure we always show the latest
