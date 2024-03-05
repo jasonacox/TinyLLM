@@ -25,7 +25,7 @@ ENV USE_SYSTEM "false"
 # Set the working directory
 WORKDIR /app
 
-# Install depencencies - Mini Install - Weaviate Vector Search
+# Install depencencies - Weaviate Vector Search
 RUN pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
 RUN pip install weaviate-client
 

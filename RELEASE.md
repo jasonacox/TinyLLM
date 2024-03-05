@@ -1,5 +1,10 @@
 # Releases
 
+## 0.14.0 - Chatbot Controls
+
+* Added ability to change LLM Temperature and MaxTokens in settings.
+* Added optional prompt settings read-only options to allow viewing but prevent changes (`PROMPT_RO=true`).
+
 ## 0.13.0 - Use Weaviate for RAG
 
 * Moved from Qdrant to Weaviate - This externalizes the sentence transformation work and lets the chatbot run as a smaller service. Activate by setting `WEAVIATE_HOST` to the address of the DB.

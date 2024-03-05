@@ -252,9 +252,9 @@
                     <div class="popup-divider"></div>
                     <div class="popup-button-container">
                         <div>
-                            <button type="button" class="dialogue-button" onclick="saveSettings()">Save</button> 
+                            <button type="button" class="dialogue-button" id="saveButton" onclick="saveSettings()">Save</button> 
                             <button type="button" class="dialogue-button" onclick="closeDialogue()">Cancel</button> 
-                            <button type="button" class="dialogue-button" onclick="resetSettings()">Reset</button>
+                            <button type="button" class="dialogue-button" id="resetButton" onclick="resetSettings()">Reset</button>
                         </div>
                     </div>
                 </form>
@@ -271,6 +271,15 @@
                 .then(response => response.json())
                 .then(data => {
                     Object.entries(data).forEach(([name, value]) => {
+                        // Skip if name is READONLY and value is True
+                         if (name === 'READONLY' && value === true) {
+                            // Hide saveButton and resetButton element
+                            document.getElementById('saveButton').style.display = 'none';
+                            document.getElementById('resetButton').style.display = 'none';
+                            // Change popup-title content to "System Settings (Read-Only)"
+                            document.querySelector('.popup-title').textContent = 'System Settings (Read-Only)';
+                            return;
+                        }
                         document.querySelector('tbody').innerHTML += `
                             <tr>
                                 <td>${name}</td>

@@ -76,7 +76,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.13.0"
+VERSION = "v0.14.0"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -100,6 +100,7 @@ MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Ma
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
 PROMPT_FILE = os.environ.get("PROMPT_FILE", f".tinyllm/prompts.json")       # File to store system prompts
+PROMPT_RO = os.environ.get("PROMPT_RO", "false").lower() == "true"          # Set to True to enable read-only prompts
 USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Use system in chat prompt if True
 TOKEN = os.environ.get("TOKEN", "secret")                                   # Secret TinyLLM token for admin functions
 ONESHOT = os.environ.get("ONESHOT", "false").lower() == "true"              # Set to True to enable one-shot mode
@@ -124,6 +125,8 @@ default_prompts["location"] = "What location is specified in this prompt, state 
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
 default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context.\\nContext: {context_str}\\nQuestion: {prompt}\\nAnswer:"
 default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nThe above article is about:"
+default_prompts["LLM_temperature"] = TEMPERATURE
+default_prompts["LLM_max_tokens"] = MAXTOKENS
 
 # Log ONE_SHOT mode
 if ONESHOT:
@@ -529,6 +532,7 @@ async def home(format: str = None):
         "LLM Temperature (TEMPERATURE)": TEMPERATURE,
         "Server Port (PORT)": PORT,
         "Saved Prompts (PROMPT_FILE)": PROMPT_FILE,
+        "Read-Only Prompts (PROMPT_RO)": PROMPT_RO,
         "LLM System Tags in Prompts (USE_SYSTEM)": USE_SYSTEM,
         "Run without conversation context (ONESHOT).": ONESHOT,
         "RAG: Run in RAG Only Mode (RAG_ONLY)": RAG_ONLY,
@@ -558,12 +562,19 @@ async def home(format: str = None):
 @app.get('/prompts')
 async def get_prompts():
     global prompts
+    # Update TEMPERATURE and MAXTOKENS
+    prompts["LLM_temperature"] = TEMPERATURE
+    prompts["LLM_max_tokens"] = MAXTOKENS
+    if PROMPT_RO:
+        prompts["READONLY"] = True
     return prompts
 
 # POST requests to update prompts
 @app.post('/saveprompts')
 async def update_prompts(data: dict):
-    global prompts, baseprompt, sio
+    global prompts, baseprompt, sio, TEMPERATURE, MAXTOKENS
+    if PROMPT_RO:
+        return ({"Result": "Prompts are read-only"})
     oldbaseprompt = prompts["baseprompt"]
     oldagentname = prompts["agentname"]
     log(f"Received prompts: {data}")
@@ -578,6 +589,11 @@ async def update_prompts(data: dict):
         formatted_date = current_date.strftime("%B %-d, %Y")
         values = {"agentname": agentname, "date": formatted_date}
         baseprompt = expand_prompt(prompts["baseprompt"], values)
+    # Update TEMPERATURE and MAXTOKENS
+    if "LLM_temperature" in data:
+        TEMPERATURE = float(data["LLM_temperature"])
+    if "LLM_max_tokens" in data:
+        MAXTOKENS = int(data["LLM_max_tokens"])
     # Notify all clients of update
     log("Base prompt updated - notifying users")
     await sio.emit('update', {'update': '[Prompts Updated - Refresh to reload]', 'voice': 'user'})
