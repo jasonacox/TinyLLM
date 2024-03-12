@@ -76,7 +76,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.0"
+VERSION = "v0.14.1"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -116,7 +116,7 @@ ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Op
 default_prompts = {}
 default_prompts["greeting"] = "Hi"
 default_prompts["agentname"] = "Jarvis"
-default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. Keep your answers brief and accurate."
+default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. The current date is {date}.\n\nYou should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
 default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source]\nHere are some examples: \n1. The World is Round - Science\n2. The Election is over and Children have won - US News\n3. Storms Hit the Southern Coast - ABC\nContext: {context_str}\nAnswer:"
@@ -286,17 +286,15 @@ def reset_prompts():
 load_prompts()
 log(f"Loaded {len(prompts)} prompts.")
 
-# Set base prompt and initialize the context array for conversation dialogue
-if agentname == "":
-    agentname = prompts["agentname"]
-current_date = datetime.datetime.now()
-formatted_date = current_date.strftime("%B %-d, %Y")
-values = {"agentname": agentname, "date": formatted_date}
-baseprompt = expand_prompt(prompts["baseprompt"], values)
-
 # Function to return base conversation prompt
 def base_prompt(content=None):
-    global baseprompt
+    global baseprompt, agentname, USE_SYSTEM, prompts
+    if agentname == "":
+        agentname = prompts["agentname"]
+    current_date = datetime.datetime.now()
+    formatted_date = current_date.strftime("%B %-d, %Y")
+    values = {"agentname": agentname, "date": formatted_date}
+    baseprompt = expand_prompt(prompts["baseprompt"], values)
     if not content:
         content = baseprompt
     if USE_SYSTEM:
@@ -572,7 +570,7 @@ async def get_prompts():
 # POST requests to update prompts
 @app.post('/saveprompts')
 async def update_prompts(data: dict):
-    global prompts, baseprompt, sio, TEMPERATURE, MAXTOKENS
+    global prompts, baseprompt, sio, TEMPERATURE, MAXTOKENS, agentname
     if PROMPT_RO:
         return ({"Result": "Prompts are read-only"})
     oldbaseprompt = prompts["baseprompt"]

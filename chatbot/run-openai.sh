@@ -35,6 +35,7 @@ docker run \
     -e ONESHOT="false" \
     -e WEAVIATE_HOST="" \
     -e WEAVIATE_LIBRARY="tinyllm" \
+    -e TZ="America/Los_Angeles" \
     -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \

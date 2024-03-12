@@ -1,5 +1,11 @@
 # Releases
 
+## 0.14.1 - Chatbot Baseprompt
+
+* Fixed bug with baseprompt updates to respond to saved Settings or new sessions.
+* Updated baseprompt to include date and guidance for complex and open-ended questions.
+* Add `TZ` local timezone environmental variable to ensure correct date in baseprompt.
+
 ## 0.14.0 - Chatbot Controls
 
 * Added ability to change LLM Temperature and MaxTokens in settings.

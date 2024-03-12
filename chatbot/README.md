@@ -18,6 +18,7 @@ docker run \
     -p 5000:5000 \
     -e PORT=5000 \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
+    -e TZ="America/Los_Angeles" \
     -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
     --restart unless-stopped \
