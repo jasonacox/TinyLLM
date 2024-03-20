@@ -76,7 +76,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.1"
+VERSION = "v0.14.2"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -869,8 +869,11 @@ async def handle_weather_command(session_id, p):
 
 async def handle_stock_command(session_id, p):
     log("Stock prompt")
-    await sio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'}, room=session_id)
     prompt = p[6:].strip()
+    if not prompt:
+        await sio.emit('update', {'update': '[Usage: /stock {company}] - Fetch stock price for company.', 'voice': 'user'}, room=session_id)
+        return
+    await sio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'}, room=session_id)
     log(f"Stock Prompt: {prompt}")
     company = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
     company = ''.join(e for e in company if e.isalnum() or e.isspace())

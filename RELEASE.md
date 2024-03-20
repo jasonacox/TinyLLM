@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.2 - Chatbot Stock RAG
+
+* Add error checking and help for `/stock {company}` command.
+
 ## 0.14.1 - Chatbot Baseprompt
 
 * Fixed bug with baseprompt updates to respond to saved Settings or new sessions.
