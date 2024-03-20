@@ -41,6 +41,8 @@ TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LL
 USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Use system in chat prompt if True
 RESULTS = int(os.environ.get("RESULTS", 10))                                # Number of results to return from Weaviate
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha-key")                        # Alpha Vantage API Key
+COMPANY = os.environ.get("COMPANY", "Google")                                # Company to use for stock news
+CITY = os.environ.get("CITY", "Los Angeles")                                # City to use for weather news  
 
 # Prompt Defaults
 prompts = {
@@ -208,7 +210,13 @@ def get_stock(company):
             return "Unable to fetch stock price for %s - No data available." % company
     
 # Function - Get news from Google
-def get_top_articles(url, max=10):
+def get_news(topic, max=10):
+    if not topic:
+        url = "https://news.google.com/rss/"
+    else:
+        topic = topic.replace(" ", "+")
+        url = "https://news.google.com/rss/search?q=%s" % topic
+    log(f"Fetching news for {topic} from {url}")
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'xml')
     items = soup.findAll('item')
@@ -222,18 +230,6 @@ def get_top_articles(url, max=10):
         if count >= max:
             break
     return articles
-
-# Function - Fetch news for topic
-def get_news(topic, max=10):
-    if not topic:
-        url = "https://news.google.com/rss/"
-    else:
-        topic = topic.replace(" ", "+")
-        url = "https://news.google.com/rss/search?q=%s" % topic
-    log(f"Fetching news for {topic} from {url}")
-    response = get_top_articles(url, max)
-    return response
-    
 
 def fetch_news(topic):
     log("Get News")
@@ -280,17 +276,22 @@ if __name__ == "__main__":
     context = base_prompt()
 
     # Query LLM for weather
-    weather = handle_weather_command("Los Angeles")
+    weather = handle_weather_command(CITY)
     print(f"Weather:\n{weather}")
     print("")
 
     # Query LLM for stock
-    stock = handle_stock_command("Disney")
-    print(f"Disney Stock: {stock}")
+    stock = handle_stock_command(COMPANY)
+    print(f"{COMPANY} Stock: {stock}")
     print("")
 
     # Query LLM for news
     news = fetch_news("")
     print(f"News:\n{news}")
+    print("")
+
+   # Query LLM for news for company
+    news = fetch_news(COMPANY)
+    print(f"News for {COMPANY}:\n{news}")
     print("")
 
