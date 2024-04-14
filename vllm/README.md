@@ -7,37 +7,29 @@ The project is located at https://github.com/vllm-project/vllm.
 * Multithreaded - Allows multiple simultaneous API calls.
 * Works on single and multiple GPU systems using a variety of hardware.
 
-## GPU support
+## Quick Start
 
-The default installation and build of vLLM does not support Pascal (Torch architecture 6, sm_6x) or older Nvidia GPU hardware.
-With some minor changes, vLLM can be changed to run on Pascal hardware.
-
-## Running vLLM
-
-For GPUs with a compute capability > 6 (anything above Pascal) you can use the following:
+The vLLM project has a helpful [Getting Started](https://docs.vllm.ai/en/latest/serving/deploying_with_docker.html) page that includes deploying with a Docker container (recommended). The following will get you started with the Mistral 7B Instruct model:
 
 ```bash
-# Clone this Repo
-git clone https://github.com/jasonacox/TinyLLM.git
-cd TinyLLM/vllm
+docker run --runtime nvidia --gpus all \
+    -v ~/.cache/huggingface:/root/.cache/huggingface \
+    -p 8000:8000 \
+    --ipc=host \
+    --restart unless-stopped \
+    --name vllm-mistral \
+    vllm/vllm-openai:latest \
+    --model mistralai/Mistral-7B-Instruct-v0.1 --enforce-eager --max-model-len 24000 
 
-# Build Container
-./build.sh 
-
-# Make a Directory to store Models
-mkdir models
-
-# Edit run.sh or run-awq.sh to pull the model you want to use. Mistral is set by default.
-# Run the Container - This will download the model on the first run
-./run.sh  
-
-# The trailing logs will be displayed so you can see the progress. Use ^C to exit without
-# stopping the container. 
+# Watch the Logs
+docker logs vllm-mistral -f
 ```
+
+You can see the vLLM APIs at http://localhost:8000/docs
 
 ## Running vLLM on Pascal
 
-For GPUs with a compute capability of 6 (Pascal), you will need to build from source. The steps below were verified with current Git Commit: 220a476 running on a Ubuntu 22.04 systems with Pascal GPUs (e.g. GTX 1060, Tesla P100). Y
+The default installation and build of vLLM does not support Pascal (Torch architecture 6, sm_6x) or older Nvidia GPU hardware. To get it to run on Pascal GPUs, you will need to build from source. The steps below were verified with current Git Commit: 220a476 running on a Ubuntu 22.04 systems with Pascal GPUs (e.g. GTX 1060, Tesla P100).
 
 The `compile.sh` script will download the vLLM source and build a vLLM container to run on Pascal GPUs.
 
@@ -67,6 +59,7 @@ and edit the files yourself:
 # Clone vLLM
 git clone https://github.com/vllm-project/vllm.git
 cd vllm
+# git checkout 220a476
 ```
 
 2. Create Dockerfile ([link](./Dockerfile.source))
