@@ -3,6 +3,7 @@
 ## 0.14.2 - Chatbot Stock RAG
 
 * Add error checking and help for `/stock {company}` command.
+* Allow user input textarea to be resized vertically.
 
 ## 0.14.1 - Chatbot Baseprompt
 

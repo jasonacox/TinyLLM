@@ -396,7 +396,9 @@ async def get_stock(company):
     symbol = await ask_llm(f"What is the stock symbol for {company}? Respond with symbol.")
     if "none" in symbol.lower():
         return "Unable to fetch stock price for %s - No matching symbol" % company
-    # Check to see if response has multiple words and if so, pick the last one
+    # Check to see if response has multiple lines and if so, pick the first one
+    symbol = symbol.split("\n")[0].strip()
+    # Check to see if there are multiple words and if so, pick the last one
     if len(symbol.split()) > 1:
         symbol = symbol.split()[-1]
     # Strip off any spaces or non-alpha characters
@@ -770,7 +772,7 @@ async def handle_url_prompt(session_id, p):
         client[session_id]["prompt"] = ''
 
 async def handle_command(session_id, p):
-    command = p[1:].split(" ")[0]
+    command = p[1:].split(" ")[0].lower()
     if command == "":
         await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
