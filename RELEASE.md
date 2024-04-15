@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.3 - Resize Control
+
+* Add intuitive UI control at top of user input area to allow user to resize text input box.
+
 ## 0.14.2 - Chatbot Stock RAG
 
 * Add error checking and help for `/stock {company}` command.
