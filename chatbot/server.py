@@ -166,6 +166,7 @@ while True:
             stream=False,
             temperature=TEMPERATURE,
             messages=[{"role": "user", "content": "Hello"}],
+            extra_body={"stop_token_ids":[128001, 128009]},
         )
         break
     except Exception as e:
@@ -325,6 +326,7 @@ async def ask(prompt, sid=None):
                 stream=True, # Send response chunks as LLM computes next tokens
                 temperature=TEMPERATURE,
                 messages=client[sid]["context"],
+                extra_body={"stop_token_ids":[128001, 128009]},
             )
         except openai.OpenAIError as e:
             # If we get an error, try to recover
@@ -370,6 +372,7 @@ async def ask_llm(query, format=""):
         stream=False,
         temperature=TEMPERATURE,
         messages=content,
+        extra_body={"stop_token_ids":[128001, 128009]},
     )
     log(f"ask_llm -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()

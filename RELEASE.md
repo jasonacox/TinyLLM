@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.4 - Llama-3 Support
+
+* Add chatbot workaround for Meta Llama-3 support via stop token addition.
+
 ## 0.14.3 - Resize Control
 
 * Add intuitive UI control at top of user input area to allow user to resize text input box.
