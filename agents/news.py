@@ -290,6 +290,22 @@ if __name__ == "__main__":
     print(f"News:\n{news}")
     print("")
 
+    # Compare current news with previous news
+    print("Comparing news...")
+    try:
+        with open("/tmp/news.txt", "r") as f:
+            old_news = f.read()
+        # Ask LLM to compare news
+        comparison = ask_llm(f"Old News: {old_news}\nCurrent News: {news}\nCompare the news and provide a list of any new items with their source. List a maximum of 5 items. List URLs for the items.")
+        print(f"New Items:\n{comparison}")
+        print("")
+    except:
+        print("No previous news to compare.")
+        print("")
+    # Save news to a file
+    with open("/tmp/news.txt", "w") as f:
+        f.write(news)
+
    # Query LLM for news for company
     news = fetch_news(COMPANY)
     print(f"News for {COMPANY}:\n{news}")
