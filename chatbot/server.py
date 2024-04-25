@@ -76,7 +76,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.3"
+VERSION = "v0.14.4"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -133,7 +133,8 @@ if ONESHOT:
     log("ONESHOT mode enabled.")
 
 # Test OpenAI API
-while True:
+def test_model():
+    global api_key, api_base, mymodel, MAXTOKENS
     log("Testing OpenAI API...")
     try:
         log(f"Using openai library version {openai.__version__}")
@@ -141,25 +142,22 @@ while True:
         llm = openai.OpenAI(api_key=api_key, base_url=api_base)
         # Get models
         models = llm.models.list()
-        """
-        models = SyncPage[Model](data=[Model(id='gpt-4-vision-preview', created=1698894917, object='model', owned_by='system'), Model(id='dall-e-3', created=1698785189, object='model', owned_by='system'), Model(id='text-embedding-3-large', created=1705953180, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-instruct-0914', created=1694122472, object='model', owned_by='system'), Model(id='dall-e-2', created=1698798177, object='model', owned_by='system'), Model(id='whisper-1', created=1677532384, object='model', owned_by='openai-internal'), Model(id='gpt-3.5-turbo-16k-0613', created=1685474247, object='model', owned_by='openai'), Model(id='babbage-002', created=1692634615, object='model', owned_by='system'), Model(id='text-embedding-ada-002', created=1671217299, object='model', owned_by='openai-internal'), Model(id='gpt-3.5-turbo-16k', created=1683758102, object='model', owned_by='openai-internal'), Model(id='gpt-3.5-turbo-0125', created=1706048358, object='model', owned_by='system'), Model(id='gpt-3.5-turbo', created=1677610602, object='model', owned_by='openai'), Model(id='text-embedding-3-small', created=1705948997, object='model', owned_by='system'), Model(id='tts-1-hd', created=1699046015, object='model', owned_by='system'), Model(id='tts-1-hd-1106', created=1699053533, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-0301', created=1677649963, object='model', owned_by='openai'), Model(id='gpt-4-0613', created=1686588896, object='model', owned_by='openai'), Model(id='gpt-3.5-turbo-instruct', created=1692901427, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-0613', created=1686587434, object='model', owned_by='openai'), Model(id='gpt-4-turbo-preview', created=1706037777, object='model', owned_by='system'), Model(id='gpt-4-0125-preview', created=1706037612, object='model', owned_by='system'), Model(id='gpt-4', created=1687882411, object='model', owned_by='openai'), Model(id='tts-1', created=1681940951, object='model', owned_by='openai-internal'), Model(id='tts-1-1106', created=1699053241, object='model', owned_by='system'), Model(id='gpt-3.5-turbo-1106', created=1698959748, object='model', owned_by='system'), Model(id='gpt-4-1106-preview', created=1698957206, object='model', owned_by='system'), Model(id='davinci-002', created=1692634301, object='model', owned_by='system')], object='list')
-        """
-        # build list of models
-        model_list = [model.id for model in models.data]
-        log(f"LLM: Models available: {model_list}")
         if len(models.data) == 0:
-            log("LLM: No models available - check your API key and endpoint.")
-            raise Exception("No models available")
-        if not mymodel in model_list:
-            log(f"LLM: Model {mymodel} not found in models list.")
-            if len(model_list) == 1:
-                log("LLM: Switching to default model")
-                mymodel = model_list[0]
-            else:
-                log(f"LLM: Unable to find model {mymodel} in models list.")
-                raise Exception(f"Model {mymodel} not found")
-        log(f"LLM: Using model {mymodel}")
+            log("LLM: No models available - proceeding.")
+        else:
+            # build list of models
+            model_list = [model.id for model in models.data]
+            log(f"LLM: Models available: {model_list}")
+            if not mymodel in model_list:
+                log(f"LLM: Model {mymodel} not found in models list.")
+                if len(model_list) == 1:
+                    log("LLM: Switching to default model")
+                    mymodel = model_list[0]
+                else:
+                    log(f"LLM: Unable to find requested model {mymodel} in models list.")
+                    raise Exception(f"Model {mymodel} not found")
         # Test LLM
+        log(f"LLM: Using and testing model {mymodel}")
         llm.chat.completions.create(
             model=mymodel,
             max_tokens=MAXTOKENS,
@@ -168,12 +166,22 @@ while True:
             messages=[{"role": "user", "content": "Hello"}],
             extra_body={"stop_token_ids":[128001, 128009]},
         )
-        break
+        return True
     except Exception as e:
         log("OpenAI API Error: %s" % e)
         log(f"Unable to connect to OpenAI API at {api_base} using model {mymodel}.")
-        log("Sleeping 10 seconds...")
-        time.sleep(10)
+        if "maximum context length" in str(e):
+            if MAXTOKENS > 1024:
+                MAXTOKENS = int(MAXTOKENS / 2)
+                log(f"LLM: Maximum context length exceeded reducing MAXTOKENS to {MAXTOKENS}.")
+        return False
+
+while True:
+    if test_model():
+        break
+    else:
+        log("Sleeping 5 seconds...")
+        time.sleep(5)
 
 # Test Weaviate Connection
 if WEAVIATE_HOST != "":
@@ -330,9 +338,13 @@ async def ask(prompt, sid=None):
             )
         except openai.OpenAIError as e:
             # If we get an error, try to recover
-            await sio.emit('update', {'update': '[Context Truncated]', 'voice': 'user'},room=sid)
             client[sid]["context"].pop()
-            if "maximum context length" in str(e):
+            if "does not exist" in str(e):
+                await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'},room=sid)
+                log(f"Model does not exist - retrying")
+                test_model()
+                await sio.emit('update', {'update': mymodel, 'voice': 'model'},room=sid)
+            elif "maximum context length" in str(e):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
@@ -427,8 +439,7 @@ async def get_top_articles(url, max=10):
             count = 0
             for item in items:
                 title = item.find('title').string.strip()
-                pubdate = item.find('pubDate').string.strip()
-                articles += f"Headline: {title} - Pub Date: {pubdate}\n"
+                articles += f"Headline: {title}\n"
                 count += 1
                 if count >= max:
                     break
@@ -463,7 +474,8 @@ async def extract_text_from_url(url):
                         "text/csv": extract_text_from_text,
                         "text/xml": extract_text_from_text,
                         "application/json": extract_text_from_text,
-                        "text/html": extract_text_from_html
+                        "text/html": extract_text_from_html,
+                        "application/xml": extract_text_from_text,
                     }
                     if content_type in content_handlers:
                         return await content_handlers[content_type](response)

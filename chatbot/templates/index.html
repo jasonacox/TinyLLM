@@ -536,6 +536,10 @@
                 updateContainer.innerHTML += "<p class='ref-text'>" + data.update.replace(/[\n\r]/g, "<br>\n") + "</p>";
             }
 
+            if (data.voice === "model") {
+                getVersion();
+            }
+
             // Ensure we always show the latest
             updateContainer.scrollTop = updateContainer.scrollHeight;
         });

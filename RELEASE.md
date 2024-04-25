@@ -3,6 +3,8 @@
 ## 0.14.4 - Llama-3 Support
 
 * Add chatbot workaround for Meta Llama-3 support via stop token addition.
+* Add logic to better handle model maximum context length errors with automated downsizing.
+* Error handling and auto-retry for model changes on LLM.
 
 ## 0.14.3 - Resize Control
 
