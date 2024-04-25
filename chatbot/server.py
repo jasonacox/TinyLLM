@@ -343,7 +343,7 @@ async def ask(prompt, sid=None):
                 await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'},room=sid)
                 log(f"Model does not exist - retrying")
                 test_model()
-                await sio.emit('update', {'update': mymodel, 'voice': 'model'},room=sid)
+                await sio.emit('update', {'update': mymodel, 'voice': 'model'})
             elif "maximum context length" in str(e):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
