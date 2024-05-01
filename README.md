@@ -95,12 +95,12 @@ The Ollama project has made it super easy to install and run LLMs on a variety o
 ```bash
 # Install and run Ollama server
 docker run -d --gpus=all \
-	-v /storj/ai/ollama:/root/.ollama \
-	-p 11434:11434 \
+    -v /storj/ai/ollama:/root/.ollama \
+    -p 11434:11434 \
     -p 8000:11434 \
-	--restart unless-stopped \
-	--name ollama \
-       	ollama/ollama
+    --restart unless-stopped \
+    --name ollama \
+    ollama/ollama
 
 # Download and test run the llama3 model
 docker exec -it ollama ollama run llama3
