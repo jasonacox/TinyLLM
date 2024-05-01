@@ -1,5 +1,26 @@
 # Releases
 
+## 0.14.5 - Ollama Support
+
+* Add logic to chatbot to support OpenAI API servers that do not support the `/v1/models` API. This allows the Chatbot to work with Ollama provided the user specifies the LLM_MODEL, example docker run script:
+
+```bash
+docker run \
+    -d \
+    -p 5000:5000 \
+    -e PORT=5000 \
+    -e OPENAI_API_KEY="Asimov-3-Laws" \
+    -e OPENAI_API_BASE="http://localhost:11434/v1" \
+    -e LLM_MODEL="llama3" \
+    -e USE_SYSTEM="false" \
+    -e MAXTOKENS=4096 \
+    -e TZ="America/Los_Angeles" \
+    -v $PWD/.tinyllm:/app/.tinyllm \
+    --name chatbot \
+    --restart unless-stopped \
+    jasonacox/chatbot
+```
+
 ## 0.14.4 - Llama-3 Support
 
 * Add chatbot workaround for Meta Llama-3 support via stop token addition.

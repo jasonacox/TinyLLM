@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# This script adds Pascal GPU support to vLLM by adding 6.0, 6.1 and 6.2 
+# This script adds Pascal GPU support to vLLM by adding 6.0 and 6.1 
 # GPU architectures to the build files CMakeLists.txt and Dockerfile
 #
 
@@ -16,11 +16,11 @@ echo "Adding Pascal GPU support..."
 
 # Update CMakeLists.txt and Dockerfile
 echo " - Updating CMakeLists.txt"
-cuda_supported_archs="6.0;6.1;6.2;7.0;7.5;8.0;8.6;8.9;9.0"
+cuda_supported_archs="6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0"
 sed -i.orig "s/set(CUDA_SUPPORTED_ARCHS \"7.0;7.5;8.0;8.6;8.9;9.0\")/set(CUDA_SUPPORTED_ARCHS \"$cuda_supported_archs\")/g" CMakeLists.txt
 
 echo " - Updating Dockerfile"
-torch_cuda_arch_list="6.0 6.1 6.2 7.0 7.5 8.0 8.6 8.9 9.0+PTX"
+torch_cuda_arch_list="6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0+PTX"
 sed -i.orig "s/ARG torch_cuda_arch_list='7.0 7.5 8.0 8.6 8.9 9.0+PTX'/ARG torch_cuda_arch_list='$torch_cuda_arch_list'/g" Dockerfile
 
 cat <<EOF

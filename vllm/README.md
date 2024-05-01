@@ -15,6 +15,7 @@ The vLLM project has a helpful [Getting Started](https://docs.vllm.ai/en/latest/
 docker run --runtime nvidia --gpus all \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -p 8000:8000 \
+    --env "HF_TOKEN=${HF_TOKEN}" \
     --ipc=host \
     --restart unless-stopped \
     --name vllm-mistral \

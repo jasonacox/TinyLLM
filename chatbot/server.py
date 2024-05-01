@@ -76,7 +76,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.4"
+VERSION = "v0.14.5"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -141,9 +141,13 @@ def test_model():
         log(f"Connecting to OpenAI API at {api_base} using model {mymodel}")
         llm = openai.OpenAI(api_key=api_key, base_url=api_base)
         # Get models
-        models = llm.models.list()
-        if len(models.data) == 0:
-            log("LLM: No models available - proceeding.")
+        try:
+            models = llm.models.list()
+            if len(models.data) == 0:
+                log("LLM: No models available - proceeding.")
+        except Exception as e:
+            log(f"LLM: Unable to get models, using default: {str(e)}")
+            models = mymodel
         else:
             # build list of models
             model_list = [model.id for model in models.data]

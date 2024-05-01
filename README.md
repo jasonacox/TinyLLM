@@ -33,7 +33,7 @@ cd TinyLLM
 
 ## Run a Local LLM
 
-To run a local LLM, you will need an inference server for the model. This project recommends two options: [vLLM](https://github.com/vllm-project/vllm) and [llama-cpp-python](https://github.com/abetlen/llama-cpp-python). Both provide a built-in OpenAI API compatible web server that will make it easier for you to integrate with other tools.  
+To run a local LLM, you will need an inference server for the model. This project recommends these options: [vLLM](https://github.com/vllm-project/vllm), [llama-cpp-python](https://github.com/abetlen/llama-cpp-python), and [Ollama](https://ollama.com/). All of these provide a built-in OpenAI API compatible web server that will make it easier for you to integrate with other tools.  
 
 
 ### Llama-cpp-python Server (Option 1)
@@ -87,6 +87,26 @@ mkdir models
 # The trailing logs will be displayed so you can see the progress. Use ^C to exit without
 # stopping the container. 
 ```
+
+### Ollama Server (Option 3)
+
+The Ollama project has made it super easy to install and run LLMs on a variety of architectures. It serves up an OpenAI compatible API as well. The underlying LLM engine is llama.cpp so it has the same constraints. To run the Ollama server container:
+
+```bash
+# Install and run Ollama server
+docker run -d --gpus=all \
+	-v /storj/ai/ollama:/root/.ollama \
+	-p 11434:11434 \
+    -p 8000:11434 \
+	--restart unless-stopped \
+	--name ollama \
+       	ollama/ollama
+
+# Download and test run the llama3 model
+docker exec -it ollama ollama run llama3
+```
+
+If you use the Chatbot with Ollama, make sure you specify the model as "llama3": `LLM_MODEL="llama3"`
 
 ## Run a Chatbot
 
