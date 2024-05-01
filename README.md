@@ -104,6 +104,9 @@ docker run -d --gpus=all \
 
 # Download and test run the llama3 model
 docker exec -it ollama ollama run llama3
+
+# Tell server to keep model loaded in GPU
+curl http://localhost:11434/api/generate -d '{"model": "llama3", "keep_alive": -1}'
 ```
 
 If you use the Chatbot with Ollama, make sure you specify the model as "llama3": `LLM_MODEL="llama3"`
