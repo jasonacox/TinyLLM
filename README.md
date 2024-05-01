@@ -95,7 +95,7 @@ The Ollama project has made it super easy to install and run LLMs on a variety o
 ```bash
 # Install and run Ollama server
 docker run -d --gpus=all \
-    -v /storj/ai/ollama:/root/.ollama \
+    -v $PWD/ollama:/root/.ollama \
     -p 11434:11434 \
     -p 8000:11434 \
     --restart unless-stopped \
