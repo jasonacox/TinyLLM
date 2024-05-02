@@ -7,7 +7,7 @@ This project helps you build a small locally hosted LLM with a ChatGPT-like web 
 ## Key Features
 
 * Supports multiple LLMs (see list below)
-* Builds a local OpenAI API web service via llama-cpp-python or vLLM. 
+* Builds a local OpenAI API web service via [Ollama](https://ollama.com/), [llama.cpp](https://github.com/ggerganov/llama.cpp) or [vLLM](https://github.com/vllm-project/vllm). 
 * Serves up a Chatbot web interface with customizable prompts, accessing external websites (URLs), vector databases and other sources (e.g. news, stocks, weather).
 
 ## Hardware Requirements
@@ -35,10 +35,61 @@ cd TinyLLM
 
 To run a local LLM, you will need an inference server for the model. This project recommends these options: [vLLM](https://github.com/vllm-project/vllm), [llama-cpp-python](https://github.com/abetlen/llama-cpp-python), and [Ollama](https://ollama.com/). All of these provide a built-in OpenAI API compatible web server that will make it easier for you to integrate with other tools.  
 
+### Ollama Server (Option 1)
 
-### Llama-cpp-python Server (Option 1)
+The Ollama project has made it super easy to install and run LLMs on a variety of systems (MacOS, Linux, Windows) with limited hardware. It serves up an OpenAI compatible API as well. The underlying LLM engine is llama.cpp. Like llama.cpp, the downside with this server is that it can only handle one session/prompt at a time. To run the Ollama server container:
 
-The llama-cpp-python's OpenAI API capatible web server is easy to set up and use. It runs optimized GGUF models that work well on many consumer grade GPUs with small amounts of VRAM. A downside with this server is that it can only handle one session/prompt at a time. The steps below outline how to setup and run the server via command line. Read the details in [llmserver](./llmserver/) to see how to set it up as a persistent service or docker container on your Linux host.
+```bash
+# Install and run Ollama server
+docker run -d --gpus=all \
+    -v $PWD/ollama:/root/.ollama \
+    -p 11434:11434 \
+    -p 8000:11434 \
+    --restart unless-stopped \
+    --name ollama \
+    ollama/ollama
+
+# Download and test run the llama3 model
+docker exec -it ollama ollama run llama3
+
+# Tell server to keep model loaded in GPU
+curl http://localhost:11434/api/generate -d '{"model": "llama3", "keep_alive": -1}'
+```
+Ollama support several models (LLMs): https://ollama.com/library If you set up the docker container mentioned above, you can down and run them using:
+
+```bash
+# Download and run Phi-3 Mini, open model by Microsoft.
+docker exec -it ollama ollama run phi3
+
+# Download and run mistral 7B model, by Mistral AI
+docker exec -it ollama ollama run mistral
+```
+
+If you use the TinyLLM Chatbot (see below) with Ollama, make sure you specify the model via: `LLM_MODEL="llama3"` This will cause Ollama to download and run this model. It may take a while to start on first run unless you run one of the `ollama run` or `curl` commands above.
+
+### vLLM Server (Option 2)
+
+vLLM offers a robust OpenAI API compatible web server that supports multiple simultaneous inference threads (sessions). It automatically downloads the models you specifdy from HuggingFace and runs extremely well in containers. vLLM requires GPUs with more VRAM since it uses non-quantized models. AWQ models are also available and more optimizations are underway in the project to reduce the memory footprint. Note, for GPUs with a compute capability of 6 or less, Pascal architecture (see [GPU table](https://github.com/jasonacox/TinyLLM/tree/main/vllm#nvidia-gpu-and-torch-architecture)), follow details [here](./vllm/) instead.
+
+```bash
+# Build Container
+cd vllm
+./build.sh 
+
+# Make a Directory to store Models
+mkdir models
+
+# Edit run.sh or run-awq.sh to pull the model you want to use. Mistral is set by default.
+# Run the Container - This will download the model on the first run
+./run.sh  
+
+# The trailing logs will be displayed so you can see the progress. Use ^C to exit without
+# stopping the container. 
+```
+
+### Llama-cpp-python Server (Option 3)
+
+The llama-cpp-python's OpenAI API compatible web server is easy to set up and use. It runs optimized GGUF models that work well on many consumer grade GPUs with small amounts of VRAM. As with Ollama, a downside with this server is that it can only handle one session/prompt at a time. The steps below outline how to setup and run the server via command line. Read the details in [llmserver](./llmserver/) to see how to set it up as a persistent service or docker container on your Linux host.
 
 ```bash
 # Uninstall any old version of llama-cpp-python
@@ -67,49 +118,6 @@ python3 -m llama_cpp.server \
     --n_ctx 2048 \
     --chat_format llama-2
 ```
-
-### vLLM Server (Option 2)
-
-vLLM offers a robust OpenAI API compatible web server that supports multiple simultaneous inference threads (sessions). It automatically downloads the models you specifdy from HuggingFace and runs extremely well in containers. vLLM requires GPUs with more VRAM since it uses non-quantized models. AWQ models are also available and more optimizations are underway in the project to reduce the memory footprint. Note, for GPUs with a compute capability of 6 or less, Pascal architecture (see [GPU table](https://github.com/jasonacox/TinyLLM/tree/main/vllm#nvidia-gpu-and-torch-architecture)), follow details [here](./vllm/) instead.
-
-```bash
-# Build Container
-cd vllm
-./build.sh 
-
-# Make a Directory to store Models
-mkdir models
-
-# Edit run.sh or run-awq.sh to pull the model you want to use. Mistral is set by default.
-# Run the Container - This will download the model on the first run
-./run.sh  
-
-# The trailing logs will be displayed so you can see the progress. Use ^C to exit without
-# stopping the container. 
-```
-
-### Ollama Server (Option 3)
-
-The Ollama project has made it super easy to install and run LLMs on a variety of architectures. It serves up an OpenAI compatible API as well. The underlying LLM engine is llama.cpp so it has the same constraints. To run the Ollama server container:
-
-```bash
-# Install and run Ollama server
-docker run -d --gpus=all \
-    -v $PWD/ollama:/root/.ollama \
-    -p 11434:11434 \
-    -p 8000:11434 \
-    --restart unless-stopped \
-    --name ollama \
-    ollama/ollama
-
-# Download and test run the llama3 model
-docker exec -it ollama ollama run llama3
-
-# Tell server to keep model loaded in GPU
-curl http://localhost:11434/api/generate -d '{"model": "llama3", "keep_alive": -1}'
-```
-
-If you use the Chatbot with Ollama, make sure you specify the model as "llama3": `LLM_MODEL="llama3"`
 
 ## Run a Chatbot
 
@@ -201,7 +209,6 @@ Here are some suggested models that work well with vLLM.
 | Mistral v0.1 7B AWQ | AWQ | [TheBloke/Mistral-7B-Instruct-v0.1-AWQ](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-AWQ) | 32k |
 | Mixtral-8x7B | None | [mistralai/Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 32k |
 | Meta Llama-3 8B | None | [meta-llama/Meta-Llama-3-8B-Instruct](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct) | 8k |
-meta-llama/Meta-Llama-3-8B-Instruct
 
 ## References
 
