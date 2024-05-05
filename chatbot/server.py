@@ -72,6 +72,7 @@ from bs4 import BeautifulSoup
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse
 from pypdf import PdfReader
 import aiohttp
 
@@ -534,6 +535,11 @@ templates = Jinja2Templates(directory="templates")
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+# Serve static socket.io.js
+@app.get("/socket.io.js")
+def serve_socket_io_js():
+    return FileResponse("templates/socket.io.js", media_type="application/javascript")
+
 # Display settings and stats
 @app.get("/stats")
 async def home(format: str = None):
@@ -686,9 +692,12 @@ async def handle_connect(session_id, env):
                         # Ask LLM for answers
                         response= await ask(client[session_id]["prompt"],session_id)
                         completion_text = ''
+                        tokens = 0
                         # iterate through the stream of events and print it
+                        stime = time.time()
                         for event in response:
                             event_text = event.choices[0].delta.content
+                            tokens += 1
                             if event_text:
                                 chunk = event_text
                                 completion_text += chunk
@@ -696,6 +705,10 @@ async def handle_connect(session_id, env):
                                     print(string_to_hex(chunk), end="")
                                     print(f" = [{chunk}]")
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
+                        # Update footer with stats
+                        await sio.emit('update', {'update': 
+                                                  f"TinyLLM Chatbot {VERSION} - {mymodel} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}", 
+                                                  'voice': 'footer'},room=session_id)
                         # Check for link injection
                         if client[session_id]["links"]:
                             await sio.emit('update', {'update': json.dumps(client[session_id]["links"]), 'voice': 'links'},room=session_id)

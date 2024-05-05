@@ -2,7 +2,11 @@
 
 ## 0.14.6 - News Links
 
+Chatbot
+
 * Expand `/news/` RAG command to include reference URL links in news article headlines.
+* Add response statistics (number of tokens and tokens per second) to footer.
+* Serve up local copy of socket.io.js library to help with air-gap installations.
 
 ## 0.14.5 - Ollama Support
 

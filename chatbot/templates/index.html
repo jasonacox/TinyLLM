@@ -8,6 +8,12 @@
             font-family: Arial, sans-serif;
             overflow: hidden; /* Hide scrollbars */
         }
+        /* Style for links */
+        a {
+            color: #6d6d6d;
+            font-size: 12px;
+            text-decoration: none;
+        }
         #container {
             display: flex;
             flex-direction: column;
@@ -380,7 +386,7 @@
         }
     </script>
     <!-- END: pop-up-dialogue -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="/socket.io.js"></script>
 </head>
 <body>
     <div id="container">
@@ -552,6 +558,11 @@
 
             if (data.voice === "model") {
                 getVersion();
+            }
+
+            if (data.voice === "footer") {
+                // Update the footer with the update message
+                document.getElementById('footer').innerHTML = data.update;
             }
 
             // Ensure we always show the latest

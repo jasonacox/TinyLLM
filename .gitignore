@@ -171,3 +171,6 @@ chatbot/local
 chatbot/oneshot/test.sh
 prompts.json
 chatbot/t
+agents/r
+chatbot/tlocal
+chatbot/tt
