@@ -76,7 +76,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.5"
+VERSION = "v0.14.6"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -119,7 +119,7 @@ default_prompts["agentname"] = "Jarvis"
 default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. The current date is {date}.\n\nYou should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
-default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source]\nHere are some examples: \n1. The World is Round - Science\n2. The Election is over and Children have won - US News\n3. Storms Hit the Southern Coast - ABC\nContext: {context_str}\nAnswer:"
+default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important. Always include the news organization and ID. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - LnkID:[ID]\nHere are some examples: \n1. The World is Round - Science - LnkID:91\n2. The Election is over and Children have won - US News - LnkID:22\n3. Storms Hit the Southern Coast - ABC - LnkID:55\nContext: {context_str}\nTop 10 Headlines with Source and LnkID:"
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
@@ -440,14 +440,19 @@ async def get_top_articles(url, max=10):
             soup = BeautifulSoup(await response.text(), 'xml')
             items = soup.findAll('item')
             articles = ""
-            count = 0
+            links = {}
+            count = 1
             for item in items:
                 title = item.find('title').string.strip()
-                articles += f"Headline: {title}\n"
+                #pubdate = item.find('pubDate').string.strip()
+                #description = item.find('description').string.strip()
+                link = item.find('link').string.strip()
+                links[f"LnkID:{count+100}"] = link
+                articles += f"Headline: {title} - LnkID:{count+100}\n"
                 count += 1
-                if count >= max:
+                if count > max:
                     break
-            return articles
+            return articles, links
 
 # Function - Fetch news for topic
 async def get_news(topic, max=10):
@@ -458,8 +463,8 @@ async def get_news(topic, max=10):
         url = "https://news.google.com/rss/search?q=%s" % topic
     log(f"Fetching news for {topic} from {url}")
     async with aiohttp.ClientSession() as session:
-        response = await get_top_articles(url, max)
-        return response
+        response, links = await get_top_articles(url, max)
+        return response, links
     
 # Function - Extract text from URL
 async def extract_text_from_url(url):
@@ -691,11 +696,15 @@ async def handle_connect(session_id, env):
                                     print(string_to_hex(chunk), end="")
                                     print(f" = [{chunk}]")
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
+                        # Check for link injection
+                        if client[session_id]["links"]:
+                            await sio.emit('update', {'update': json.dumps(client[session_id]["links"]), 'voice': 'links'},room=session_id)
+                            client[session_id]["links"] = ""
                         # Check for references
                         if client[session_id]["references"]:
                             await sio.emit('update', {'update': client[session_id]["references"], 'voice': 'ref'},room=session_id)
                             client[session_id]["references"] = ""
-                        else:
+                        if not ONESHOT:
                             # remember context
                             client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
                     except Exception as e:
@@ -735,6 +744,7 @@ async def handle_connect(session_id, env):
         client[session_id]["prompt"] = ""
         client[session_id]["stop_thread_flag"] = False
         client[session_id]["references"] = ""
+        client[session_id]["links"] = {}
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -836,10 +846,11 @@ async def fetch_news(session_id, p):
     log("News requested")
     topic = p[5:].strip() or "none"
     await sio.emit('update', {'update': '%s [Fetching News]' % p, 'voice': 'user'}, room=session_id)
-    context_str = await get_news(topic, 25)
+    context_str, links = await get_news(topic, 25)
     log(f"News Raw Context = {context_str}")
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
+    client[session_id]["links"] = links
     client[session_id]["prompt"] = expand_prompt(prompts["news"], {"context_str": context_str})
 
 async def handle_rag_command(session_id, p):

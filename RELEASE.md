@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.6 - News Links
+
+* Expand `/news/` RAG command to include reference URL links in news article headlines.
+
 ## 0.14.5 - Ollama Support
 
 * Add logic to chatbot to support OpenAI API servers that do not support the `/v1/models` API. This allows the Chatbot to work with Ollama provided the user specifies the LLM_MODEL, example docker run script:

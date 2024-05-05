@@ -536,6 +536,20 @@
                 updateContainer.innerHTML += "<p class='ref-text'>" + data.update.replace(/[\n\r]/g, "<br>\n") + "</p>";
             }
 
+            if (data.voice === "links") {
+                // {LnkID:xxx:UEL} are used to replace LnkID with URL
+                var payload = JSON.parse(data.update);
+                var messageContainer = document.getElementById("messageContainer");
+                var messageText = messageContainer.innerHTML;
+                for (var key in payload) {
+                    var linkID = key;
+                    var linkURL = payload[key];
+                    var re = new RegExp(linkID, "g");
+                    messageText = messageText.replace(re, "<a href='" + linkURL + "' target='_blank'>[Link]</a>");
+                }
+                messageContainer.innerHTML = messageText;
+            }
+
             if (data.voice === "model") {
                 getVersion();
             }

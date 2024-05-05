@@ -16,6 +16,7 @@ import openai
 import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
+import threading
 
 # Version
 VERSION = "v0.0.1"
@@ -51,7 +52,7 @@ prompts = {
     "baseprompt": "You are {agentname}, a highly intelligent assistant. The current date is {date}.\n\nYou should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions.",
     "weather": "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}.",
     "stock": "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}.",
-    "news": "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source]\nHere are some examples: \n1. The World is Round - Science\n2. The Election is over and Children have won - US News\n3. Storms Hit the Southern Coast - ABC\nContext: {context_str}\nAnswer:",
+    "news": "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization and ID. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - ID: [ID]\nHere are some examples: \n1. The World is Round - Science - ID: 11\n2. The Election is over and Children have won - US News - ID: 22\n3. Storms Hit the Southern Coast - ABC - ID: 55\nContext: {context_str}\nTop 10 Headlines with Source and ID:",
     "clarify": "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}.",
     "location": "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]",
     "company": "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]",
@@ -208,7 +209,34 @@ def get_stock(company):
             return f"The price of {company} (symbol {symbol}) is ${price}."
         except:
             return "Unable to fetch stock price for %s - No data available." % company
+
+# Cache class to store news items
+class Cache:
+    def __init__(self, ttl=60):
+        self.cache = {}
+        self.ttl = ttl
+        self.uuid = 0
+        self.lock = threading.Lock()
+
+    def set(self, value):
+        with self.lock:
+            self.cache[self.uuid] = {"value": value, "time": time.time()}
+            self.uuid += 1
+            return self.uuid - 1
+
+    def get(self, key):
+        with self.lock:
+            # Clear out old cache items
+            for k in list(self.cache.keys()):
+                if time.time() - self.cache[k]["time"] > self.ttl:
+                    del self.cache[k]
+            if key in self.cache:
+                return self.cache[key]["value"]
+            return None
     
+# Global cache for news items
+news_cache = Cache(60)
+
 # Function - Get news from Google
 def get_news(topic, max=10):
     if not topic:
@@ -224,8 +252,11 @@ def get_news(topic, max=10):
     count = 0
     for item in items:
         title = item.find('title').string.strip()
-        pubdate = item.find('pubDate').string.strip()
-        articles += f"Headline: {title} - Pub Date: {pubdate}\n"
+        #pubdate = item.find('pubDate').string.strip()
+        #description = item.find('description').string.strip()
+        link = item.find('link').string.strip()
+        uuid = news_cache.set(link)
+        articles += f"Headline: {title} - ID: {uuid}\n"
         count += 1
         if count >= max:
             break
@@ -236,7 +267,23 @@ def fetch_news(topic):
     context_str = get_news(topic, 25)
     log(f"News Raw Context = {context_str}")
     prompt = expand_prompt(prompts["news"], {"context_str": context_str})
-    return ask(prompt)
+    answer = ask(prompt)
+    # Replace IDs in answer with URLs
+    result = ""
+    for line in answer.split("\n"):
+        if "ID:" in line:
+            elements = line.split("ID: ")
+            title = elements[0].strip()
+            if len(elements) > 1:
+                uuid = elements[1].strip()        
+                url = news_cache.get(int(uuid))
+                result += f"{title} <a href=\"{url}\">[Link]</a>"
+            else:
+                result += line
+        else:
+            result += line
+        result += "\n"
+    return result
 
 def handle_weather_command(p):
     log("Get Weather")
@@ -310,4 +357,3 @@ if __name__ == "__main__":
     news = fetch_news(COMPANY)
     print(f"News for {COMPANY}:\n{news}")
     print("")
-
