@@ -24,22 +24,38 @@ docker run -d -p 3000:3000 --name grafana \
     grafana/grafana
 ```
 
-## Cronjob
+## Monitoring Tool
 
 The monitor.py script will poll local GPU and CPU information and store it in the InfluxDB for graphing in Grafana.
 
+Dockerfile to build the container:
+
+```dockerfile
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+RUN apt-get update && apt-get install -y python3 python3-pip
+RUN pip3 install psutil influxdb
+ENV INFLUXDB_HOST localhost
+ENV INFLUXDB_PORT 8086
+ENV INFLUXDB_DBNAME tinyllm
+ENV WAIT_TIME 5
+COPY monitor.py .
+CMD ["python3", "monitor.py"]
+```
+
+Build and Run
+
 ```bash
-# Install dependent libraries
-pip install psutil
-pip install influxdb
+# Build
+docker build -t gpumonitor .
 
-cd ~TinyLLM/monitoring
-
-# Add a task to crontab to run montior every 5 seconds
-echo "`crontab -l`" > mycron
-echo "*/5 * * * * `which python3` ${PWD}/monitor.py" >> mycron
-crontab mycron
-rm mycron
+# Run
+docker run -d --name gpumonitor --gpus all \
+     -e INFLUXDB_HOST=localhost \
+     -e INFLUXDB_PORT=8086 \
+     -e INFLUXDB_DBNAME=tinyllm \
+     -e WAIT_TIME=5 \
+     --restart always \
+     gpumonitor
 ```
 
 ## Dashboard Setup
