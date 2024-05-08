@@ -127,7 +127,9 @@
       "id": 9,
       "options": {
         "legend": {
-          "calcs": [],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -2222,6 +2224,6 @@
   "timezone": "",
   "title": "TinyLLM Monitor",
   "uid": "z8qG4_ZIk",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
