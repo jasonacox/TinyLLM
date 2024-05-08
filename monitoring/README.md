@@ -2,7 +2,7 @@
 
 These are some tools to help monitor your TinyLLM system.
 
-<img width="1319" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/ab24068b-5303-4e82-b05a-ee23e55a7959">
+<img width="1319" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/a1389cb0-c3d1-46ec-bec1-1ff3ac412507">
 
 ## Setup
 
