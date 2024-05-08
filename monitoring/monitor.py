@@ -3,8 +3,7 @@
 # Gather System and GPU data and store in InfluxDB
 #
 # Requirements:
-#  pip install psutil
-#  pip install influxdb
+#  pip install psutil influxdb
 # 
 # Author: Jason Cox
 # 7 May 2024
@@ -14,17 +13,33 @@ import subprocess
 import psutil
 from influxdb import InfluxDBClient
 import json
+import time
+import os
+import sys
 
-# Replace these with your InfluxDB server details
-host = 'localhost'
-port = 8086
-database = 'tinyllm'
+# Replace these with your InfluxDB server details from environment variables or secrets
+host = os.getenv('INFLUXDB_HOST') or 'localhost'
+port = int(os.getenv('INFLUXDB_PORT')) or 8086
+database = os.getenv('INFLUXDB_DATABASE') or 'tinyllm'  
+wait_time = int(os.getenv('WAIT_TIME')) or 5
+
+# Print application header
+print("System and GPU Monitor v0.1", file=sys.stderr)
+sys.stderr.flush()
 
 # Connect
 client = InfluxDBClient(
     host=host,
     port=port,
     database=database)
+# Check connection
+if not client:
+    print(f" - Connection to InfluxDB {host}:{port} database {database} failed", file=sys.stderr)
+    sys.stderr.flush()
+    sys.exit(1)
+else:
+    print(f" - Connection to InfluxDB {host}:{port} database {database} successful", file=sys.stderr)
+    sys.stderr.flush()
 
 # Functions
 def getsensors():
@@ -44,60 +59,79 @@ def getcommand(command):
     except subprocess.CalledProcessError as e:
         print("Error executing the command:", e)
 
+print(f" - Monitor started - Looping every {wait_time} seconds.", file=sys.stderr)
+sys.stderr.flush()
 
-# Grab data points
-measurements = {}
-memory_stats = psutil.virtual_memory()
-sen = getsensors()
-hd1temp = hd2temp = hd3temp = 0.0
+# Main loop
+try:
+    while True:
+        # Grab data points
+        measurements = {}
+        memory_stats = psutil.virtual_memory()
+        sen = getsensors()
+        hd1temp = hd2temp = hd3temp = 0.0
 
-measurements["memory"] = memory_stats.used
-measurements["cpu"] =  psutil.cpu_percent(interval=1.0)
-command = "nvidia-smi -q -d POWER -i 0 | grep Draw | grep W | awk '{print $4}'"
-measurements["gpupower"] =  float(getcommand(command))
-command = "nvidia-smi -q -d MEMORY -i 0 | grep Used | head -1 | awk '{print $3}'"
-measurements["gpumemory"] =  int(getcommand(command))
-command = "nvidia-smi -q -d TEMPERATURE -i 0 | grep Current | head -1 | awk '{print $5}'"
-measurements["gputemp"] =  float(getcommand(command))
+        measurements["memory"] = memory_stats.used
+        measurements["cpu"] =  psutil.cpu_percent(interval=1.0)
 
+        command = "/usr/bin/nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total --format csv"
+        """
+        Command output:
+        utilization.gpu [%], temperature.gpu, power.draw [W], memory.used [MiB], memory.total [MiB]
+        0 %, 32, 31.09 W, 13322 MiB, 16384 MiB
+        0 %, 34, 31.33 W, 13288 MiB, 16384 MiB
+        0 %, 31, 32.56 W, 13288 MiB, 16384 MiB
+        0 %, 33, 33.78 W, 13228 MiB, 16384 MiB
+        0 %, 31, 31.07 W, 360 MiB, 16384 MiB
+        0 %, 31, 31.31 W, 460 MiB, 16384 MiB
+        0 %, 28, 30.82 W, 1294 MiB, 16384 MiB
+        """
+        # Remove the header and split the output into lines
+        nvidia = getcommand(command).split("\n")[1:]
+        i = 0
+        for gpu in nvidia:
+            (util,temp,power,used,total) = gpu.split(",")
+            # print(f"GPU{i}: Util: {util}; Temp: {temp}; Power: {power}; Used: {used}; Total: {total}")
 
-"""
-drivetemp-scsi-1-0 : {'Adapter': 'SCSI adapter', 'temp1': {'temp1_input': 34.0, 'temp1_max': 55.0, 'temp1_min': 14.0, 'temp1_crit': 60.0, 'temp1_lcrit': 10.0, 'temp1_lowest': 27.0, 'temp1_highest': 36.0}}
+            # Remove non-numeric characters and convert to floats/ints
+            measurements[f"gpupower{i}"] = float(power.replace(" W",""))
+            measurements[f"gputemp{i}"] = float(temp)
+            measurements[f"gpumemory{i}"] = int(used.replace(" MiB",""))
+            measurements[f"gputotalmemory{i}"] = int(total.replace(" MiB",""))
+            measurements[f"gpuutil{i}"] = int(util.replace(" %",""))
+            i += 1
 
-coretemp-isa-0000 : {'Adapter': 'ISA adapter', 'Package id 0': {'temp1_input': 32.0, 'temp1_max': 84.0, 'temp1_crit': 100.0, 'temp1_crit_alarm': 0.0}, 'Core 0': {'temp2_input': 28.0, 'temp2_max': 84.0, 'temp2_crit': 100.0, 'temp2_crit_alarm': 0.0}, 'Core 1': {'temp3_input': 27.0, 'temp3_max': 84.0, 'temp3_crit': 100.0, 'temp3_crit_alarm': 0.0}, 'Core 2': {'temp4_input': 32.0, 'temp4_max': 84.0, 'temp4_crit': 100.0, 'temp4_crit_alarm': 0.0}, 'Core 3': {'temp5_input': 29.0, 'temp5_max': 84.0, 'temp5_crit': 100.0, 'temp5_crit_alarm': 0.0}}
+        # Create payload
+        json_body = []
 
-"""
-for i in sen:
-    #print(f"{i} : {sen[i]}")
-    if i.startswith("drivetemp-scsi-"): #0-0":
-        hd = int(i[15]) + 1
-        #hd1temp = sen[i]['temp1']['temp1_input']
-        name = "hd%dtemp" % hd
-        value = sen[i]['temp1']['temp1_input']
-        #print(f"{name} = {value}")
-        measurements[name] = value
-    if i.startswith("coretemp-isa-0000"):
-        name = "cputemp"
-        value = sen[i]['Package id 0']['temp1_input']
-        measurements[name] = value
-    
+        for name, value in measurements.items():
+            data_point = {
+                "measurement": name,
+                "tags": {},
+                "fields": {"value": value}
+            }
+            json_body.append(data_point)
 
-# Create payload
-json_body = []
+        # Debug
+        #print(json.dumps(json_body, indent=4))
+        #print("Sending...")
 
-for name, value in measurements.items():
-    data_point = {
-        "measurement": name,
-        "tags": {},
-        "fields": {"value": value}
-    }
-    json_body.append(data_point)
+        # Send to InfluxDB
+        r = client.write_points(json_body)
+        #print(r)
+        client.close()
 
-# Debug
-#print(json.dumps(json_body, indent=4))
-#print("Sending...")
+        # Wait 5 seconds
+        # print("Sleeping...")
+        time.sleep(wait_time)
 
-# Send to InfluxDB
-r = client.write_points(json_body)
-#print(r)
-client.close()
+except KeyboardInterrupt:
+    print(" - Monitor stopped by user", file=sys.stderr)
+    sys.stderr.flush()
+except Exception as e:
+    print(f" - Monitor stopped with error: {e}", file=sys.stderr)
+    sys.stderr.flush()
+
+print(" - Monitor stopped", file=sys.stderr)
+sys.stderr.flush()
+
