@@ -2,6 +2,8 @@
 
 These are some tools to help monitor your TinyLLM system.
 
+<img width="1319" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/ab24068b-5303-4e82-b05a-ee23e55a7959">
+
 ## Setup
 
 Launch InfluxDB and Grafana
@@ -31,3 +33,11 @@ echo "*/5 * * * * `which python3` ${PWD}/monitor.py" >> mycron
 crontab mycron
 rm mycron
 ```
+
+## Dashboard Setup
+
+Dashboard Setup
+
+1. Go to `http://localhost:3000` and default user/password is admin/admin.
+2. Create a data source, InfluxDB and use database name `tinyllm` to match monitor.py script.
+3. Import dashboard and select `dashboard.json`.
