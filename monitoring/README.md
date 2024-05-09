@@ -1,6 +1,6 @@
-# Monitoring Tools
+# Monitoring Dashboard
 
-This will help you set up a dashboard to monitor your TinyLLM system.
+This sets up a Grafana dashboard to monitor your TinyLLM system. It uses Telegraf to fetch the Prometheus metrics from vLLM and a [monitor.py](monitor.py) script to pull the GPU metrics from the nvidia-smi tool.
 
 <img width="1319" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/a1389cb0-c3d1-46ec-bec1-1ff3ac412507">
 <img width="1498" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/f0bf092d-9a1a-4a41-902b-f95585480fde">
@@ -38,7 +38,7 @@ docker run -d -p 3000:3000 --name grafana \
 
 ## Monitoring Tool
 
-The monitor.py script will poll local GPU and CPU information and store it in the InfluxDB for graphing in Grafana.
+The monitor.py script will poll local Nvidia GPU and host CPU information and store it in the InfluxDB for graphing in Grafana. The steps below will build a CUDA container that will fetch the metrics every 5 seconds.
 
 Dockerfile to build the container:
 
@@ -77,4 +77,4 @@ Dashboard Setup
 
 1. Go to `http://localhost:3000` and default user/password is admin/admin.
 2. Create a data source, select InfluxDB and use URL http://x.x.x.x:8086 (replace with IP address of host), database name `tinyllm` and timeout `5s`.
-3. Import dashboard and select `dashboard.json`.
+3. Import dashboard and upload or copy/paste [dashboard.json](dashboard.json). Select InfluxDB as the data source.
