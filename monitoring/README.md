@@ -2,8 +2,8 @@
 
 This sets up a Grafana dashboard to monitor your TinyLLM system. It uses Telegraf to fetch the Prometheus metrics from vLLM and a [monitor.py](monitor.py) script to pull the GPU metrics from the nvidia-smi tool.
 
-<img width="1319" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/a1389cb0-c3d1-46ec-bec1-1ff3ac412507">
-<img width="1498" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/f0bf092d-9a1a-4a41-902b-f95585480fde">
+![image](https://github.com/jasonacox/TinyLLM/assets/836718/a1389cb0-c3d1-46ec-bec1-1ff3ac412507)
+![image](https://github.com/vllm-project/vllm/assets/836718/878b4c99-2707-4907-9847-6521aad30755)
 
 ## Setup
 
