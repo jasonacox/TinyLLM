@@ -10,7 +10,7 @@
 #     -e WAIT_TIME=5 \
 #     gpumonitor
 
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
 RUN apt-get update && apt-get install -y python3 python3-pip
 RUN pip3 install psutil influxdb
 ENV INFLUXDB_HOST localhost
