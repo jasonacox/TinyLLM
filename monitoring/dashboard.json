@@ -2223,7 +2223,7 @@
           "tags": []
         }
       ],
-      "title": "vLLM: Token per Second",
+      "title": "vLLM: Tokens per Second",
       "transparent": true,
       "type": "timeseries"
     },
