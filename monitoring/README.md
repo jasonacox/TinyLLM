@@ -1,26 +1,38 @@
 # Monitoring Tools
 
-These are some tools to help monitor your TinyLLM system.
+This will help you set up a dashboard to monitor your TinyLLM system.
 
 <img width="1319" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/a1389cb0-c3d1-46ec-bec1-1ff3ac412507">
+<img width="1498" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/f0bf092d-9a1a-4a41-902b-f95585480fde">
 
 ## Setup
 
-Launch InfluxDB and Grafana
+Launch InfluxDB, Telegraf and Grafana
 
 ```bash
 # Run InfluxDB docker container
-docker run -d -p 8086:8086 --name influxdb \
+docker run -d -p 0.0.0.0:8086:8086 --name influxdb \
     -v $PWD/influxdb:/var/lib/influxdb \
     --restart=unless-stopped \
     -e INFLUXDB_DB=tinyllm \
     influxdb:1.8
+
+# Run Telegraf docker container (for vLLM)
+docker run -d --name telegraf \
+    --user "$(id -u)" \
+    -v $PWD/telegraf.conf:/etc/telegraf/telegraf.conf \
+    --network host \
+    --restart unless-stopped \
+    telegraf:1.28.2 \
+    --config /etc/telegraf/telegraf.conf \
+    --config-directory /etc/telegraf/telegraf.d
 
 # Run Grafana docker container
 docker run -d -p 3000:3000 --name grafana \
     --user "$(id -u)" \
     -v $PWD/grafana:/var/lib/grafana \
     --restart=unless-stopped \
+    -e GF_AUTH_ANONYMOUS_ENABLED=true \
     grafana/grafana
 ```
 
@@ -30,8 +42,8 @@ The monitor.py script will poll local GPU and CPU information and store it in th
 
 Dockerfile to build the container:
 
-```dockerfile
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+```Dockerfile
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
 RUN apt-get update && apt-get install -y python3 python3-pip
 RUN pip3 install psutil influxdb
 ENV INFLUXDB_HOST localhost
@@ -48,12 +60,13 @@ Build and Run
 # Build
 docker build -t gpumonitor .
 
-# Run
+# Run 
 docker run -d --name gpumonitor --gpus all \
      -e INFLUXDB_HOST=localhost \
      -e INFLUXDB_PORT=8086 \
      -e INFLUXDB_DBNAME=tinyllm \
      -e WAIT_TIME=5 \
+     --network host \
      --restart always \
      gpumonitor
 ```

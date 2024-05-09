@@ -12,10 +12,10 @@
 import subprocess
 import psutil
 from influxdb import InfluxDBClient
-import json
 import time
 import os
 import sys
+import signal
 
 # Replace these with your InfluxDB server details from environment variables or secrets
 host = os.getenv('INFLUXDB_HOST') or 'localhost'
@@ -26,6 +26,11 @@ wait_time = int(os.getenv('WAIT_TIME')) or 5
 # Print application header
 print("System and GPU Monitor v0.1", file=sys.stderr)
 sys.stderr.flush()
+
+# Signal handler - Exit on SIGTERM
+def sigTermHandler(signum, frame):
+    raise SystemExit
+signal.signal(signal.SIGTERM, sigTermHandler)
 
 # Connect
 client = InfluxDBClient(
@@ -41,20 +46,10 @@ else:
     print(f" - Connection to InfluxDB {host}:{port} database {database} successful", file=sys.stderr)
     sys.stderr.flush()
 
-# Functions
-def getsensors():
-    try:
-        output = subprocess.check_output(['sensors', '-j'])
-        # Parse the JSON output
-        temperature_data = json.loads(output.decode())
-        return temperature_data
-    except Exception as e:
-        return str(e)
-
+# Function to run a command and return the output
 def getcommand(command):
     try:
         output = subprocess.check_output(command, shell=True, universal_newlines=True)
-        # The 'universal_newlines=True' option ensures that the output is returned as a string (text mode).
         return output.strip()
     except subprocess.CalledProcessError as e:
         print("Error executing the command:", e)
@@ -65,15 +60,13 @@ sys.stderr.flush()
 # Main loop
 try:
     while True:
-        # Grab data points
+        # Get system metrics
         measurements = {}
         memory_stats = psutil.virtual_memory()
-        sen = getsensors()
-        hd1temp = hd2temp = hd3temp = 0.0
-
         measurements["memory"] = memory_stats.used
         measurements["cpu"] =  psutil.cpu_percent(interval=1.0)
 
+        # Get GPU metrics
         command = "/usr/bin/nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total --format csv"
         """
         Command output:
@@ -86,14 +79,10 @@ try:
         0 %, 31, 31.31 W, 460 MiB, 16384 MiB
         0 %, 28, 30.82 W, 1294 MiB, 16384 MiB
         """
-        # Remove the header and split the output into lines
         nvidia = getcommand(command).split("\n")[1:]
         i = 0
         for gpu in nvidia:
             (util,temp,power,used,total) = gpu.split(",")
-            # print(f"GPU{i}: Util: {util}; Temp: {temp}; Power: {power}; Used: {used}; Total: {total}")
-
-            # Remove non-numeric characters and convert to floats/ints
             measurements[f"gpupower{i}"] = float(power.replace(" W",""))
             measurements[f"gputemp{i}"] = float(temp)
             measurements[f"gpumemory{i}"] = int(used.replace(" MiB",""))
@@ -112,20 +101,14 @@ try:
             }
             json_body.append(data_point)
 
-        # Debug
-        #print(json.dumps(json_body, indent=4))
-        #print("Sending...")
-
         # Send to InfluxDB
         r = client.write_points(json_body)
-        #print(r)
         client.close()
 
-        # Wait 5 seconds
-        # print("Sleeping...")
+        # Wait
         time.sleep(wait_time)
 
-except KeyboardInterrupt:
+except (KeyboardInterrupt, SystemExit):
     print(" - Monitor stopped by user", file=sys.stderr)
     sys.stderr.flush()
 except Exception as e:
