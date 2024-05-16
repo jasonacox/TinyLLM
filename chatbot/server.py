@@ -77,7 +77,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.6"
+VERSION = "v0.14.7"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -533,7 +533,7 @@ templates = Jinja2Templates(directory="templates")
 # Display the main chatbot page
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 # Serve static socket.io.js
 @app.get("/socket.io.js")
