@@ -17,6 +17,8 @@ import os
 import sys
 import signal
 
+BUILD = "0.1"
+
 # Replace these with your InfluxDB server details from environment variables or secrets
 host = os.getenv('INFLUXDB_HOST') or 'localhost'
 port = int(os.getenv('INFLUXDB_PORT')) or 8086
@@ -24,7 +26,7 @@ database = os.getenv('INFLUXDB_DATABASE') or 'tinyllm'
 wait_time = int(os.getenv('WAIT_TIME')) or 5
 
 # Print application header
-print("System and GPU Monitor v0.1", file=sys.stderr)
+print(f"System and GPU Monitor v{BUILD}", file=sys.stderr)
 sys.stderr.flush()
 
 # Signal handler - Exit on SIGTERM
