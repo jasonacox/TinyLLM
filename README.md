@@ -121,7 +121,7 @@ python3 -m llama_cpp.server \
 
 ## Run a Chatbot
 
-The TinyLLM Chatbot is a simple web based python flask app that allows you to chat with an LLM using the OpenAI API. It supports multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
+The TinyLLM Chatbot is a simple web based python FastAPI app that allows you to chat with an LLM using the OpenAI API. It supports multiple sessions and remembers your conversational history. Some RAG (Retrieval Augmented Generation) features including:
 
 * Summarizing external websites and PDFs (paste a URL in chat window)
 * List top 10 headlines from current news (use `/news`)
