@@ -105,11 +105,10 @@ nvidia-docker run -d --gpus all -shm-size=10.24gb -p 8000:8000 \
     -v $PWD/models:/root/.cache/huggingface \
     --env "HF_TOKEN={Your_Hugingface_Token}" \
     --restart unless-stopped \
-    --name $CONTAINER \
+    --name vllm \
     vllm \
     --host 0.0.0.0 \
     --model=mistralai/Mistral-7B-Instruct-v0.1 \
-    --served-model-name vllm \
     --dtype=float \
     --max-model-len 20000
 
@@ -120,6 +119,7 @@ nvidia-docker run -d --gpus all -shm-size=10.24gb -p 8000:8000 \
     # --disable-log-requests
     # --tensor-parallel-size NUM_GPU
     # --enforce-eager 
+    # --served-model-name mistral
 
 # Print Running Logs - ^C to Stop Viewing Logs
 docker logs vllm -f
