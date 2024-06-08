@@ -12,17 +12,13 @@ cd vllm
 
 # Copy helpful files
 echo "Copying helpful files..."
-mv Dockerfile Dockerfile.orig       # save original
-cp ../Dockerfile.source Dockerfile
-cp ../entrypoint.sh entrypoint.sh 
 cp ../run-pascal.sh run.sh
 cp ../build.sh build.sh
-cp ../setup.py.patch setup.py.patch
+cp ../vllm.patch vllm.patch
 
 # Patch the source code
 echo "Patching source code..."
-cp setup.py setup.py.orig           # save original
-patch setup.py setup.py.patch
+patch < vllm.patch
 
 # Build the docker image
 echo "Building docker image..."
@@ -30,7 +26,7 @@ echo "Building docker image..."
 
 # Make models directory
 echo "Creating models directory..."
-mkdir models
+mkdir -p models
 echo "Models will be stored in ${PWD}/models."
 
 # Done

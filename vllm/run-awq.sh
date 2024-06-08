@@ -18,24 +18,32 @@ docker rm $CONTAINER
 
 echo "Starting new $CONTAINER instance..."
 
-docker run -d \
-  -p 8000:8000 \
-  --shm-size=10.24gb \
-  --gpus all \
-  -e MODEL=$LLM \
-  -e PORT=8000 \
-  -e GPU_MEMORY_UTILIZATION=0.95 \
-  -e QUANTIZATION=awq \
-  -e DTYPE=$QT \
-  -e NUM_GPU=1 \
-  -e SERVED_MODEL_NAME=tinyllm \
-  -e HF_HOME=/app/models \
-  -v $PWD/models:/app/models \
-  --restart unless-stopped \
-  --name $CONTAINER \
-  vllm
+docker run -d --gpus all \
+    -v $PWD/models:/root/.cache/huggingface \
+    -p 8000:8000 \
+    --env "HF_TOKEN={Your_Hugingface_Token}" \
+    --restart unless-stopped \
+    --name $CONTAINER \
+    vllm/vllm-openai:latest \
+    --host 0.0.0.0 \
+    --model=$MODEL \
+    --gpu-memory-utilization 0.95 \
+    --enforce-eager \
+    --served-model-name $LLM \
+    --disable-log-requests \
+    --dtype=auto \
+    --quantization awq
 
-# Additional options: -e EXTRA_ARGS="" -e MAX_MODEL_LEN=xxxxx
+    # Additional arguments to pass to the API server on startup:
+    # --gpu-memory-utilization 
+    # --max-model-len
+    # --dtype
+    # --quantization
+    # --enforce-eager
+    # --disable-log-requests
+
+
+-q ${QUANTIZATION} --dtype ${DTYPE}"
 
 echo "Printing logs (^C to quit)..."
 

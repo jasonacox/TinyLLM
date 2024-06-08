@@ -63,81 +63,64 @@ cd vllm
 # git checkout 220a476
 ```
 
-2. Create Dockerfile ([link](./Dockerfile.source))
-
-```dockerfile
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
-RUN apt-get update -y \
-     && apt-get install -y python3-pip
-WORKDIR /app
-COPY . .
-RUN python3 -m pip install -e .
-EXPOSE 8000
-COPY entrypoint.sh /usr/local/bin/
-CMD [ "entrypoint.sh" ]
-```
-
-3. Create entrypoint.sh ([link](./entrypoint.sh))
-
-```bash
-# Start the vLLM OpenAI API compatible server
-python3 -m vllm.entrypoints.openai.api_server \
-    --tensor-parallel-size ${NUM_GPU} \
-    --worker-use-ray \
-    --host 0.0.0.0 \
-    --port "${PORT}" \
-    --model "${MODEL}" \
-    --served-model-name "${MODEL}" ${EXTRA_ARGS}
-```
-
-4. Edit setup.py (see [patch](./setup.py.patch))
+2. Edit Dockerfile and CMakeList.txt:
 
 ```patch
---- _setup.py	2024-01-27 18:44:45.509406538 +0000
-+++ setup.py	2024-01-28 00:02:23.581639719 +0000
-@@ -18,7 +18,7 @@
- MAIN_CUDA_VERSION = "12.1"
+--- _Dockerfile	2024-06-07 22:09:30.069782339 -0700
++++ Dockerfile	2024-06-07 22:10:02.357875428 -0700
+@@ -35,7 +35,7 @@
+ # can be useful for both `dev` and `test`
+ # explicitly set the list to avoid issues with torch 2.2
+ # see https://github.com/pytorch/pytorch/pull/123243
+-ARG torch_cuda_arch_list='7.0 7.5 8.0 8.6 8.9 9.0+PTX'
++ARG torch_cuda_arch_list='6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0+PTX'
+ ENV TORCH_CUDA_ARCH_LIST=${torch_cuda_arch_list}
+ #################### BASE BUILD IMAGE ####################
  
- # Supported NVIDIA GPU architectures.
--NVIDIA_SUPPORTED_ARCHS = {"7.0", "7.5", "8.0", "8.6", "8.9", "9.0"}
-+NVIDIA_SUPPORTED_ARCHS = {"6.0", "6.1", "6.2", "7.0", "7.5", "8.0", "8.6", "8.9", "9.0"}
- ROCM_SUPPORTED_ARCHS = {"gfx90a", "gfx908", "gfx906", "gfx1030", "gfx1100"}
- # SUPPORTED_ARCHS = NVIDIA_SUPPORTED_ARCHS.union(ROCM_SUPPORTED_ARCHS)
+--- _CMakeList.txt	2024-06-07 22:08:27.657601121 -0700
++++ CMakeLists.txt	2024-06-07 22:09:01.541699767 -0700
+@@ -16,7 +16,7 @@
+ set(PYTHON_SUPPORTED_VERSIONS "3.8" "3.9" "3.10" "3.11")
  
-@@ -184,9 +184,9 @@
-     device_count = torch.cuda.device_count()
-     for i in range(device_count):
-         major, minor = torch.cuda.get_device_capability(i)
--        if major < 7:
-+        if major < 6:
-             raise RuntimeError(
--                "GPUs with compute capability below 7.0 are not supported.")
-+                "GPUs with compute capability below 6.0 are not supported.")
-         compute_capabilities.add(f"{major}.{minor}")
+ # Supported NVIDIA architectures.
+-set(CUDA_SUPPORTED_ARCHS "7.0;7.5;8.0;8.6;8.9;9.0")
++set(CUDA_SUPPORTED_ARCHS "6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0")
  
- ext_modules = []
+ # Supported AMD GPU architectures.
+ set(HIP_SUPPORTED_ARCHS "gfx906;gfx908;gfx90a;gfx940;gfx941;gfx942;gfx1030;gfx1100")
 ```
 
-5. Create build.sh ([link](./build.sh))
+3. Create build.sh ([link](./build.sh))
 
 ```bash
 # Create Container
-nvidia-docker build -t vllm .
+nvidia-docker build . -f Dockerfile --target vllm-openai --tag vllm
 ```
 
-6. Create run.sh ([link](./run.sh))
+4. Create run.sh ([link](./run.sh))
 
 ```bash
 # Run Container
-nvidia-docker run -d -p 8000:8000 --gpus=all --shm-size=10.24gb \
-  -e MODEL=mistralai/Mistral-7B-Instruct-v0.1 \
-  -e PORT=8000 \
-  -e HF_HOME=/app/models \
-  -e NUM_GPU=4 \
-  -e EXTRA_ARGS="--dtype float --max-model-len 20000" \
-  -v $PWD/models:/app/models \
-  --name vllm \
-  vllm 
+nvidia-docker run -d --gpus all -shm-size=10.24gb -p 8000:8000 \
+    -v $PWD/models:/root/.cache/huggingface \
+    --env "HF_TOKEN={Your_Hugingface_Token}" \
+    --restart unless-stopped \
+    --name $CONTAINER \
+    vllm \
+    --host 0.0.0.0 \
+    --model=mistralai/Mistral-7B-Instruct-v0.1 \
+    --served-model-name vllm \
+    --dtype=float \
+    --max-model-len 20000
+
+    # Additional arguments to pass to the API server on startup:
+    # --gpu-memory-utilization 0.95
+    # --dtype auto|half|float
+    # --quantization awq
+    # --disable-log-requests
+    # --tensor-parallel-size NUM_GPU
+    # --enforce-eager 
+
 # Print Running Logs - ^C to Stop Viewing Logs
 docker logs vllm -f
 ```
