@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TinyLLM Lab</title>
+    <meta name="viewport" content="width=device-width, height=device-height, maximum-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            overflow: hidden; /* Hide scrollbars */
+        }
+        /* Style for links */
+        a {
+            color: #6d6d6d;
+            font-size: 12px;
+            text-decoration: none;
+        }
+        /* Style for ids */
+        #header {
+            text-align: center;
+            font-size: 20px;
+            color: #333;
+            padding: 3px;
+            border-bottom: 1px solid #ddd;
+        }
+        #footer {
+            text-align: center; 
+            font-size: 12px; 
+            color: #888; 
+            padding-top: 5px;
+        }
+        #footer a {
+            color: #888; 
+            text-decoration: none; 
+        }
+        #baseprompt {
+            padding: 5px;
+            height: 60px;
+            background-color: #7f7f7f88;
+            border-bottom: 1px solid #ddd;
+            border: 2px solid #434343;
+            /* two divs side by side */
+            display: flex;  
+        }
+        #vectordb {
+            padding: 5px;
+            height: 50px;
+            background-color: #f1f1f1;
+            border-left: 1px dashed #a8a8a8;
+            border-right: 1px dashed #a8a8a8;
+            display: flex;
+        }
+        #user-input {
+            padding: 5px;
+            height: 60px;
+            background-color: #f1f1f1;
+            border: 1px dashed #a8a8a8;
+            display: flex;
+        }
+        #vector-response {
+            padding: 5px;
+            height: 80px;
+            background-color: #f1f1f1;
+            border-left: 1px dashed #a8a8a8;
+            border-right: 1px dashed #a8a8a8;
+            display: flex;
+        }
+        #rag-prompt {
+            padding: 5px;
+            height: 60px;
+            background-color: #f1f1f1;
+            border: 1px dashed #a8a8a8;
+            display: flex;
+        }
+        #rag-response {
+            padding: 5px;
+            height: 100px;
+            background-color: #f1f1f1;
+            border-bottom: 1px solid #ddd;
+            border-left: 1px dashed #a8a8a8;
+            border-right: 1px dashed #a8a8a8;
+            overflow-y: scroll;
+            display: flex;
+        }
+        #llm {
+            padding: 5px;
+            height: calc(100% - 360px);
+            background-color: #f1f1f1;
+            border-bottom: 1px solid #ddd;
+            border: 2px solid #0044ff;
+        }
+        #llm-input {
+            border-radius: 5px;
+            padding: 5px;
+            height: 70px;
+            background-color: #002fff54;
+            border-bottom: 1px solid #ddd;
+        }
+        #llm-response {
+            padding: 5px;
+            height: 100px;
+            background-color: #0026ff2a;
+            border-bottom: 1px solid #ddd;
+            overflow-y: auto;
+            /* add visible scrollbar */
+            scrollbar-width: thin;
+            scrollbar-color: #3a30c9 #f1f1f1;
+            /* always display scrollbar */
+            overflow-y: scroll;
+        }
+        /* style for class */
+        .left-text {
+            width: 80px;
+            height: 30px;
+            border: none;
+            padding: 5px;
+            margin-right: 5px;
+            text-align: left;
+        }
+        .result-text {
+            width: 80px;
+            height: 30px;
+            border: none;
+            padding: 5px;
+            margin-right: 5px;
+            text-align: right;
+        }
+        .buttons {
+            width: 80px;
+            height: 24px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 5px;
+            margin-top: 2px;
+        }
+        .button2 {
+            width: 80px;
+            height: 24px;
+            background-color: #af4c4c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 5px;
+            margin-top: 2px;
+        }
+        .button3 {
+            width: 80px;
+            height: 24px;
+            background-color: #3a30c9;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 5px;
+            margin-top: 2px;
+        }
+        .user-text {
+            /* set user text color as blue */
+            color: #e71010;
+        }
+        .prompt-value {
+            width: calc(100% - 100px);
+            height: 40px;
+            border: 2px solid #254cb7;
+            background-color: rgba(251, 255, 0, 0.212);
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .input-ask-llm {
+            width: calc(100% - 100px);
+            height: 40px;
+            border: 2px solid #b72525;
+            background-color: rgb(255, 255, 255);
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .input-vectordb {
+            width: calc(100% - 200px);
+            height: 20px;
+            border: 2px solid #b72525;
+            background-color: rgba(251, 255, 0, 0.212);
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .input-vectornum {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #b72525;
+            background-color: rgba(251, 255, 0, 0.212);
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .input-prompt {
+            width: calc(100% - 100px);
+            height: 40px;
+            border: 2px solid #b72525;
+            background-color: rgba(251, 255, 0, 0.212);
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .output-vector {
+            width: calc(100% - 10px);
+            height: calc(100% - 20px);
+            border: 1px solid #575757;
+            border-radius: 5px;
+            padding: 5px;
+            /* add visible scrollbar */
+            scrollbar-width: thin;
+            scrollbar-color: #2c2c2c #f1f1f1;
+            /* always display scrollbar */
+            overflow-y: scroll;
+        }
+        .output-rag {
+            width: calc(100% - 10px);
+            height: calc(100% - 20px);
+            border: 1px solid #575757;
+            border-radius: 5px;
+            padding: 5px;
+            /* add visible scrollbar */
+            scrollbar-width: thin;
+            scrollbar-color: #2c2c2c #f1f1f1;
+            /* always display scrollbar */
+            overflow-y: scroll;
+        }
+        .input-rag {
+            width: calc(100% - 100px);
+            height: 40px;
+            border: 2px solid #b72525;
+            background-color: rgba(251, 255, 0, 0.212);
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .input-baseprompt {
+            width: calc(100% - 100px);
+            height: 40px;
+            border: 2px solid #b72525;
+            background-color: rgb(255, 255, 255);
+            border-radius: 5px;
+            padding: 5px;
+        }
+    </style>
+    <script src="/socket.io.js"></script>
+</head>
+<body>
+    <div id="header">
+        TinyLLM Lab
+    </div>
+    <div id="container">
+        <div id="baseprompt">
+            <!-- Base prompt will be displayed here -->
+            <div class="left-text">Base Prompt</div>
+            <textarea id="input-baseprompt" class="input-baseprompt" placeholder="Base Prompt" onkeydown="checkEnter(event, 'baseprompt')"></textarea>
+            <button class="buttons" onclick="updateBaseprompt()">Update</button>
+        </div>
+        <div id="vectordb">
+            <div class="left-text">Vector Database</div>
+            <!-- Vector database will be displayed here -->
+            <!-- simple single line text input indicating container to use -->
+            <input id="vectorDB" class="input-vectordb" placeholder="Vector Database" onkeydown="checkEnter(event, 'vectordb')" style="display: inline-block;">
+            <div class="result-text">Results</div>
+            <input id="vectorNum" class="input-vectornum" placeholder="5" onkeydown="checkEnter(event)" style="display: inline-block;">
+            <button class="buttons" onclick="updateVectorDB()">Update</button>
+        </div>
+        <div id="user-input">
+            <!-- User input will be displayed here -->
+            <div class="left-text">User Prompt</div>
+            <textarea id="input-prompt" class="input-prompt" placeholder="User Input" onkeydown="checkEnter(event, 'userinput')"></textarea>
+            <button class="button2" onclick="runUserPrompt()">Run</button>
+        </div>
+        <div id="vector-response">
+            <div class="left-text">Docs Found</div>
+            <div id="output-vector" class="output-vector">
+                <!-- Vector response will be displayed here -->
+                 Here
+            </div>
+        </div>
+        <div id="rag-prompt">
+            <!-- RAG prompt template will be displayed here -->
+            <div class="left-text">RAG Template</div>
+            <textarea id="input-rag" class="input-rag" placeholder="RAG Prompt" onkeydown="checkEnter(event, 'ragprompt')"></textarea>
+            <button class="button2" onclick="runRAG()">Run</button>
+        </div>
+        <div id="rag-response">
+            <div class="left-text">RAG Response</div>
+            <div id="output-rag" class="output-rag">
+                <!-- RAG response will be displayed here -->
+                 Here
+            </div>
+        </div>        
+        <div id="llm">
+            <div id="llm-input">
+                <!-- User input to LLM will be displayed here -->
+                <div style="display: flex;">
+                    <textarea id="ask-llm" class="input-ask-llm" placeholder="Ask LLM" onkeydown="checkEnter(event,'llminput')"></textarea>
+                    <button class="button3" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+            <div id="llm-response">
+                <!-- LLM response will be displayed here -->
+            </div>
+        </div>
+        <div id="footer">TinyLLM Lab - <a href="https://github.com/jasonacox/TinyLLM">https://github.com/jasonacox/TinyLLM</a></div>
+    <script>
+        // Check for user input
+        function checkEnter(event, field) {
+            console.log("Update requested for field: " + field);
+            // If Shift-Enter is pressed in the input field, just add a newline
+            if (event.key === "Enter" && event.shiftKey) {
+                event.preventDefault(); // Prevent form submission
+                const input = event.target;
+                input.value += "\n";
+            }
+            // If Enter is pressed in the input field, send the message
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault(); // Prevent form submission
+                switch (field) {
+                    case "baseprompt":
+                        updateBaseprompt();
+                        break;
+                    case "vectordb":
+                        runUserPrompt();
+                        break;
+                    case "userinput":
+                        runUserPrompt();
+                        break;
+                    case "ragprompt":
+                        runRAG();
+                        break;
+                    default:
+                        sendMessage();
+                }
+            }
+        }
+
+        // Connect to the Socket.IO server
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+        var incode =false;
+
+        // Function to send prompt to the server
+        function sendMessage(visible = true) {
+            var message = document.getElementById('ask-llm').value;
+            if (message != "") {
+                // Send the message to the server
+                socket.emit('message', {
+                    prompt: message,
+                    show: visible
+                });
+                // Clear the input field
+                document.getElementById('ask-llm').value = "";
+            }
+        }
+
+        // Send prompt to LLM
+        function sendMessagePOST(visible = true) {
+            var dataToSend = {
+                prompt: document.getElementById('ask-llm').value,
+                show: visible
+            };
+
+            // Clear form
+            document.getElementById('ask-llm').value = "";
+
+            // Send a POST request to the Flask route
+            fetch('/send_message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(dataToSend)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Response from backend:', data);
+                // Handle the response from Flask as needed
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        // Function to update the base prompt
+        function updateBaseprompt() {
+            console.log("Update base prompt requested");
+            var message = document.getElementById('input-baseprompt').value;
+            if (message != "") {
+                // Send the message to the server
+                socket.emit('baseprompt', {
+                    prompt: message
+                });
+            }
+        }
+
+        // Function to run user input
+        function runUserPrompt() {
+            console.log("Run user input requested");
+            var vectordb = document.getElementById('vectorDB').value;
+            var num = document.getElementById('vectorNum').value;
+            var message = document.getElementById('input-prompt').value;
+            if (message != "") {
+                // Send the message to the server
+                socket.emit('userprompt', {
+                    vectordb: vectordb,
+                    num: num,
+                    prompt: message
+                });
+            }
+        }
+
+        // Function to run RAG
+        function runRAG() {
+            // Clear Rag response
+            document.getElementById('output-rag').innerHTML = "";
+            var baseprompt = document.getElementById('input-baseprompt').value;
+            var vectordb = document.getElementById('vectorDB').value;
+            var num = document.getElementById('vectorNum').value;
+            var userprompt = document.getElementById('input-prompt').value;
+            var ragtemplate = document.getElementById('input-rag').value;
+            if (userprompt != "") {
+                // Send the message to the server
+                socket.emit('rag', {
+                    baseprompt: baseprompt,
+                    vectordb: vectordb,
+                    num: num,
+                    userprompt: userprompt,
+                    ragtemplate: ragtemplate
+                });
+            }
+        }
+
+        // Refresh the data
+        function refresh() {
+            console.log("Refresh requested");
+            // Send the message to the server
+            socket.emit('defaults', {
+                prompt: "refresh"
+            });
+        }
+
+        // Function to handle updates received from the server
+        socket.on('update', function(data) {
+            const updateContainer = document.getElementById('llm-response');
+
+            if (data.voice === "done") {
+                // Try to identify code and format it for display
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```([\s\S]*?)```/g, function(match, codeBlock) {
+                    const codeTypeMatch = codeBlock.match(/^(\w+)<br>\n/);
+                    const codeType = codeTypeMatch ? codeTypeMatch[1] : '';
+                    const formattedCodeBlock = codeBlock.replace(/^\w+<br>\n/, '').replace(/<br>\n/g, '\n');
+
+                    // Add a copy-to-clipboard button
+                    const codeBox = `<div class="code-container"><pre class="code-box" data-code-type="${codeType}"><code>${formattedCodeBlock}</code></pre><button class="copy-button" onclick="copyToClipboard(this)">Copy ${codeType} code</button></div>\n`;
+                    return codeBox;
+                });
+
+                // Convert newline and carriage return characters outside the code-box to <br>
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/`([\s\S]*?)`/g, '<code>$1</code>');
+            }
+
+            if (data.voice === "user") {
+                // Encode html tags and newlines
+                data.update = data.update.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/[\n\r]/g, "<br>");
+                updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
+            }
+
+            if (data.voice === "ai") {
+                updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>\n");
+            }
+
+            if (data.voice === "ref") {
+                updateContainer.innerHTML += "<p class='ref-text'>" + data.update.replace(/[\n\r]/g, "<br>\n") + "</p>";
+            }
+
+            if (data.voice === "links") {
+                // {LnkID:xxx:UEL} are used to replace LnkID with URL
+                var payload = JSON.parse(data.update);
+                var messageContainer = document.getElementById("llm-response");
+                var messageText = messageContainer.innerHTML;
+                for (var key in payload) {
+                    var linkID = key;
+                    var linkURL = payload[key];
+                    var re = new RegExp(linkID, "g");
+                    messageText = messageText.replace(re, "<a href='" + linkURL + "' target='_blank'>[Link]</a>");
+                }
+                messageContainer.innerHTML = messageText;
+            }
+
+            if (data.voice === "model") {
+                getVersion();
+            }
+
+            if (data.voice === "footer") {
+                // Update the footer with the update message
+                document.getElementById('footer').innerHTML = data.update;
+            }
+
+            // Ensure we always show the latest
+            updateContainer.scrollTop = updateContainer.scrollHeight;
+        });
+
+        // Function to handle RAG updates received from the server
+        socket.on('rag', function(data) {
+            const updateContainer = document.getElementById('output-rag');
+
+            if (data.voice === "done") {
+                // Try to identify code and format it for display
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```([\s\S]*?)```/g, function(match, codeBlock) {
+                    const codeTypeMatch = codeBlock.match(/^(\w+)<br>\n/);
+                    const codeType = codeTypeMatch ? codeTypeMatch[1] : '';
+                    const formattedCodeBlock = codeBlock.replace(/^\w+<br>\n/, '').replace(/<br>\n/g, '\n');
+
+                    // Add a copy-to-clipboard button
+                    const codeBox = `<div class="code-container"><pre class="code-box" data-code-type="${codeType}"><code>${formattedCodeBlock}</code></pre><button class="copy-button" onclick="copyToClipboard(this)">Copy ${codeType} code</button></div>\n`;
+                    return codeBox;
+                });
+
+                // Convert newline and carriage return characters outside the code-box to <br>
+                updateContainer.innerHTML = updateContainer.innerHTML.replace(/`([\s\S]*?)`/g, '<code>$1</code>');
+            }
+
+            if (data.voice === "user") {
+                // Encode html tags and newlines
+                data.update = data.update.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/[\n\r]/g, "<br>");
+                updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
+            }
+
+            if (data.voice === "ai") {
+                updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>\n");
+            }
+
+            if (data.voice === "ref") {
+                updateContainer.innerHTML += "<p class='ref-text'>" + data.update.replace(/[\n\r]/g, "<br>\n") + "</p>";
+            }
+
+            if (data.voice === "links") {
+                // {LnkID:xxx:UEL} are used to replace LnkID with URL
+                var payload = JSON.parse(data.update);
+                var messageContainer = document.getElementById("llm-response");
+                var messageText = messageContainer.innerHTML;
+                for (var key in payload) {
+                    var linkID = key;
+                    var linkURL = payload[key];
+                    var re = new RegExp(linkID, "g");
+                    messageText = messageText.replace(re, "<a href='" + linkURL + "' target='_blank'>[Link]</a>");
+                }
+                messageContainer.innerHTML = messageText;
+            }
+
+            if (data.voice === "model") {
+                getVersion();
+            }
+
+            if (data.voice === "footer") {
+                // Update the footer with the update message
+                document.getElementById('footer').innerHTML = data.update;
+            }
+
+            // Ensure we always show the latest
+            updateContainer.scrollTop = updateContainer.scrollHeight;
+        });
+
+        // Function to handle updates received from the server
+        socket.on('defaults', function(data) {
+            // Update the default settings
+            console.log(data);
+            document.getElementById('input-baseprompt').value = data.baseprompt;
+            document.getElementById('vectorDB').value = data.vectordb;
+            document.getElementById('vectorNum').value = data.vectorNum;
+            document.getElementById('input-rag').value = data.ragprompt;
+        });
+
+        socket.on('vector-response', function(data) {
+            // Update the vector response
+            document.getElementById('output-vector').innerHTML = data.update;
+        });
+
+        socket.on('rag-response', function(data) {
+            // Update the rag response
+            document.getElementById('output-rag').innerHTML = data.update;
+        });
+
+        socket.on('docs-found', function(data) {
+            // Update the vector response
+            document.getElementById('output-vector').innerHTML = "<pre>" + data.update + "</pre>";
+        });
+
+        // Function to copy code to clipboard
+        function copyToClipboard(button) {
+            const codeBox = button.parentNode.querySelector('.code-box');
+            const codeText = codeBox.textContent || codeBox.innerText;
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(codeText)
+                    .then(() => {
+                        showNotification('Code copied to clipboard!');
+                    })
+                    .catch(err => {
+                        showNotification('Unable to copy to clipboard', true);
+                        console.error('Clipboard writeText failed:', err);
+                    });
+            } else {
+                // Clipboard API not supported in this browser so use textarea hack
+                // Create a temporary textarea element to facilitate copying
+                const textarea = document.createElement('textarea');
+                textarea.value = codeText;
+                document.body.appendChild(textarea);
+
+                // Select and copy the text
+                textarea.select();
+                document.execCommand('copy');
+
+                // Remove the temporary textarea
+                document.body.removeChild(textarea);
+
+                // Show notification
+                showNotification('Code copied to clipboard!');
+            }
+        }
+
+        // Function to display a notification
+        function showNotification(message, isError = false) {
+            const notification = document.createElement('div');
+            notification.className = isError ? 'notification error' : 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            // Change focus back to the input field
+            var textInput = document.getElementById("ask-llm");
+            textInput.focus();
+
+            // Automatically remove the notification after a certain time (e.g., 3 seconds)
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
+
+        // Function to get the version of the TinyLLM Lab
+        function getVersion() {
+            fetch('/version')
+                .then(response => response.json())
+                .then(data => {
+                const version = data.version;
+                const model = data.model;
+                document.getElementById('footer').innerHTML = '<a href="https://github.com/jasonacox/TinyLLM">' + 
+                    'TinyLLM Lab</a> ' + version + ' - ' + model;
+                })
+                .catch(error => {
+                console.error('Error fetching version:', error);
+                });
+        }
+
+        // Run once on reload
+        window.onload = function() {
+            document.getElementById('ask-llm').value = "{start}";
+            sendMessage(false);
+
+            // Set the focus on the text input field
+            var textInput = document.getElementById("ask-llm"); 
+            textInput.focus();
+
+            // Fetch version and update footer
+            getVersion();
+        };
+
+        // On window resize, scroll to the bottom of the message container
+        window.onresize = function() {
+            var messageContainer = document.getElementById("messageContainer");
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        };
+
+        // Set focus on the text input field when the window is focused
+        window.onfocus = function() {
+            var textInput = document.getElementById("ask-llm"); 
+            textInput.focus();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# TinyLLM Chatbot Requirements
+
+# Required Packages
+fastapi 
+uvicorn
+python-socketio
+jinja2
+openai
+bs4
+pypdf
+requests
+lxml
+aiohttp
+
+# RAG Support - Weaviate Vector Database
+weaviate-client
+
