@@ -159,7 +159,10 @@ while True:
         p = prompts.pop(0)
         print(f"{COLOR_USER}> {p}")
     else:
-        p = input(f"{COLOR_USER}> ")
+        try:
+            p = input(f"{COLOR_USER}> ")
+        except EOFError:
+            break
     if not p or p == "":
         break
     print()
