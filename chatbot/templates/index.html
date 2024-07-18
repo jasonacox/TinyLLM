@@ -562,7 +562,31 @@
 
             if (data.voice === "footer") {
                 // Update the footer with the update message
-                document.getElementById('footer').innerHTML = data.update;
+                document.getElementById('footer').innerHTML = data.update +
+                    ' - <a href="javascript:void(0);" onclick="requestConversation()">Debug Session</a>'
+            }
+
+            if (data.voice === "conversation") {
+                // Create popup with full conversation payload
+                var popup = window.open("", "Conversation", "width=800,height=600");
+                popup.document.write(`
+                    <html>
+                    <head>
+                        <title>Debug Session</title>
+                    </head>
+                    <body>
+                        <style> 
+                            body { font-family: Arial, sans-serif; }
+                            pre { white-space: pre-wrap; }
+                        </style>
+                        <pre style='white-space: pre-wrap'>${JSON.stringify(data.update, null, 2)}</pre>
+                        <br>
+                        <button style="padding: 5px 10px;" onclick="window.close()">Close</button>
+                    </body>
+                    </body>
+                    </html>
+                `);
+                
             }
 
             // Ensure we always show the latest
@@ -626,11 +650,17 @@
                 const version = data.version;
                 const model = data.model;
                 document.getElementById('footer').innerHTML = '<a href="https://github.com/jasonacox/TinyLLM">' + 
-                    'TinyLLM Chatbot</a> ' + version + ' - ' + model;
+                    'TinyLLM Chatbot</a> ' + version + ' - ' + model +
+                    ' - <a href="javascript:void(0);" onclick="requestConversation()">Debug Session</a>';
                 })
                 .catch(error => {
                 console.error('Error fetching version:', error);
                 });
+        }
+
+        // Function to request a conversation via websockets
+        function requestConversation() {
+            socket.emit('request_conversation');
         }
 
         // Run once on reload

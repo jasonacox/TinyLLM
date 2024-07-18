@@ -809,6 +809,18 @@ async def handle_message(session_id, data):
         await handle_normal_prompt(session_id, p)
     return {'status': 'Message received'}
 
+# Client sent a request for conversation thread
+@sio.on('request_conversation')
+async def handle_request_conversation(session_id):
+    global client
+    # Send conversation context to client
+    if session_id in client:
+        log(f"Sending full conversation context to {session_id}")
+        await sio.emit('update', {'update': client[session_id]["context"], 'voice': 'conversation'},room=session_id)
+    else:
+        log(f"Invalid session {session_id}")
+        await handle_invalid_session(session_id)
+
 async def handle_invalid_session(session_id):
     await sio.emit('update', {'update': '[Session Unrecognized - Try Refresh]', 'voice': 'user'}, room=session_id)
 
