@@ -55,6 +55,10 @@ Author: Jason A. Cox
 https://github.com/jasonacox/TinyLLM
 
 """
+# pylint: disable=invalid-name
+# pylint: disable=global-statement
+# pylint: disable=global-variable-not-assigned
+
 # Import Libraries
 import asyncio
 import datetime
@@ -77,7 +81,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.7"
+VERSION = "v0.14.8"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -125,7 +129,7 @@ default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your 
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
 default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context.\\nContext: {context_str}\\nQuestion: {prompt}\\nAnswer:"
-default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nThe above article is about:"
+default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nExplain what the link is about and provide a summary with the main points."
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
 
@@ -146,8 +150,8 @@ def test_model():
             models = llm.models.list()
             if len(models.data) == 0:
                 log("LLM: No models available - proceeding.")
-        except Exception as e:
-            log(f"LLM: Unable to get models, using default: {str(e)}")
+        except Exception as err:
+            log(f"LLM: Unable to get models, using default: {str(err)}")
             models = mymodel
         else:
             # build list of models
@@ -172,10 +176,10 @@ def test_model():
             extra_body={"stop_token_ids":[128001, 128009]},
         )
         return True
-    except Exception as e:
-        log("OpenAI API Error: %s" % e)
+    except Exception as err:
+        log("OpenAI API Error: %s" % err)
         log(f"Unable to connect to OpenAI API at {api_base} using model {mymodel}.")
-        if "maximum context length" in str(e):
+        if "maximum context length" in str(err):
             if MAXTOKENS > 1024:
                 MAXTOKENS = int(MAXTOKENS / 2)
                 log(f"LLM: Maximum context length exceeded reducing MAXTOKENS to {MAXTOKENS}.")
@@ -201,8 +205,8 @@ if WEAVIATE_HOST != "":
         )
         log(f"RAG: Connected to Weaviate at {WEAVIATE_HOST}")
         client.close()
-    except Exception as e:
-        log(f"RAG: Unable to connect to Weaviate at {WEAVIATE_HOST}: {str(e)}")
+    except Exception as er:
+        log(f"RAG: Unable to connect to Weaviate at {WEAVIATE_HOST}: {str(er)}")
         WEAVIATE_HOST = "" # Disable RAG support
         log("RAG: RAG support disabled.")
 
@@ -211,27 +215,39 @@ def query_index(query, library, num_results=RESULTS):
     references = "References:"
     content = ""
     try:
-        client = weaviate.connect_to_local(
+        weaviate_client = weaviate.connect_to_local(
             host=WEAVIATE_HOST,
             port=8080,
             grpc_port=50051,
             additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
         )
-        hr = client.collections.get(library)
+        hr = weaviate_client.collections.get(library)
         results = hr.query.near_text(
             query=query,
             limit=num_results
         )
+        previous_title = ""
+        previous_file = ""
+        previous_content = ""
         for ans in results.objects:
+            # Skip duplicate titles and files
+            if ans.properties['title'] == previous_title and ans.properties['file'] == previous_file:
+                continue
             references = references + f"\n - {ans.properties['title']} - {ans.properties['file']}"
+            # Skip duplicates of content
+            if ans.properties['content'] == previous_content:
+                continue
             content = content + f"Document: {ans.properties['title']}\nDocument Source: {ans.properties['file']}\nContent: {ans.properties['content']}\n---\n"
             if (len(content)/4) > MAXTOKENS/2:
                 break
-        client.close()
+            previous_title = ans.properties['title']
+            previous_file = ans.properties['file']
+            previous_content = ans.properties['content']
+        weaviate_client.close()
         log(f"RAG: Retrieved: {references}")
         return content, references
-    except Exception as e:
-        log(f"Error querying Weaviate: {str(e)}")
+    except Exception as err:
+        log(f"Error querying Weaviate: {str(err)}")
         return None, None
 
 # Globals
@@ -314,17 +330,14 @@ def base_prompt(content=None):
     if USE_SYSTEM:
         return [{"role": "system", "content": content}] 
     else:
-        return [{"role": "user", "content": content}, {"role": "assistant", "content": "Okay, let's get started."}] 
-
-# Initialize context 
-context = base_prompt()
+        return [{"role": "user", "content": content}, {"role": "assistant", "content": "Okay, let's get started."}]
 
 # Function - Send user prompt to LLM for response
 async def ask(prompt, sid=None):
     global client, stats
     stats["ask"] += 1
     response = False
-    log(f"Context size = {len(context)}")
+    log(f"Context size = {len(client[sid]['context'])}")
     while not response:
         try:
             # remember context
@@ -341,15 +354,15 @@ async def ask(prompt, sid=None):
                 messages=client[sid]["context"],
                 extra_body={"stop_token_ids":[128001, 128009]},
             )
-        except openai.OpenAIError as e:
+        except openai.OpenAIError as err:
             # If we get an error, try to recover
             client[sid]["context"].pop()
-            if "does not exist" in str(e):
+            if "does not exist" in str(err):
                 await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'},room=sid)
-                log(f"Model does not exist - retrying")
+                log("Model does not exist - retrying")
                 test_model()
                 await sio.emit('update', {'update': mymodel, 'voice': 'model'})
-            elif "maximum context length" in str(e):
+            elif "maximum context length" in str(err):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
@@ -433,7 +446,7 @@ async def get_stock(company):
             return f"The price of {company} (symbol {symbol}) is ${price}."
         except:
             return "Unable to fetch stock price for %s - No data available." % company
-    
+
 # Function - Get news for topic
 async def get_top_articles(url, max=10):
     async with aiohttp.ClientSession() as session:
@@ -466,7 +479,7 @@ async def get_news(topic, max=10):
     async with aiohttp.ClientSession() as session:
         response, links = await get_top_articles(url, max)
         return response, links
-    
+
 # Function - Extract text from URL
 async def extract_text_from_url(url):
     try:
@@ -495,8 +508,8 @@ async def extract_text_from_url(url):
                     m = f"Failed to fetch the webpage. Status code: {response.status}"
                     log(m)
                     return m
-    except Exception as e:
-        log(f"An error occurred: {str(e)}")
+    except Exception as err:
+        log(f"An error occurred: {str(err)}")
 
 # Function - Extract text from PDF
 async def extract_text_from_pdf(response):
@@ -638,7 +651,7 @@ async def reset_prompts_route():
 
 # Return the current version and LLM model
 @app.get('/version')
-async def show_version():
+async def show_version_api():
     global VERSION, DEBUG
     log(f"Version requested - DEBUG={DEBUG}")
     if DEBUG:
@@ -720,9 +733,9 @@ async def handle_connect(session_id, env):
                         if not ONESHOT:
                             # remember context
                             client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
-                    except Exception as e:
+                    except Exception as err:
                         # Unable to process prompt, give error
-                        log(f"ERROR {e}")
+                        log(f"ERROR {er}")
                         await sio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'},room=session_id)
                         # Reset context
                         client[session_id]["context"] = base_prompt()
@@ -733,8 +746,8 @@ async def handle_connect(session_id, env):
                         print(f"AI: {completion_text}")
         except KeyError:
             log(f"Thread ended: {session_id}")
-        except Exception as e:
-            log(f"Thread error: {e}")
+        except Exception as err:
+            log(f"Thread error: {err}")
 
     if session_id in client:
         # Client reconnected - restart thread

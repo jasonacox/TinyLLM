@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.8 - RAG Updates
+
+* Chatbot: Update some RAG to remove duplicate documents.
+
 ## 0.14.7 - TemplateResponse
 
 * Update TemplateResponse arguments to current format as reported in #7.
