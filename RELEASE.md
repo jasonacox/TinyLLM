@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.10 - Fix Popup
+
+* Chatbot: Fix issue where DOM was being corrupted by popup. New logic creates separate div for conversation debug.
+
 ## 0.14.9 - Conversation Thread
 
 * Chatbot: Add `Debug Session` link to footer to display conversation thread.
