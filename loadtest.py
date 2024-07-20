@@ -1,4 +1,4 @@
-# LLM Load Test Generator and Performance Report
+# LLM Load Generator and Performance Report
 #
 # Author: Jason A. Cox
 # Date: 27 Apr 2024
@@ -14,7 +14,7 @@ token="token-abc123"
 max_sessions=1024
 
 # Ask user for settings
-print("LLM Load Test Generator and Performance Report")
+print("LLM Load Generator and Performance Report")
 print()
 base_url = input(f"Enter vLLM URL [{base_url}]: ") or base_url
 token = input(f"Enter API Key [{token}]: ") or token
@@ -106,6 +106,8 @@ if __name__ == "__main__":
             i *= 2
 
     print("Load test complete.")
+    print()
+
     print("Results:")
     for threads, result in report.items():
         print(f"Threads: {threads} - {result}")
