@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.9 - Conversation Thread
+
+* Chatbot: Add `Debug Session` link to footer to display conversation thread.
+
 ## 0.14.8 - RAG Updates
 
 * Chatbot: Update some RAG to remove duplicate documents.

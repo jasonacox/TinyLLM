@@ -264,9 +264,9 @@
         <div class="popup-box" style="width: 90%;">
             <h2 class="popup-title">System Settings</h2>
             <div class="popup-content">
-                <p class="popup-content-text">The TinyLLM Chatbot can be customized by changing the prompts used to generate responses.</p> 
+                <p class="popup-content-text" id="popup-content-text">The TinyLLM Chatbot can be customized by changing the prompts used to generate responses.</p> 
                 <form id="settingsForm">
-                    <div class="popup-table-container">
+                    <div class="popup-table-container" id="conversation">
                         <table>
                             <thead>
                                 <tr>
@@ -279,7 +279,7 @@
                     </div>
                     <div class="popup-divider"></div>
                     <div class="popup-button-container">
-                        <div>
+                        <div id="popup-buttons">
                             <button type="button" class="dialogue-button" id="saveButton" onclick="saveSettings()">Save</button> 
                             <button type="button" class="dialogue-button" onclick="closeDialogue()">Cancel</button> 
                             <button type="button" class="dialogue-button" id="resetButton" onclick="resetSettings()">Reset</button>
@@ -567,32 +567,56 @@
             }
 
             if (data.voice === "conversation") {
-                // Create popup with full conversation payload
-                var popup = window.open("", "Conversation", "width=800,height=600");
-                popup.document.write(`
-                    <html>
-                    <head>
-                        <title>Debug Session</title>
-                    </head>
-                    <body>
-                        <style> 
-                            body { font-family: Arial, sans-serif; }
-                            pre { white-space: pre-wrap; }
-                        </style>
-                        <pre style='white-space: pre-wrap'>${JSON.stringify(data.update, null, 2)}</pre>
-                        <br>
-                        <button style="padding: 5px 10px;" onclick="window.close()">Close</button>
-                    </body>
-                    </body>
-                    </html>
-                `);
-                
+                document.getElementById("dialogueOverlay").style.display = "flex";
+                document.querySelector('.popup-title').textContent = 'Conversation Thread';
+                document.getElementById('popup-content-text').textContent = 'The conversation thread shows the interaction between the user and the chatbot.';
+                document.getElementById('popup-buttons').innerHTML = `
+                    <button type="button" class="dialogue-button" onclick="closeDialogue()">Close</button>
+                    <button type="button" class="dialogue-button" onclick="convCopy()">Copy</button>
+                `;
+                // First clear the form from any previous settings
+                document.getElementById("conversation").innerHTML = `
+                    <pre style='white-space: pre-wrap'>${JSON.stringify(data.update, null, 2)}</pre>
+                `;
             }
 
             // Ensure we always show the latest
             updateContainer.scrollTop = updateContainer.scrollHeight;
         });
 
+        // Function to copy conversation to clipboard
+        function convCopy(button) {
+            const conversation = document.querySelector('.popup-table-container');
+            const conversationText = conversation.textContent || conversation.innerText;
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(conversationText)
+                    .then(() => {
+                        showNotification('Conversation copied to clipboard!');
+                    })
+                    .catch(err => {
+                        showNotification('Unable to copy to clipboard', true);
+                        console.error('Clipboard writeText failed:', err);
+                    });
+            } else {
+                // Clipboard API not supported in this browser so use textarea hack
+                // Create a temporary textarea element to facilitate copying
+                const textarea = document.createElement('textarea');
+                textarea.value = conversationText;
+                document.body.appendChild(textarea);
+
+                // Select and copy the text
+                textarea.select();
+                document.execCommand('copy');
+
+                // Remove the temporary textarea
+                document.body.removeChild(textarea);
+
+                // Show notification
+                showNotification('Conversation copied to clipboard!');
+            }
+        }
+        
         // Function to copy code to clipboard
         function copyToClipboard(button) {
             const codeBox = button.parentNode.querySelector('.code-box');
