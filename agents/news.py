@@ -11,12 +11,13 @@ https://github.com/jasonacox/TinyLLM
 import datetime
 import os
 import time
+import threading
+import re
 
 import openai
 import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
-import threading
 
 # Version
 VERSION = "v0.0.1"
@@ -37,13 +38,18 @@ api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Re
 agentname = os.environ.get("AGENT_NAME", "Newsbot")                         # Set the name of your bot
 mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
-MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
+TIMEOUT = int(os.environ.get("TIMEOUT", 10))                                # Timeout for HTTP requests
+MAXTOKENS = int(os.environ.get("MAXTOKENS", 4*1024))                        # Maximum number of tokens to send to LLM
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
-USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Use system in chat prompt if True
+USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower() == "true"        # Use system in chat prompt if True
 RESULTS = int(os.environ.get("RESULTS", 10))                                # Number of results to return from Weaviate
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha-key")                        # Alpha Vantage API Key
-COMPANY = os.environ.get("COMPANY", "Google")                                # Company to use for stock news
-CITY = os.environ.get("CITY", "Los Angeles")                                # City to use for weather news  
+COMPANY = os.environ.get("COMPANY", "Google")                               # Company to use for stock news
+CITY = os.environ.get("CITY", "Los Angeles")                                # City to use for weather news
+CITY_WEEKEND = os.environ.get("CITY_WEEKEND", "Ventura")                    # City to use for weather news on weekends
+EMAIL_FORMAT = os.environ.get("EMAIL_FORMAT", "false").lower() == "true"    # Format output for sending email
+ABOUT_ME = os.environ.get("ABOUT_ME", 
+         "I'm a 31 year old woman who lives in Los Angeles. I have two kids and work as a software engineer.")    
 
 # Prompt Defaults
 prompts = {
@@ -52,7 +58,7 @@ prompts = {
     "baseprompt": "You are {agentname}, a highly intelligent assistant. The current date is {date}.\n\nYou should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions.",
     "weather": "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}.",
     "stock": "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}.",
-    "news": "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Do not display the pub date or timestamp. Rank headlines by most important to least important. Always include the news organization and ID. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - ID: [ID]\nHere are some examples: \n1. The World is Round - Science - ID: 11\n2. The Election is over and Children have won - US News - ID: 22\n3. Storms Hit the Southern Coast - ABC - ID: 55\nContext: {context_str}\nTop 10 Headlines with Source and ID:",
+    "news": "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important but do not explain why. Always include the news organization and ID. List no more than 10 and do not add a preamble or any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - ID: [ID]\nHere are some examples: \n1. The World is Round - Science - ID: 11\n2. The Election is over and Children have won - US News - ID: 22\n3. Storms Hit the Southern Coast - ABC - ID: 55\n. Context: {context_str}\nTop 10 Headlines with Source and ID:",
     "clarify": "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}.",
     "location": "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]",
     "company": "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]",
@@ -142,15 +148,15 @@ def ask(prompt):
             temperature=TEMPERATURE,
             messages=context,
         )
-    except openai.OpenAIError as e:
+    except openai.OpenAIError as err:
         # If we get an error, try to recover
         context.pop()
-        if "maximum context length" in str(e):
+        if "maximum context length" in str(err):
             # our context has grown too large, reset
-            context = base_prompt()   
-            error(f"Reset context due to error: {e}")
+            context = base_prompt()
+            error(f"Reset context due to error: {err}")
         else:
-            error(f"ERROR: {e}")
+            error(f"ERROR: {err}")
     log(f"ask -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
@@ -180,12 +186,12 @@ def get_weather(location):
     location = location.replace(" ", "+")
     url = "https://wttr.in/%s?format=j2" % location
     log(f"Fetching weather for {location} from {url}")
-    response = requests.get(url)
+    response = requests.get(url, timeout=TIMEOUT)
     if response.status_code == 200:
         return response.text
     else:
         return "Unable to fetch weather for %s" % location
-    
+
 # Function - Get stock price for company
 def get_stock(company):
     if ALPHA_KEY == "alpha_key":
@@ -202,13 +208,28 @@ def get_stock(company):
     # Now get the stock price
     url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s" % (symbol.upper(), ALPHA_KEY)
     log(f"Fetching stock price for {company} from {url}")
-    response = requests.get(url)
+    response = requests.get(url, timeout=TIMEOUT)
     if response.status_code == 200:
         try:
-            price = response.json()["Global Quote"]["05. price"]
+            price = "{:.2f}".format(float(response.json()["Global Quote"]["05. price"]))
             return f"The price of {company} (symbol {symbol}) is ${price}."
         except:
             return "Unable to fetch stock price for %s - No data available." % company
+
+# Function - Get news for topic
+def get_top_articles(url, max=10):
+    response = requests.get(url, timeout=TIMEOUT)
+    soup = BeautifulSoup(response.text, 'xml')
+    items = soup.findAll('item')
+    articles = ""
+    count = 0
+    for item in items:
+        title = item.find('title').string.strip()
+        articles += f"Headline: {title}\n"
+        count += 1
+        if count >= max:
+            break
+    return articles
 
 # Cache class to store news items
 class Cache:
@@ -233,7 +254,7 @@ class Cache:
             if key in self.cache:
                 return self.cache[key]["value"]
             return None
-    
+
 # Global cache for news items
 news_cache = Cache(60)
 
@@ -245,7 +266,7 @@ def get_news(topic, max=10):
         topic = topic.replace(" ", "+")
         url = "https://news.google.com/rss/search?q=%s" % topic
     log(f"Fetching news for {topic} from {url}")
-    response = requests.get(url)
+    response = requests.get(url, timeout=TIMEOUT)
     soup = BeautifulSoup(response.text, 'xml')
     items = soup.findAll('item')
     articles = ""
@@ -270,10 +291,12 @@ def fetch_news(topic):
     answer = ask(prompt)
     # Replace IDs in answer with URLs
     result = ""
+    text_only = ""
     for line in answer.split("\n"):
         if "ID:" in line:
             elements = line.split("ID: ")
             title = elements[0].strip()
+            text_only += title + "\n"
             if len(elements) > 1:
                 uuid = elements[1].strip()        
                 url = news_cache.get(int(uuid))
@@ -283,7 +306,7 @@ def fetch_news(topic):
         else:
             result += line
         result += "\n"
-    return result
+    return result, text_only
 
 def handle_weather_command(p):
     log("Get Weather")
@@ -310,50 +333,76 @@ def handle_stock_command(prompt):
     log(f"Company = {company} - Context = {context_str}")
     return context_str
 
+# Use buffer to capture output
+output = ""
+def buffer(s):
+    global output
+    output = output + s + "\n"
+
 # main
 if __name__ == "__main__":
-    print("TinyLLM News Bot")
-    print("")
+    buffer("TinyLLM News Bot")
+    buffer("")
 
     # Date
     current_date = datetime.datetime.now()
-    print(f"Current date: {current_date.strftime('%B %-d, %Y')}")
-    print("")
+    buffer(f"Current date: {current_date.strftime('%B %-d, %Y')}")
+    buffer("")
     # Initialize context
     context = base_prompt()
 
-    # Query LLM for weather
-    weather = handle_weather_command(CITY)
-    print(f"Weather:\n{weather}")
-    print("")
-
-    # Query LLM for stock
-    stock = handle_stock_command(COMPANY)
-    print(f"{COMPANY} Stock: {stock}")
-    print("")
-
-    # Query LLM for news
-    news = fetch_news("")
-    print(f"News:\n{news}")
-    print("")
-
-    # Compare current news with previous news
-    print("Comparing news...")
+    # Get Weather
     try:
-        with open("/tmp/news.txt", "r") as f:
-            old_news = f.read()
-        # Ask LLM to compare news
-        comparison = ask_llm(f"Old News: {old_news}\nCurrent News: {news}\nCompare the news and provide a list of any new items with their source. List a maximum of 5 items. List URLs for the items.")
-        print(f"New Items:\n{comparison}")
-        print("")
-    except:
-        print("No previous news to compare.")
-        print("")
-    # Save news to a file
-    with open("/tmp/news.txt", "w") as f:
-        f.write(news)
+        # Query LLM for weather
+        if current_date.weekday() >= 5:
+            location = CITY_WEEKEND
+        else:
+            location = CITY
+        weather = handle_weather_command(location)
+    except Exception as e:
+        weather = f"ERROR: {e}"
 
-   # Query LLM for news for company
-    news = fetch_news(COMPANY)
-    print(f"News for {COMPANY}:\n{news}")
-    print("")
+    # Company Stock Price
+    stock = handle_stock_command(COMPANY)
+    buffer(f"{COMPANY} Stock: {stock}")
+    buffer("")
+
+    # Fetch News Payloads
+    news, news_text = fetch_news("")
+    company_news, company_text = fetch_news(COMPANY)
+    science_news, science_text = fetch_news("Science")
+
+    # Personalized News Summary
+    buddy_request = f"{ABOUT_ME} Provide a paragraph summary of the news that should be most interesting to me. Say it as a concerned friend and are giving me a short update for my day."
+    if current_date.weekday() >= 5:
+        buddy_request += " It is the weekend so suggestion things to do with the family as well."
+    else:
+        buddy_request += " It is a work day so add some encouragement."
+    buddy = ask_llm(f"Here are the top news items:\n{news_text}\n\n{COMPANY} news:\n{company_text}\n\nScience news:\n{science_text}\n\nWeather:\n{weather}\n\n{buddy_request}")
+    buffer(f"{buddy}\n")
+    buffer("")
+
+    # Global News
+    buffer(f"News:\n{news}")
+    buffer("")
+
+    # Company News
+    buffer(f"News for {COMPANY}:\n{company_news}")
+    buffer("")
+
+    # Science News
+    buffer(f"Science News:\n{science_news}")
+    buffer("")
+
+    # Weather
+    buffer(f"Weather:\n\n{weather}")
+    buffer("")
+
+    buffer("\n---")
+
+    # Output
+    if EMAIL_FORMAT:
+        # Fix newlines and degree symbols for email
+        output = output.replace("\n", "<br>\n")
+        output = re.sub(r"[^\x00-\x7F]", "&deg;", output)
+    print(output)
