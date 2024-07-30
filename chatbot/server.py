@@ -81,7 +81,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.10"
+VERSION = "v0.14.11"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -133,6 +133,13 @@ default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEG
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
 
+# Set up chat completion extra body parameters
+if api_base.startswith("https://api.openai.com"):
+    EXTRA_BODY = {}
+else:
+    # Extra stop tokens are needed for some non-OpenAI LLMs
+    EXTRA_BODY = {"stop_token_ids":[128001, 128009]}
+
 # Log ONE_SHOT mode
 if ONESHOT:
     log("ONESHOT mode enabled.")
@@ -173,7 +180,7 @@ def test_model():
             stream=False,
             temperature=TEMPERATURE,
             messages=[{"role": "user", "content": "Hello"}],
-            extra_body={"stop_token_ids":[128001, 128009]},
+            extra_body=EXTRA_BODY,
         )
         return True
     except Exception as err:
@@ -352,7 +359,7 @@ async def ask(prompt, sid=None):
                 stream=True, # Send response chunks as LLM computes next tokens
                 temperature=TEMPERATURE,
                 messages=client[sid]["context"],
-                extra_body={"stop_token_ids":[128001, 128009]},
+                extra_body=EXTRA_BODY,
             )
         except openai.OpenAIError as err:
             # If we get an error, try to recover
@@ -402,7 +409,7 @@ async def ask_llm(query, format=""):
         stream=False,
         temperature=TEMPERATURE,
         messages=content,
-        extra_body={"stop_token_ids":[128001, 128009]},
+        extra_body=EXTRA_BODY,
     )
     log(f"ask_llm -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()

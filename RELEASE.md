@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.11 - OpenAI Support
+
+* Chatbot: Add logic to detect OpenAI URL and disable non-OpenAI stop_token_ids.
+
 ## 0.14.10 - Fix Popup
 
 * Chatbot: Fix issue where DOM was being corrupted by popup. New logic creates separate div for conversation debug.
