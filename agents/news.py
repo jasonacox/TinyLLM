@@ -49,7 +49,8 @@ CITY = os.environ.get("CITY", "Los Angeles")                                # Ci
 CITY_WEEKEND = os.environ.get("CITY_WEEKEND", "Ventura")                    # City to use for weather news on weekends
 EMAIL_FORMAT = os.environ.get("EMAIL_FORMAT", "false").lower() == "true"    # Format output for sending email
 ABOUT_ME = os.environ.get("ABOUT_ME", 
-         "I'm a 31 year old woman who lives in Los Angeles. I have two kids and work as a software engineer.")    
+         "I'm a 31 year old woman who lives in Los Angeles. I have two kids and work as a software engineer.")   
+BUDDY_FILE = os.environ.get("BUDDY_FILE", None)             # File to use personalization update 
 
 # Prompt Defaults
 prompts = {
@@ -379,6 +380,11 @@ if __name__ == "__main__":
     else:
         buddy_request += " It is a work day so add some encouragement."
     buddy = ask_llm(f"Here are the top news items:\n{news_text}\n\n{COMPANY} news:\n{company_text}\n\nScience news:\n{science_text}\n\nWeather:\n{weather}\n\n{buddy_request}")
+
+    # Personalized Summary
+    if BUDDY_FILE
+        with open(BUDDY_FILE, "w") as f:
+            f.write(buddy)
     buffer(f"{buddy}\n")
     buffer("")
 
@@ -402,7 +408,10 @@ if __name__ == "__main__":
 
     # Output
     if EMAIL_FORMAT:
-        # Fix newlines and degree symbols for email
+        # Clean up output for email
         output = output.replace("\n", "<br>\n")
-        output = re.sub(r"[^\x00-\x7F]", "&deg;", output)
+        # replace 0xb0 with &deg;
+        output = output.replace("\xb0", "&deg;")
+        # remove unprintable characters
+        output = re.sub(r"[^\x00-\x7F]", "", output)
     print(output)
