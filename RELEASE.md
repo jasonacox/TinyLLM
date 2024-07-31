@@ -1,5 +1,10 @@
 # Releases
 
+## 0.14.12 - Toxic Filter
+
+* Chatbot: Add toxic filter option (uses environmental variable `TOXIC_THRESHOLD`) to analyze and filter out bad prompts. Uses LLM to evaluate and score prompt. Set variable between 0 and 1 or 99 to disable (default).
+* Chatbot: Add `EXTRA_BODY` variable (JSON string) to customize chat completion calls.
+
 ## 0.14.11 - OpenAI Support
 
 * Chatbot: Add logic to detect OpenAI URL and disable non-OpenAI stop_token_ids.

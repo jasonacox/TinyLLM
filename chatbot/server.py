@@ -67,6 +67,7 @@ import json
 import logging
 import os
 import time
+import re
 
 import openai
 import requests
@@ -81,7 +82,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.11"
+VERSION = "v0.14.12"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -110,6 +111,22 @@ USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower == "true"          # Us
 TOKEN = os.environ.get("TOKEN", "secret")                                   # Secret TinyLLM token for admin functions
 ONESHOT = os.environ.get("ONESHOT", "false").lower() == "true"              # Set to True to enable one-shot mode
 RAG_ONLY = os.environ.get("RAG_ONLY", "false").lower() == "true"            # Set to True to enable RAG only mode
+EXTRA_BODY = os.environ.get("EXTRA_BODY", None)                             # Extra body parameters for OpenAI API
+TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # Toxicity threshold for responses 0-1 or 99 disable
+
+# Convert EXTRA_BODY to dictionary if it is proper JSON
+if EXTRA_BODY:
+    try:
+        EXTRA_BODY = json.loads(EXTRA_BODY)
+    except:
+        log("EXTRA_BODY is not valid JSON")
+        EXTRA_BODY = {}
+else:
+    if api_base.startswith("https://api.openai.com"):
+        EXTRA_BODY = {}
+    else:
+        # Extra stop tokens are needed for some non-OpenAI LLMs
+        EXTRA_BODY = {"stop_token_ids":[128001, 128009]}
 
 # RAG Configuration Settings
 WEAVIATE_HOST = os.environ.get("WEAVIATE_HOST", "")                         # Empty = no Weaviate support
@@ -132,13 +149,7 @@ default_prompts["rag"] = "You are an assistant for question-answering tasks. Use
 default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nExplain what the link is about and provide a summary with the main points."
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
-
-# Set up chat completion extra body parameters
-if api_base.startswith("https://api.openai.com"):
-    EXTRA_BODY = {}
-else:
-    # Extra stop tokens are needed for some non-OpenAI LLMs
-    EXTRA_BODY = {"stop_token_ids":[128001, 128009]}
+default_prompts["toxic_filter"] = "You are a highly intelligent assistant. Review the following text and filter out any toxic or inappropriate content. Please respond with a toxicity rating. Use a scale of 0 to 1, where 0 is not toxic and 1 is highly toxic. [BEGIN] {prompt} [END]"
 
 # Log ONE_SHOT mode
 if ONESHOT:
@@ -589,6 +600,9 @@ async def home(format: str = None):
         "RAG: Weaviate (WEAVIATE_HOST)": WEAVIATE_HOST,
         "RAG: default Library (WEAVIATE_LIBRARY)": WEAVIATE_LIBRARY,
         "RAG: Default Results Retrieved (RESULTS)": RESULTS,
+        "Alpha Vantage API Key (ALPHA_KEY)": "************" if ALPHA_KEY != "" else "Not Set",
+        "Toxicity Threshold (TOXIC_THRESHOLD)": TOXIC_THRESHOLD,
+        "Extra Body Parameters (EXTRA_BODY)": EXTRA_BODY,
     }
     if format == "json":
         return data
@@ -727,7 +741,7 @@ async def handle_connect(session_id, env):
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
                         # Update footer with stats
                         await sio.emit('update', {'update': 
-                                                  f"TinyLLM Chatbot {VERSION} - {mymodel} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}", 
+                                                  f"TinyLLM Chatbot {VERSION} - {mymodel} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
                                                   'voice': 'footer'},room=session_id)
                         # Check for link injection
                         if client[session_id]["links"]:
@@ -778,6 +792,7 @@ async def handle_connect(session_id, env):
         client[session_id]["stop_thread_flag"] = False
         client[session_id]["references"] = ""
         client[session_id]["links"] = {}
+        client[session_id]["toxicity"] = 0.0
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -970,8 +985,28 @@ async def handle_normal_prompt(session_id, p):
     if WEAVIATE_HOST and RAG_ONLY and p is not prompts["greeting"]:
         # Activate RAG every time
         await handle_rag_command(session_id, f"/rag {WEAVIATE_LIBRARY} {RESULTS} {p}")
-    else:
-        client[session_id]["prompt"] = p
+        return
+    if TOXIC_THRESHOLD != 99:
+        # Test toxicity of prompt
+        toxicity_check = await ask_llm(expand_prompt(prompts["toxic_filter"], {"prompt": p}))
+        # extract floating point number from response
+        toxicity = re.findall(r"[-+]?\d*\.\d+|\d+", toxicity_check)
+        # convert float string to float
+        try:
+            toxicity = float(toxicity[0])
+        except:
+            toxicity = 0
+        client[session_id]["toxicity"] = toxicity
+        if toxicity > TOXIC_THRESHOLD:
+            # Prompt is toxic - remove newlines from toxicity_check
+            reason = toxicity_check.replace('\n', ' ')
+            await sio.emit('update', {'update': f'[Filter Activated ({toxicity}) {reason}]\nPlease try a different topic.', 'voice': 'ai'}, room=session_id)
+            client[session_id]["prompt"] = ""
+            client[session_id]["toxicity"] = 0.0
+            log(f"Toxic Prompt Detected [{toxicity}] - {p}")
+            return
+    # Prompt is safe
+    client[session_id]["prompt"] = p
 
 #
 # Start dev server and listen for connections
