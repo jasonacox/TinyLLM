@@ -1,10 +1,15 @@
 # Research to TinyLLM
 
-The following documents my research journey to building my TinyLLM, a locally run LLM and Chatbot.
+The following documents my research journey to building my TinyLLM, a locally run LLM and Chatbot. I have also recorded two video classes to document some of my learning:
+
+* Large Language Models: How do they work? ([YouTube Video](https://youtu.be/s4zEQyM_Rks?si=-0ki7cW5z2vvKEcG)) ([Notebook](gpt.ipynb))
+* Retrieval Augmented Generation (RAG) ([YouTube Video](https://youtu.be/MyCWYweJniA?si=8Vl_JwBGuGQui5U4)) ([Notebook](rag.ipynb))
+
 
 ## Hardware Specs
 
-My research began trying to prove that a LLM could run on consumer grade quipment. The reference base hardware:
+My research began trying to prove that a LLM could run on consumer grade equipment. The reference base hardware:
+
 * CPU: Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz
 * Memory: 8GB DDR4 (more recommended)
 * Disk: 128G SSD Boot, 4TB HDD
