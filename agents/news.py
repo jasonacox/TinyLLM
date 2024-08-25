@@ -59,7 +59,7 @@ prompts = {
     "baseprompt": "You are {agentname}, a highly intelligent assistant. The current date is {date}.\n\nYou should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions.",
     "weather": "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}.",
     "stock": "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}.",
-    "news": "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important but do not explain why. Always include the news organization and ID. List no more than 10 and do not add a preamble or any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - ID: [ID]\nHere are some examples: \n1. The World is Round - Science - ID: 11\n2. The Election is over and Children have won - US News - ID: 22\n3. Storms Hit the Southern Coast - ABC - ID: 55\n. Context: {context_str}\nTop 10 Headlines with Source and ID:",
+    "news": "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important but do not explain why. Always include the news organization and ID. List no more than 10 and do not add a preamble or any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - ID: [ID]\nHere are some examples but never use these: \n1. The World is Round - Science - ID: 11\n2. The Election is over and Children have won - US News - ID: 22\n3. Storms Hit the Southern Coast - ABC - ID: 55\n. Context: {context_str}\nTop 10 Headlines with Source and ID:",
     "clarify": "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}.",
     "location": "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]",
     "company": "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]",
@@ -299,7 +299,11 @@ def fetch_news(topic):
             title = elements[0].strip()
             text_only += title + "\n"
             if len(elements) > 1:
-                uuid = elements[1].strip()        
+                uuid = elements[1].strip()
+                # Ensure we have a valid UUId that is a integer
+                if not uuid.isdigit():
+                    result += line
+                    continue    
                 url = news_cache.get(int(uuid))
                 result += f"{title} <a href=\"{url}\">[Link]</a>"
             else:
@@ -382,7 +386,7 @@ if __name__ == "__main__":
     buddy = ask_llm(f"Here are the top news items:\n{news_text}\n\n{COMPANY} news:\n{company_text}\n\nScience news:\n{science_text}\n\nWeather:\n{weather}\n\n{buddy_request}")
 
     # Personalized Summary
-    if BUDDY_FILE
+    if BUDDY_FILE:
         with open(BUDDY_FILE, "w") as f:
             f.write(buddy)
     buffer(f"{buddy}\n")

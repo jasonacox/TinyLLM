@@ -1,5 +1,9 @@
 # Releases
 
+## 0.14.13 - TPS Calculation
+
+* Chatbot: Fix a bug that was counting null tokens.
+
 ## 0.14.12 - Toxic Filter
 
 * Chatbot: Add toxic filter option (uses environmental variable `TOXIC_THRESHOLD`) to analyze and filter out bad prompts. Uses LLM to evaluate and score prompt. Set variable between 0 and 1 or 99 to disable (default).

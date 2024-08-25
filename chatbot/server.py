@@ -82,7 +82,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.12"
+VERSION = "v0.14.13"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -141,7 +141,7 @@ default_prompts["agentname"] = "Jarvis"
 default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. The current date is {date}.\n\nYou should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
-default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important. Always include the news organization and ID. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - LnkID:[ID]\nHere are some examples: \n1. The World is Round - Science - LnkID:91\n2. The Election is over and Children have won - US News - LnkID:22\n3. Storms Hit the Southern Coast - ABC - LnkID:55\nContext: {context_str}\nTop 10 Headlines with Source and LnkID:"
+default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important. Always include the news organization and ID. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - LnkID:[ID]\nHere are some examples, but do not use them: \n1. The World is Round - Science - LnkID:91\n2. The Election is over and Children have won - US News - LnkID:22\n3. Storms Hit the Southern Coast - ABC - LnkID:55\nContext: {context_str}\nTop 10 Headlines with Source and LnkID:"
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
@@ -709,7 +709,7 @@ async def handle_connect(session_id, env):
         return hex_values
 
     # Continuous thread to send updates to connected clients
-    async def send_update(session_id): 
+    async def send_update(session_id):
         global client
         log(f"Starting send_update thread for {session_id}")
 
@@ -727,14 +727,17 @@ async def handle_connect(session_id, env):
                         response= await ask(client[session_id]["prompt"],session_id)
                         completion_text = ''
                         tokens = 0
-                        # iterate through the stream of events and print it
+                        # Iterate through the stream of tokens and send to client
                         stime = time.time()
                         for event in response:
                             event_text = event.choices[0].delta.content
-                            tokens += 1
+                            # Skip prefixed newlines
+                            if tokens == 0 and event_text == "\n":
+                                continue
                             if event_text:
                                 chunk = event_text
                                 completion_text += chunk
+                                tokens += 1
                                 if DEBUG:
                                     print(string_to_hex(chunk), end="")
                                     print(f" = [{chunk}]")
@@ -970,7 +973,7 @@ async def handle_stock_command(session_id, p):
     company = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
     company = ''.join(e for e in company if e.isalnum() or e.isspace())
     if "none" in company.lower():
-        context_str = "Unable to fetch stock price - Unknown company specified." 
+        context_str = "Unable to fetch stock price - Unknown company specified."
     else:
         context_str = await get_stock(company)
     log(f"Company = {company} - Context = {context_str}")
