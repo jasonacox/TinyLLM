@@ -214,6 +214,36 @@ Here are some suggested models that work well with vLLM.
 | Phi-3 Small 7B | None | [microsoft/Phi-3-small-8k-instruct](https://huggingface.co/microsoft/Phi-3-small-8k-instruct) | 16k | MIT |
 | Phi-3 Medium 14B | None | [microsoft/Phi-3-medium-4k-instruct](https://huggingface.co/microsoft/Phi-3-medium-4k-instruct) | 4k | MIT |
 
+## LLM Tools
+
+### LLM
+
+A CLI utility (`llm`) and Python library for interacting with Large Language Models. To configure this tool to use your local LLM's OpenAI API:
+
+```bash
+# Install llm command line tool
+pipx install llm
+
+# Location to store configuration files:
+dirname "$(llm logs path)"
+```
+
+You define the model in the `extra-openai-models.yaml` file. Create this file in the directory discovered above. Edit the model_name and api_base to match your LLM OpenAI API setup:
+
+```yaml
+- model_id: tinyllm
+  model_name: meta-llama/Meta-Llama-3.1-8B-Instruct
+  api_base: "http://localhost:8000/v1"
+```
+
+```bash
+# Configure llm to use your local model
+llm models default tinyllm
+
+# Test
+llm "What is love?"
+```
+
 ## References
 
 * LLaMa.cpp - https://github.com/ggerganov/llama.cpp
