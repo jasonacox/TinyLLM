@@ -1,5 +1,7 @@
 # TinyLLM Web Based Chatbot
 
+![Docker Pulls](https://img.shields.io/docker/pulls/jasonacox/chatbot)
+
 The TinyLLM Chatbot is a web based python flask app that allows you to chat with a LLM using the OpenAI API.
 
 The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. With the Chatbot, we explore stitching context through conversational threads, rendering responses via realtime token streaming from LLM, and using external data to provide context for the LLM response (Retrieval Augemented Generation).
