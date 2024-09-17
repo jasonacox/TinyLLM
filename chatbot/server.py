@@ -47,6 +47,7 @@ Running a llama-cpp-python server:
 
 Web APIs:
     * GET / - Chatbot HTML main page
+    * GET /upload - Chatbot Document Upload page
     * GET /version - Get version
     * POST /alert - Send alert to all clients
 
@@ -69,6 +70,8 @@ import os
 import time
 import re
 
+from documents import Documents
+
 import openai
 import requests
 import socketio
@@ -82,7 +85,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.14.13"
+VERSION = "v0.15.0"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -133,7 +136,11 @@ WEAVIATE_HOST = os.environ.get("WEAVIATE_HOST", "")                         # Em
 WEAVIATE_LIBRARY = os.environ.get("WEAVIATE_LIBRARY", "tinyllm")            # Weaviate library to use
 RESULTS = int(os.environ.get("RESULTS", 1))                                 # Number of results to return from RAG query
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Optional - Alpha Vantage API Key
+UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/tmp")                     # Folder to store uploaded documents
 
+# Document Management Settings
+rag_documents = Documents(WEAVIATE_HOST, filepath=UPLOAD_FOLDER)
+   
 # Prompt Defaults
 default_prompts = {}
 default_prompts["greeting"] = "Hi"
