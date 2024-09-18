@@ -23,14 +23,11 @@ Class Documents:
     add_docx: Add a DOCX document
     add_txt: Add a TXT document
 
-Utility Functions:
-    extract_text_from_url: Extract text from a URL
-    extract_text_from_pdf: Extract text from a PDF
-    extract_text_from_text: Extract text from a text file
-    extract_text_from_html: Extract text from an HTML file
-
 Requirements:
-    !pip install weaviate-client 
+    !pip install weaviate-client pdfreader bs4 pypandoc
+
+Run Test:
+    WEAVIATE_HOST=localhost python3 documents.py
 
 Author: Jason A. Cox
 16 September 2024
@@ -46,16 +43,16 @@ import logging
 import weaviate.classes as wvc
 import weaviate
 import requests
-from pdfreader import PdfReader
+from pypdf import PdfReader
 from bs4 import BeautifulSoup
 import pypandoc
 
 # Logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 def log(msg):
-    logger.info(msg)
+    logger.debug(msg)
 
 # Document class
 class Documents:
@@ -70,7 +67,7 @@ class Documents:
         client: Weaviate client object
     """
 
-    def __init__(self, host, filepath="/tmp", port=8080, grpc_port=50051):
+    def __init__(self, host="localhost", filepath="/tmp", port=8080, grpc_port=50051):
         """
         Initialize the Document class
         """
@@ -171,14 +168,14 @@ class Documents:
         """
         Return a document by ID or query
         """
-        docs = []
+        dd = []
         if not self.client:
             self.connect()
         if uuid:
             # Get a document by its ID
             response = collection.query.fetch_object_by_id(uuid)
             p = response.properties
-            docs.append({
+            dd.append({
                 "uuid": uuid,
                 "file": p.get("file"),
                 "title": p.get("title"),
@@ -187,34 +184,46 @@ class Documents:
             })
         if query:
             # Search by vector query
-            query = "List facts about solar."
-            num_results = 5
-            docs = self.client.collections.get(collection)
-            results = docs.query.near_text(
+            qdocs = self.client.collections.get(collection)
+            r = qdocs.query.near_text(
                 query=query,
                 limit=num_results
             )
-            for i in results.objects:
+            for i in r.objects:
                 p = i.properties
                 uuid = str(i.uuid)
-                docs.append( {
+                dd.append( {
                     "uuid": uuid,
                     "file": p.get("file"),
                     "title": p.get("title"),
                     "doc_type": p.get("doc_type"),
                     'content': p.get("content"),
                 })
-        return docs
+        return dd
 
-    def delete_document(self, collection, uuid):
+    def delete_document(self, collection, uuid=None, filename=None):
         """
-        Delete a document by its ID
+        Delete a document by its ID or filename
         """
         # Delete a document by its ID
         if not self.client:
             self.connect()
-        collection = self.client.collections.get(collection)
-        return collection.data.delete_by_id(uuid)
+        c = self.client.collections.get(collection)
+        if uuid:
+            r = c.data.delete_by_id(uuid)
+            log(f"Document deleted: {uuid}")
+        elif filename:
+            # Delete a document by its filename
+            documents = self.list_documents(collection)
+            for f in documents:
+                if f == filename:
+                    # delete all UUIDs for this filename
+                    for u in documents[f]:
+                        r = c.data.delete_by_id(u)
+                        log(f"Document deleted: {filename} - uuid: {u}")
+        else:
+            raise ValueError('Missing document ID or filename')
+        return r
 
     def add_document(self, collection, title, doc_type, filename, content):
         """
@@ -249,6 +258,7 @@ class Documents:
         """
         # is filename a URL?
         if filename.startswith("http"):
+            # TODO: Break into chunks
             return self.add_url(collection, title, filename)
         else:
             # Detect what type of file (case insensitive)
@@ -279,14 +289,15 @@ class Documents:
         Add a PDF document from a local file
         """
         # Convert PDF to text document
-        pdf_content = open(tmp_file, 'rb').read()
+        with open(tmp_file, 'rb') as file:
+            pdf_content = file.read()
         pdf2text = ""
-        f = io.BytesIO(pdf_content)
-        reader = PdfReader(f)
+        pdf_file = io.BytesIO(pdf_content)
+        reader = PdfReader(pdf_file)
         for page in reader.pages:
             pdf2text = page.extract_text() + "\n"
             # TODO: Break into chunks
-            section = title + " - Page " + str(page.page_number)
+            section = title + " - Page " + str(page.page_number+1)
             r = self.add_document(collection, section, "PDF", filename, pdf2text)
         return r
 
@@ -309,6 +320,8 @@ class Documents:
             txt2text = f.read()
         r = self.add_document(collection, title, "TXT", filename, txt2text)
         return r
+    
+# End of document class
 
 # Utility functions
 
@@ -319,21 +332,22 @@ def extract_from_url(url):
     # Function - Extract text from PDF
     def extract_text_from_pdf(response):
         # Convert PDF to text
-        pdf_content = response.read()
+        pdf_content = response.read
         pdf2text = ""
-        f = io.BytesIO(pdf_content)
-        reader = PdfReader(f)
+        pdf_f = io.BytesIO(pdf_content)
+        reader = PdfReader(pdf_f)
         for page in reader.pages:
             pdf2text = pdf2text + page.extract_text() + "\n"
+        pdf_f.close()
         return pdf2text
 
     # Function - Extract text from text
     def extract_text_from_text(response):
-        return response.text()
+        return response.text
 
     # Function - Extract text from HTML
     def extract_text_from_html(response):
-        html_content = response.text()
+        html_content = response.text
         # get title of page from html
         source = "Document Source: " + str(response.url)
         soup = BeautifulSoup(html_content, 'html.parser')
@@ -342,32 +356,92 @@ def extract_from_url(url):
         website_text = f"{title}{source}\nDocument Content:\n" + '\n\n'.join([p.get_text() for p in paragraphs])
         return website_text
 
-    try:
-        with requests.Session() as session:
-            response = session.get(url, allow_redirects=True)
-            if response.status_code == 200:
-                # Route extraction based on content type
-                if ";" in response.headers["Content-Type"]:
-                    content_type = response.headers["Content-Type"].split(";")[0]
-                else:
-                    content_type = response.headers["Content-Type"]
-                content_handlers = {
-                    "application/pdf": extract_text_from_pdf,
-                    "text/plain": extract_text_from_text,
-                    "text/csv": extract_text_from_text,
-                    "text/xml": extract_text_from_text,
-                    "application/json": extract_text_from_text,
-                    "text/html": extract_text_from_html,
-                    "application/xml": extract_text_from_text,
-                }
-                if content_type in content_handlers:
-                    return content_handlers[content_type](response)
-                else:
-                    return "Unsupported content type"
+    with requests.Session() as session:
+        response = session.get(url, allow_redirects=True)
+        if response.status_code == 200:
+            # Route extraction based on content type
+            if ";" in response.headers["Content-Type"]:
+                content_type = response.headers["Content-Type"].split(";")[0]
             else:
-                m = f"Failed to fetch the webpage. Status code: {response.status_code}"
-                log(m)
-                return m
-    except Exception as err:
-        log(f"An error occurred: {str(err)}")
-        return None
+                content_type = response.headers["Content-Type"]
+            content_handlers = {
+                "application/pdf": extract_text_from_pdf,
+                "text/plain": extract_text_from_text,
+                "text/csv": extract_text_from_text,
+                "text/xml": extract_text_from_text,
+                "application/json": extract_text_from_text,
+                "text/html": extract_text_from_html,
+                "application/xml": extract_text_from_text,
+            }
+            if content_type in content_handlers:
+                return content_handlers[content_type](response)
+            else:
+                return "Unsupported content type"
+        else:
+            m = f"Failed to fetch the webpage. Status code: {response.status_code}"
+            log(m)
+            return m
+
+# Main - Test
+if __name__ == "__main__":
+    print("Testing the document module")
+    print("---------------------------")
+    HOST = os.getenv("WEAVIATE_HOST", "localhost")
+    # Test the document module
+    print("Testing the document module")
+    docs = Documents(host=HOST)
+    print("Connecting to Weaviate")
+    if not docs.connect():
+        print("Unable to connect to Weaviate")
+        exit(1)
+    # Remove test collection
+    print("Deleting test collection")
+    docs.delete("test")
+    print("Creating test collection")
+    docs.create("test")
+    # URL Test
+    print("Adding a URL document")
+    docs.add_file("test", "Twinkle, Twinkle, Little Star", "https://www.jasonacox.com/wordpress/archives/2141")
+    # PDF Test
+    print("Adding a PDF document")
+    docs.add_file("test", "Wind the Clock", "test.pdf", "/tmp/tinyllm/test.pdf")
+    # DOCX Test
+    print("Adding a DOCX document")
+    docs.add_file("test", "Wiring for Outcomes", "test.docx", "/tmp/tinyllm/test.docx")
+    # TXT Test
+    print("Adding a TXT document")
+    docs.add_file("test", "Grid Bugs", "test.txt", "/tmp/tinyllm/test.txt")
+    # List documents
+    print("Listing documents")
+    documents = docs.list_documents("test")
+    print(f"   Number of files: {len(documents)}")
+    for f in documents:
+        print(f"{f}: {documents[f]}")
+    # Get document
+    print("Getting document with query: time")
+    results = docs.get_documents("test", query="time", num_results=5)
+    print(f"   Number: {len(results)}")
+    uuid = []
+    for d in results:
+        print("   " + d["uuid"] + " - " + d["title"] + " - " + d["file"])   
+        if d["doc_type"] != "PDF":
+            uuid.append(d["uuid"])
+    # Update document
+    print("Updating document")
+    docs.update_document("test", uuid[0], "Replace Title", "TXT", "updated.txt", "Updated content")
+    # Delete document by ID
+    print("Deleting document by ID")
+    docs.delete_document("test", uuid[1])
+    # Delete document by filename
+    print("Deleting document by filename: test.docx")
+    docs.delete_document("test", filename="test.pdf")
+    # Get number of documents
+    print("Getting number of documents")
+    documents = docs.list_documents("test")
+    print(f"   Number: {len(documents)}")
+    # Delete collection
+    print("Deleting test collection")
+    docs.delete("test")
+    # Close connection
+    docs.close()
+    log("Test complete")
