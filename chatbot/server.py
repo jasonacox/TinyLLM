@@ -219,61 +219,47 @@ while True:
 
 # Test Weaviate Connection
 if WEAVIATE_HOST != "":
-    import weaviate
-    import weaviate.classes as wvc
     try:
-        client = weaviate.connect_to_local(
-            host=WEAVIATE_HOST,
-            port=8080,
-            grpc_port=50051,
-            additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
-        )
-        log(f"RAG: Connected to Weaviate at {WEAVIATE_HOST}")
-        client.close()
-    except Exception as er:
-        log(f"RAG: Unable to connect to Weaviate at {WEAVIATE_HOST}: {str(er)}")
-        WEAVIATE_HOST = "" # Disable RAG support
-        log("RAG: RAG support disabled.")
+        rag_documents.connect()
+        log(f"Connected to Weaviate at {WEAVIATE_HOST}")
+    except Exception as err:
+        log(f"Unable to connect to Weaviate at {WEAVIATE_HOST} - {str(err)}")
+        WEAVIATE_HOST = ""
+        log("RAG support disabled.")
 
 # Find document closely related to query
 def query_index(query, library, num_results=RESULTS):
     references = "References:"
     content = ""
-    try:
-        weaviate_client = weaviate.connect_to_local(
-            host=WEAVIATE_HOST,
-            port=8080,
-            grpc_port=50051,
-            additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
-        )
-        hr = weaviate_client.collections.get(library)
-        results = hr.query.near_text(
-            query=query,
-            limit=num_results
-        )
+    if True:
+        try:
+            results = rag_documents.get_documents(library, query=query, num_results=num_results)
+        except Exception as err:
+            log(f"Error querying Weaviate: {str(err)}")
+            return None, None
         previous_title = ""
         previous_file = ""
         previous_content = ""
-        for ans in results.objects:
+        for ans in results:
             # Skip duplicate titles and files
-            if ans.properties['title'] == previous_title and ans.properties['file'] == previous_file:
+            if ans['title'] == previous_title and ans['file'] == previous_file:
                 continue
-            references = references + f"\n - {ans.properties['title']} - {ans.properties['file']}"
+            references = references + f"\n - {ans['title']} - {ans['file']}"
             # Skip duplicates of content
-            if ans.properties['content'] == previous_content:
+            if ans['content'] == previous_content:
                 continue
-            content = content + f"Document: {ans.properties['title']}\nDocument Source: {ans.properties['file']}\nContent: {ans.properties['content']}\n---\n"
+            content = content + f"Document: {ans['title']}\nDocument Source: {ans['file']}\nContent: {ans['content']}\n---\n"
             if (len(content)/4) > MAXTOKENS/2:
                 break
-            previous_title = ans.properties['title']
-            previous_file = ans.properties['file']
-            previous_content = ans.properties['content']
-        weaviate_client.close()
+            previous_title = ans['title']
+            previous_file = ans['file']
+            previous_content = ans['content']
+        rag_documents.close()
         log(f"RAG: Retrieved: {references}")
         return content, references
-    except Exception as err:
-        log(f"Error querying Weaviate: {str(err)}")
-        return None, None
+    #except Exception as err:
+    #    log(f"Error querying Weaviate: {str(err)}")
+    #    return None, None
 
 # Globals
 client = {}
