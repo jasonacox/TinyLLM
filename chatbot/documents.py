@@ -39,9 +39,11 @@ https://github.com/jasonacox/TinyLLM
 import os
 import io
 import logging
+import time
 
 import weaviate.classes as wvc
 import weaviate
+from weaviate.exceptions import WeaviateConnectionError
 import requests
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
@@ -67,61 +69,93 @@ class Documents:
         client: Weaviate client object
     """
 
-    def __init__(self, host="localhost", filepath="/tmp", port=8080, grpc_port=50051):
+    def __init__(self, host="localhost", filepath="/tmp", port=8080, grpc_port=50051, retry=3):
         """
         Initialize the Document class
         """
         # Weaviate client object
-        self.host = host
-        self.filepath = filepath
-        self.port = port
-        self.grpc_port = grpc_port
-        self.client = None
+        self.host = host            # Weaviate host IP address
+        self.filepath = filepath    # File path for temporary document storage
+        self.port = port            # Weaviate port
+        self.grpc_port = grpc_port  # Weaviate gRPC port
+        self.client = None          # Weaviate client object
+        self.retry = retry          # Number of times to retry connection
         # Verify file path
         if not os.path.exists(filepath):
             raise Exception('File path does not exist')
+
+    def connect(self):
+        """
+        Connect to the weaviate instance
+        """
+        x = self.retry
+        # Connect to Weaviate
+        while x:
+            try:
+                self.client = weaviate.connect_to_local(
+                    host=self.host,
+                    port=self.port,
+                    grpc_port=self.grpc_port,
+                    additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
+                )
+                log(f"Connected to Weaviate at {self.host}")
+                return True
+            except WeaviateConnectionError as er:
+                log(f"Connection error: {str(er)}")
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError(f"Unable to connect to Weaviate at {self.host}")
+        return False
 
     def create(self, collection):
         """
         Create a collection in weaviate
         """
+        r = None
+        x = self.retry
         if not self.client:
             self.connect()
         # Create a collection
-        r = self.client.collections.create(
-            name=collection,
-            vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_transformers()
-        )
-        log(f"Collection created: {collection}")
+        while x: # retry until success
+            try:
+                r = self.client.collections.create(
+                    name=collection,
+                    vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_transformers()
+                )
+                log(f"Collection created: {collection}")
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error: {str(er)}")
+                self.connect()
+                time.sleep(1)
+                x -= 1
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
     def delete(self, collection):
         """
         Delete a collection in weaviate
         """
+        r = None
+        x = self.retry
         if not self.client:
             self.connect()
         # Delete a collection
-        r = self.client.collections.delete(collection)
-        log(f"Collection deleted: {collection}")
+        while x:
+            try:
+                r = self.client.collections.delete(collection)
+                log(f"Collection deleted: {collection}")
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error: {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
-
-    def connect(self):
-        """
-        Connect to the weaviate instance
-        """
-        try:
-            self.client = weaviate.connect_to_local(
-                host=self.host,
-                port=self.port,
-                grpc_port=self.grpc_port,
-                additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
-            )
-            log(f"Connected to Weaviate at {self.host}")
-            return True
-        except Exception as er:
-            log(f"Unable to connect to Weaviate at {self.host}: {str(er)}")
-            return False
 
     def close(self):
         """
@@ -129,39 +163,66 @@ class Documents:
         """
         if self.client:
             self.client.close()
+            log("Connection to Weaviate closed")
+            self.client = None
 
     def list_documents(self, collection=None):
         """
         List all documents in collection with file as the key
         """
+        x = self.retry
+        documents = {}
         # List all documents in collection
         if not self.client:
             self.connect()
         # Get list of documents in collection
-        collection = self.client.collections.get(collection)
-        documents = {}
-        for o in collection.iterator():
-            p = o.properties
-            uuid = str(o.uuid)
-            filename = p.get("file")
-            title = p.get("title")
-            doc_type = p.get("doc_type")
-            if filename not in documents:
-                documents[filename] = {}
-            documents[filename][uuid] = {
-                "title": title,
-                "doc_type": doc_type,                
-            }
+        while x:
+            try:
+                collection = self.client.collections.get(collection)
+                for o in collection.iterator():
+                    p = o.properties
+                    uuid = str(o.uuid)
+                    filename = p.get("file")
+                    title = p.get("title")
+                    doc_type = p.get("doc_type")
+                    if filename not in documents:
+                        documents[filename] = {}
+                    documents[filename][uuid] = {
+                        "title": title,
+                        "doc_type": doc_type,                
+                    }
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error: {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
         return documents
 
     def get_document(self, collection, uuid):
         """
         Return a document by its ID
         """
+        document = None
+        x = self.retry
+        if not self.client:
+            self.connect()
         # Get a document by its ID - list fist element if list
-        document = self.client.documents.get(collection, uuid) 
-        if document and isinstance(document, list):
-            document = document[0]
+        while x:
+            try:
+                document = self.client.documents.get(collection, uuid) 
+                if document and isinstance(document, list):
+                    document = document[0]
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error (retry {x}): {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
         return document
 
     def get_documents(self, collection, uuid=None, query=None, num_results=10):
@@ -169,66 +230,98 @@ class Documents:
         Return a document by ID or query
         """
         dd = []
+        x = self.retry
         if not self.client:
             self.connect()
         if uuid:
             # Get a document by its ID
-            response = collection.query.fetch_object_by_id(uuid)
-            p = response.properties
-            dd.append({
-                "uuid": uuid,
-                "file": p.get("file"),
-                "title": p.get("title"),
-                "doc_type": p.get("doc_type"),
-                'content': p.get("content"),
-            })
+            while x:
+                try:
+                    response = collection.query.fetch_object_by_id(uuid)
+                    p = response.properties
+                    dd.append({
+                        "uuid": uuid,
+                        "file": p.get("file"),
+                        "title": p.get("title"),
+                        "doc_type": p.get("doc_type"),
+                        'content': p.get("content"),
+                    })
+                    break
+                except WeaviateConnectionError as er:
+                    log(f"Connection error (retry {x}): {str(er)}")
+                    self.connect()
+                    x -= 1
+                    time.sleep(1)
         if query:
             # Search by vector query
-            qdocs = self.client.collections.get(collection)
-            r = qdocs.query.near_text(
-                query=query,
-                limit=num_results
-            )
-            for i in r.objects:
-                p = i.properties
-                uuid = str(i.uuid)
-                dd.append( {
-                    "uuid": uuid,
-                    "file": p.get("file"),
-                    "title": p.get("title"),
-                    "doc_type": p.get("doc_type"),
-                    'content': p.get("content"),
-                })
+            while x:
+                try:
+                    qdocs = self.client.collections.get(collection)
+                    r = qdocs.query.near_text(
+                        query=query,
+                        limit=num_results
+                    )
+                    for i in r.objects:
+                        p = i.properties
+                        uuid = str(i.uuid)
+                        dd.append( {
+                            "uuid": uuid,
+                            "file": p.get("file"),
+                            "title": p.get("title"),
+                            "doc_type": p.get("doc_type"),
+                            'content': p.get("content"),
+                        })
+                    break
+                except WeaviateConnectionError as er:
+                    log(f"Connection error (retry {x}): {str(er)}")
+                    self.connect()
+                    x -= 1
+                    time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
         return dd
 
     def delete_document(self, collection, uuid=None, filename=None):
         """
         Delete a document by its ID or filename
         """
+        r = None
+        x = self.retry
         # Delete a document by its ID
         if not self.client:
             self.connect()
-        c = self.client.collections.get(collection)
-        if uuid:
-            r = c.data.delete_by_id(uuid)
-            log(f"Document deleted: {uuid}")
-        elif filename:
-            # Delete a document by its filename
-            documents = self.list_documents(collection)
-            for f in documents:
-                if f == filename:
-                    # delete all UUIDs for this filename
-                    for u in documents[f]:
-                        r = c.data.delete_by_id(u)
-                        log(f"Document deleted: {filename} - uuid: {u}")
-        else:
-            raise ValueError('Missing document ID or filename')
+        while x:
+            try:
+                c = self.client.collections.get(collection)
+                if uuid:
+                    r = c.data.delete_by_id(uuid)
+                    log(f"Document deleted: {uuid}")
+                elif filename:
+                    # Delete a document by its filename
+                    documents = self.list_documents(collection)
+                    for f in documents:
+                        if f == filename:
+                            # delete all UUIDs for this filename
+                            for u in documents[f]:
+                                r = c.data.delete_by_id(u)
+                                log(f"Document deleted: {filename} - uuid: {u}")
+                else:
+                    raise ValueError('Missing document ID or filename')
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error (retry {x}): {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
     def add_document(self, collection, title, doc_type, filename, content):
         """
         Add a document into weaviate
         """
+        r = None
         if not self.client:
             self.connect()
         if not (title and doc_type and filename and content):
@@ -240,17 +333,45 @@ class Documents:
             "file": filename,
             "content": content
         }]
-        c = self.client.collections.get(collection)
-        r = c.data.insert_many(documents)
-        log(f"Document added: {filename}")
+        x = self.retry
+        while x:
+            try:
+                c = self.client.collections.get(collection)
+                r = c.data.insert_many(documents)
+                log(f"Document added: {filename}")
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error (retry {x}): {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
     def update_document(self, collection, uuid, title, doc_type, filename, content):
         """
         Update a document in weaviate by its ID
         """
-        self.delete_document(collection, uuid)
-        return self.add_document(collection, title, doc_type, filename, content)
+        # Delete and re-add document
+        x = self.retry
+        r = None
+        if not self.client:
+            self.connect()
+        while x:
+            try:
+                self.delete_document(collection, uuid)
+                r = self.add_document(collection, title, doc_type, filename, content)
+                log(f"Document updated: {uuid}")
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error (retry {x}): {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
+        return r
 
     def add_file(self, collection, title, filename, tmp_file=None):
         """
