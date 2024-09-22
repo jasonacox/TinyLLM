@@ -85,7 +85,7 @@ from pypdf import PdfReader
 import aiohttp
 
 # TinyLLM Version
-VERSION = "v0.15.0"
+from version import VERSION
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 

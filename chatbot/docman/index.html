@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyLLM Document Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 20px;
+        }
+        footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px 0;
+            font-size: small;
+        }
+        .docmanager {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .container {
+            max-width: 900px;
+            margin: 10 auto;
+            display: flex;
+            justify-content: space-between;
+        }
+        .northwest {
+            width: 35%;
+        }
+        .northeast {
+            width: 50%;
+        }
+        h1, h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            margin-top: 10px;
+        }
+        .box {
+            background-color: #fff;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .drag-drop-area {
+            border: 2px dashed #007bff;
+            border-radius: 5px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+            color: #007bff;
+        }
+        .url-input::placeholder {
+            color: #007bff;
+        }
+        .url-input {
+            padding: 10px;
+            border: 2px dashed #007bff;
+            width: 100%;
+            box-sizing: border-box;
+            color: #007bff;
+        }
+        .drag-drop-area.dragging {
+            background-color: #e7f0ff;
+        }
+        .file-preview ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .file-preview li {
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .progress-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .progress-bar-inner {
+            height: 10px;
+            width: 0;
+            background-color: #007bff;
+        }
+        .file-upload button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .file-upload button:hover {
+            background-color: #0056b3;
+        }
+        .upload-button {
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: inline-block;        
+        }
+        .upload-button:hover {
+            background-color: #218838;
+        }
+        #deleteModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+        }
+        #deleteModal .modal-content {
+            background-color: white;
+            padding: 20px;
+            max-width: 400px;
+            margin: 100px auto;
+            text-align: center;
+        }
+        #confirmDelete, #cancelDelete {
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        #confirmDelete {
+            background-color: red;
+            color: white;
+        }
+        #cancelDelete {
+            background-color: gray;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>TinyLLM Document Manager</h1>
+    <div class="docmanager">
+        <div class="container" id="container">
+        
+            <!-- Collection list box -->
+            <div class="box northwest" id="northwest">
+                <h2>Vector DB Collections</h2>
+                <ul id="collection-list">
+                    <!-- Form with radio buttons list of collections -->
+                    <form id="collection-selector">
+                        <label>
+                            <input type="radio" name="collection" value="One" onclick="selectCollection(this.value)">
+                            One
+                        </label><br>
+                        <label>
+                            <input type="radio" name="collection" value="Two" onclick="selectCollection(this.value)">
+                            Two
+                        </label><br>
+                        <label>
+                            <input type="radio" name="collection" value="Three" onclick="selectCollection(this.value)">
+                            Three
+                        </label><br>
+                        <label>
+                            <input type="radio" name="collection" value="Four" onclick="selectCollection(this.value)">
+                            Four
+                        </label><br>
+                        <label>
+                            <input type="radio" name="collection" value="Five" onclick="selectCollection(this.value)">
+                            Five
+                        </label>
+                    </form>
+                </ul>
+            </div>
+
+            <!-- File upload box -->
+            <div class="box northeast" id="northeast">
+                <h2>File Upload</h2>
+
+                <!-- Drag-and-drop area -->
+                <div id="drop-area" class="drag-drop-area">
+                    <p>Drag and drop a file here, or click to select a file</p>
+                </div>
+
+                <!-- File preview list -->
+                <div class="file-preview" id="file-preview">
+                    <ul id="preview-list"></ul>
+                </div>
+
+                <form id="upload-form">
+                    <!-- Accept optional URL -->
+                    <input type="url" id="url-input" class="url-input" name="url" placeholder="Or Enter URL">
+                    <!-- Hidden file input -->
+                    <input type="file" id="file-input" name="file" style="display: none;">
+                    <br><br>
+                    <div style="text-align: center;"><button type="button" id="upload-button" class="upload-button">Upload</button></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Collection Documents box -->
+        <div class="south" id="south">
+            <div class="box">
+                <h2>Documents</h2>
+                <ul id="uploaded-files-list">
+                    <li>No documents uploaded yet.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <!-- Pop up to confirm from user -->
+    <div id="deleteModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.5);">
+        <div style="background:#fff; padding:20px; max-width:400px; margin:100px auto; text-align:center;">
+            <p id="modalMessage">Are you sure you want to delete this file?</p>
+            <button id="confirmDelete" style="background:red; color:white; padding:10px 20px;">Delete</button>
+            <button id="cancelDelete" style="background:gray; color:white; padding:10px 20px;">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('file-input');
+        const previewList = document.getElementById('preview-list');
+        const uploadedFilesList = document.getElementById('uploaded-files-list');
+        const uploadButton = document.getElementById('upload-button');
+        const collectionList = document.getElementById('collection-selector');
+        let files = [];
+        let collectionValue = '';
+
+        // Highlight drop area when files are dragged over
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropArea.classList.add('dragging');
+            });
+        });
+
+        // Remove highlight when files leave drop area
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.remove('dragging');
+            });
+        });
+
+        // Handle file drop
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            files = e.dataTransfer.files;
+            updateFilePreview();
+        });
+
+        // Open file dialog on click
+        dropArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Update file input when files are selected through the file dialog
+        fileInput.addEventListener('change', () => {
+            files = fileInput.files;
+            updateFilePreview();
+        });
+
+        // Update the file preview list
+        function updateFilePreview() {
+            previewList.innerHTML = ''; // Clear previous list
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const li = document.createElement('li');
+                li.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+                
+                const progressBar = document.createElement('div');
+                progressBar.classList.add('progress-bar');
+                
+                const progressBarInner = document.createElement('div');
+                progressBarInner.classList.add('progress-bar-inner');
+                progressBar.appendChild(progressBarInner);
+
+                li.appendChild(progressBar);
+                previewList.appendChild(li);
+            }
+        }
+
+        // Handle file upload when the "Upload" button is clicked
+        uploadButton.addEventListener('click', () => {
+            if (files.length === 0 && document.getElementById('url-input').value === '') {
+                alert('Please enter URL or select a file.');
+                return;
+            }
+            // We can only upload one file - check
+            if (files.length > 1) {
+                alert('Please select only one file.');
+                return;
+            }
+            // Upload the file
+            uploadFile(files[0]);
+
+            // Clear the file input
+            previewList.innerHTML = '';
+            
+        });
+
+        // Function to handle file upload and load the new HTML page
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('url', document.getElementById('url-input').value);
+            formData.append('collection', collectionValue);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.ok) {
+                    return response.text();  // Fetch the HTML response as text
+                } else {
+                    throw new Error('Failed to upload the file.');
+                }
+            }).then(html => {
+                // Replace the current document's HTML with the new HTML
+                document.open();
+                document.write(html);
+                document.close();
+            }).catch(error => {
+                console.error('Error uploading file:', error);
+            });
+        }
+
+        // Fetch updated list of uploaded files and refresh the UI
+        function refreshUploadedFiles() {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/get_uploaded_files', true);
+            
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    const filesData = JSON.parse(xhr.responseText);
+                    updateUploadedFilesUI(filesData);
+                } else {
+                    console.log('Failed to load the updated file list.');
+                }
+            };
+            
+            xhr.send();
+        }
+
+        // Fetch list of collections and refresh the UI
+        function refreshCollections() {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/get_collections', true);
+            
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    const collectionsData = JSON.parse(xhr.responseText);
+                    updateCollectionsUI(collectionsData);
+                } else {
+                    console.log('Failed to load the updated collection list.');
+                }
+            };
+            
+            xhr.send();
+        }
+
+        // Update the "Uploaded Files" section in the UI
+        function updateUploadedFilesUI(filesData) {
+            uploadedFilesList.innerHTML = '';  // Clear the current list
+
+            if (filesData.length === 0) {
+                uploadedFilesList.innerHTML = '<li>No files uploaded yet.</li>';
+            } else {
+                filesData.forEach(file => {
+                    const li = document.createElement('li');
+                    // Build View <a> tag
+                    const viewLink = document.createElement('a');
+                    // create simple a tag to /view?filename=filename encoded url
+                    viewLink.href = '/view?filename=' + encodeURIComponent(file.filename);
+                    viewLink.textContent = 'View';
+                    li.appendChild(viewLink);
+                    // Build Delete <a> tag
+                    const deleteLink = document.createElement('a');
+                    deleteLink.href = '#';
+                    deleteLink.onclick = function() {
+                        deleteFile(file.filename);
+                    };
+                    deleteLink.textContent = 'Delete';
+                    deleteLink.style.marginLeft = '10px';
+                    li.appendChild(deleteLink);
+                    // Build filename and chunk count
+                    li.appendChild(document.createTextNode(` - ${file.filename} (${file.count} chunks)`));
+                    uploadedFilesList.appendChild(li);
+                });
+            }
+        }
+
+        // Update the "Collection List" form radio boxes in the UI
+        function updateCollectionsUI(collectionsData) {
+            collectionList.innerHTML = '';  // Clear the current list
+
+            if (collectionsData.length === 0) {
+            collectionList.innerHTML = '<li>No collections available.</li>';
+            } else {
+            const fragment = document.createDocumentFragment();
+            collectionsData.forEach(collection => {
+                // Create a radio button for each collection
+                const label = document.createElement('label');
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = 'collection';
+                input.value = collection;
+                input.onclick = () => selectCollection(collection);
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(collection));
+                // select checked if collectionValue matches
+                if (collection === collectionValue) {
+                    input.checked = true;
+                }
+                label.appendChild(document.createElement('br'));
+                fragment.appendChild(label);
+            });
+            collectionList.appendChild(fragment);
+            }
+        }
+
+        // Select collection
+        function selectCollection(collection) {
+            console.log(collection);
+            // Store selection in a cookie
+            document.cookie = `collection=${collection}`;
+            // Tell server to update the collection via POST request
+            const formData = new FormData();
+            formData.append('collection', collection);
+            fetch('/select_collection', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.ok) {
+                    return response.text();  // Fetch the HTML response as text
+                } else {
+                    throw new Error('Failed to select the collection.');
+                }
+            }).catch(error => {
+                console.error('Error selecting collection:', error);
+            });
+            
+            // Refresh the uploaded files list
+            refreshUploadedFiles();
+        }
+
+        // View file
+        function viewFile(filename) {
+            // urlencoded filename
+            filename = encodeURIComponent(filename);
+            window.open(`/view/filename=${filename}`, '_blank');
+        }
+
+        // Delete file confirmation
+        async function deleteFile(filename) {
+            // Use a modal to confirm the delete action
+            const modal = document.getElementById('deleteModal');
+            const confirmDelete = document.getElementById('confirmDelete');
+            const cancelDelete = document.getElementById('cancelDelete');
+            const modalMessage = document.getElementById('modalMessage');
+            // Show the modal
+            document.getElementById('deleteModal').style.display = 'block';
+            // Set the message
+            modalMessage.textContent = `Are you sure you want to delete ${filename}?`;
+            // Set the confirm delete action
+            confirmDelete.onclick = async function() {
+                await deleteFileRequest(filename);
+                // Hide the modal
+                modal.style.display = 'none';
+            };
+            // Set the cancel delete action
+            cancelDelete.onclick = function() {
+                // Hide the modal
+                modal.style.display = 'none';
+            };
+        }
+
+        // Delete file request
+        async function deleteFileRequest(filename) {
+
+            // create a FormData object and submit the filename to the server
+            const formData = new FormData();
+            formData.append('filename', filename);
+
+            try {
+                // Await the fetch request to the server
+                const response = await fetch('/delete', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error deleting file.');
+                }
+
+                // Await the response text to complete (HTML page in this case)
+                const html = await response.text();
+
+                // Assuming you're refreshing or reloading the page or part of the page here
+                refreshUploadedFiles();
+            } catch (error) {
+                // Handle any error that occurs during the process
+                console.error('Error deleting file:', error);
+            }
+        }
+
+        // Prevent the default behavior of file drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, (e) => {
+                e.preventDefault();
+            });
+        });
+
+        // Prevent the default behavior of file drop for the drop area
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => {
+                e.preventDefault();
+            });
+        });
+
+        // Set collectionValue from cookie
+        const cookie = document.cookie;
+        const cookieParts = cookie.split(';');
+        for (let i = 0; i < cookieParts.length; i++) {
+            const cookiePart = cookieParts[i].trim();
+            if (cookiePart.startsWith('collection=')) {
+                collectionValue = cookiePart.substring('collection='.length);
+                break;
+            }
+        }
+
+        // Send server the collectionValue
+        selectCollection(collectionValue);
+
+        // First load
+        refreshUploadedFiles();
+        refreshCollections(collectionValue);
+    </script>
+
+    <!-- Footer - Bottom of Screen add html file and link to TinyLLM-->
+    <footer style="position: fixed; bottom: 0; left: 0; width: 100%; background-color: #333; color: white; text-align: center; padding: 10px 0;">
+        <a href="/" style="color: white; font-size: small;">Home</a> | 
+        <a href="https://github.com/jasonacox/TinyLLM" style="color: white; font-size: small;">TinyLLM Document Manager {{ version }}</a> - index.html
+   </footer>
+
+</body>
+</html>

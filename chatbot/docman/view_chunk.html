@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chunk Details</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 20px;
+        }
+        footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px 0;
+            font-size: small;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .box {
+            background-color: #fff;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .file-details ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .file-details li {
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .back-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: inline-block;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        .back-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Chunk Details</h1>
+
+        <!-- File details box -->
+        <div class="box file-details">
+            <ul>
+                <li><strong>Filename:</strong> <span>{{ filename }}</span></li>
+                <li><strong>Chunk UUID:</strong> <span>{{ uuid }}</span></li>
+                <li><strong>Title:</strong> <span>{{ title }}</span></li>
+                <li><strong>Type:</strong> <span>{{ doc_type }}</span></li>
+                <li><strong>Created:</strong> <span>{{ creation_time }}</span></li>
+                <li><strong>Chunk:</strong> <span>{{ chunk }}</span></li>
+                <li><strong>Content:</strong> <br><span>{{ content }}</span></li>
+
+            </ul>
+        </div>
+
+        <!-- Back to files list button -->
+        <a href="/" class="back-button">Back to Files</a>
+    </div>
+
+    <!-- Footer - Bottom of Screen add html file and link to TinyLLM-->
+    <footer style="position: fixed; bottom: 0; left: 0; width: 100%; background-color: #333; color: white; text-align: center; padding: 10px 0;">
+        <a href="/" style="color: white; font-size: small;">Home</a> | 
+        <a href="https://github.com/jasonacox/TinyLLM" style="color: white; font-size: small;">TinyLLM Document Manager {{ version }}</a> - view_chunk.html
+   </footer>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TinyLLM Chatbot - Document Management</title>
+    <meta name="viewport" content="width=device-width, height=device-height, maximum-scale=1.0">
+</head>
+<body></body>
+    <h1>Document Management</h1>
+    <p>Here you can manage your documents.</p>
+    <p>Click on the document to view it.</p>
+    <ul>
+        {% for doc in docs %}
+            <li><a href="/docs/{{ doc.file }}">{{ doc.file }} - {{ doc.title }}</a></li>
+        {% endfor %}
+    </ul>
+    <p>Upload new documents</p>
+    <form action="/docs" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <input type="text" name="title" placeholder="Title" required>
+        <input type="submit" value="Upload">
+    </form>
+
+</body>
+</html>

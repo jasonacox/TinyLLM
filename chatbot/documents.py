@@ -24,7 +24,7 @@ Class Documents:
     add_txt: Add a TXT document
 
 Requirements:
-    !pip install weaviate-client pdfreader bs4 pypandoc
+    !pip install weaviate-client pdfreader bs4 pypandoc pypdf
 
 Run Test:
     WEAVIATE_HOST=localhost python3 documents.py
@@ -44,10 +44,15 @@ import time
 import weaviate.classes as wvc
 import weaviate
 from weaviate.exceptions import WeaviateConnectionError
+from weaviate.classes.query import Filter
 import requests
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
 import pypandoc
+
+# optional - download pandoc
+#from pypandoc.pandoc_download import download_pandoc
+#download_pandoc()
 
 # Logging
 logging.basicConfig(level=logging.ERROR)
@@ -55,6 +60,9 @@ logger = logging.getLogger(__name__)
 
 def log(msg):
     logger.debug(msg)
+
+# Defaults
+MAX_CHUNK_SIZE=256*4
 
 # Document class
 class Documents:
@@ -74,12 +82,13 @@ class Documents:
         Initialize the Document class
         """
         # Weaviate client object
-        self.host = host            # Weaviate host IP address
-        self.filepath = filepath    # File path for temporary document storage
-        self.port = port            # Weaviate port
-        self.grpc_port = grpc_port  # Weaviate gRPC port
-        self.client = None          # Weaviate client object
-        self.retry = retry          # Number of times to retry connection
+        self.host = host                        # Weaviate host IP address
+        self.filepath = filepath                # File path for temporary document storage
+        self.port = port                        # Weaviate port
+        self.grpc_port = grpc_port              # Weaviate gRPC port
+        self.client = None                      # Weaviate client object
+        self.retry = retry                      # Number of times to retry connection
+        self.max_chunk_size = MAX_CHUNK_SIZE    # Maximum chunk size for document content
         # Verify file path
         if not os.path.exists(filepath):
             raise Exception('File path does not exist')
@@ -107,6 +116,45 @@ class Documents:
         if not x:
             raise WeaviateConnectionError(f"Unable to connect to Weaviate at {self.host}")
         return False
+
+    def close(self):
+        """
+        Close the weaviate connection
+        """
+        if self.client:
+            self.client.close()
+            log("Connection to Weaviate closed")
+            self.client = None
+
+    def set_max_chunk_size(self, size):
+        """
+        Set the maximum chunk size for document content
+        """
+        self.max_chunk_size = size
+        
+    def all_collections(self):
+        """
+        List all collections in weaviate
+        """
+        if not self.client:
+            self.connect()
+        x = self.retry
+        while x:
+            try:
+                c = []
+                collections = self.client.collections.list_all(simple=True)
+                for i in collections:
+                    c.append(i)
+                log(f"Collections: {c}")
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error: {str(er)}")
+                self.connect()
+                time.sleep(1)
+                x -= 1
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
+        return c
 
     def create(self, collection):
         """
@@ -157,18 +205,20 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
-    def close(self):
-        """
-        Close the weaviate connection
-        """
-        if self.client:
-            self.client.close()
-            log("Connection to Weaviate closed")
-            self.client = None
-
     def list_documents(self, collection=None):
         """
         List all documents in collection with file as the key
+
+        Returns:
+            documents: Dictionary of documents with filename as the key
+            {
+                "filename.txt": {
+                    "uuid": {
+                        "title": "title", 
+                        "doc_type": "doc_type"
+                    }
+                }
+            }
         """
         x = self.retry
         documents = {}
@@ -185,11 +235,13 @@ class Documents:
                     filename = p.get("file")
                     title = p.get("title")
                     doc_type = p.get("doc_type")
+                    creation_time = p.get("creation_time")
                     if filename not in documents:
                         documents[filename] = {}
                     documents[filename][uuid] = {
                         "title": title,
-                        "doc_type": doc_type,                
+                        "doc_type": doc_type,    
+                        "creation_time": creation_time            
                     }
                 break
             except WeaviateConnectionError as er:
@@ -212,9 +264,20 @@ class Documents:
         # Get a document by its ID - list fist element if list
         while x:
             try:
-                document = self.client.documents.get(collection, uuid) 
-                if document and isinstance(document, list):
-                    document = document[0]
+                c = self.client.collections.get(collection)
+                udocs = c.query.fetch_objects(
+                    filters=Filter.by_id().equal(uuid),
+                )
+                p = udocs.objects[0].properties
+                document ={
+                    "uuid": uuid,
+                    "file": p.get("file"),
+                    "title": p.get("title"),
+                    "chunk": p.get("chunk"),
+                    "doc_type": p.get("doc_type"),
+                    "content": p.get("content"),
+                    "creation_time": p.get("creation_time"),
+                }
                 break
             except WeaviateConnectionError as er:
                 log(f"Connection error (retry {x}): {str(er)}")
@@ -225,9 +288,9 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return document
 
-    def get_documents(self, collection, uuid=None, query=None, num_results=10):
+    def get_documents(self, collection, uuid=None, query=None, filename=None, num_results=10):
         """
-        Return a document by ID or query
+        Return a document by ID, query or filename
         """
         dd = []
         x = self.retry
@@ -235,23 +298,7 @@ class Documents:
             self.connect()
         if uuid:
             # Get a document by its ID
-            while x:
-                try:
-                    response = collection.query.fetch_object_by_id(uuid)
-                    p = response.properties
-                    dd.append({
-                        "uuid": uuid,
-                        "file": p.get("file"),
-                        "title": p.get("title"),
-                        "doc_type": p.get("doc_type"),
-                        'content': p.get("content"),
-                    })
-                    break
-                except WeaviateConnectionError as er:
-                    log(f"Connection error (retry {x}): {str(er)}")
-                    self.connect()
-                    x -= 1
-                    time.sleep(1)
+            dd = [self.get_document(collection, uuid)]
         if query:
             # Search by vector query
             while x:
@@ -268,8 +315,10 @@ class Documents:
                             "uuid": uuid,
                             "file": p.get("file"),
                             "title": p.get("title"),
+                            "chunk": p.get("chunk"),
                             "doc_type": p.get("doc_type"),
-                            'content': p.get("content"),
+                            "content": p.get("content"),
+                            "creation_time": p.get("creation_time"),
                         })
                     break
                 except WeaviateConnectionError as er:
@@ -277,8 +326,15 @@ class Documents:
                     self.connect()
                     x -= 1
                     time.sleep(1)
-        if not x:
-            raise WeaviateConnectionError("Unable to connect to Weaviate")
+            if not x:
+                raise WeaviateConnectionError("Unable to connect to Weaviate")
+        if filename:
+            # Get a document by its filename
+            r = self.list_documents(collection)
+            for fn in r:
+                if fn == filename:
+                    for uuid in r[fn]:
+                        dd.append(self.get_document(collection, uuid))
         return dd
 
     def delete_document(self, collection, uuid=None, filename=None):
@@ -317,27 +373,61 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
-    def add_document(self, collection, title, doc_type, filename, content):
+    def add_document(self, collection, title, doc_type, filename, chunk=None, content=None):
         """
         Add a document into weaviate
+
+        Inputs:
+            collection: Collection name
+            title: Document title
+            doc_type: Document type
+            filename: Document filename
+            chunk: Document chunk - Part of the document
+            content: Document content - Full text of the document
         """
         r = None
-        if not self.client:
-            self.connect()
+        dd = []
+        if not chunk and not content:
+            raise ValueError('Missing document content')
+        if not content:
+            content = chunk
         if not (title and doc_type and filename and content):
             raise ValueError('Missing document properties')
-        # Ingest a document
-        documents = [{
-            "title": title,
-            "doc_type": doc_type,
-            "file": filename,
-            "content": content
-        }]
+        if not chunk and self.max_chunk_size > 0:
+            # Auto break up content into chunks
+            chunks = break_up_content(content, self.max_chunk_size)
+            ci = 0
+            total_chunks = len(chunks)
+            for chunk in chunks:
+                ci = ci + 1
+                if total_chunks > 1:
+                    suffix = f" - Section {ci} of {total_chunks}"
+                else:
+                    suffix = ""
+                dd.append({
+                    "title": title + suffix,
+                    "chunk": chunk,
+                    "doc_type": doc_type,
+                    "file": filename,
+                    "content": content,
+                    "creation_time": time.time()
+                })
+        else :
+            dd.append({
+                "title": title,
+                "chunk": chunk,
+                "doc_type": doc_type,
+                "file": filename,
+                "content": content,
+                "creation_time": time.time()
+            })
         x = self.retry
+        if not self.client:
+            self.connect()
         while x:
             try:
                 c = self.client.collections.get(collection)
-                r = c.data.insert_many(documents)
+                r = c.data.insert_many(dd)
                 log(f"Document added: {filename}")
                 break
             except WeaviateConnectionError as er:
@@ -349,7 +439,7 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
-    def update_document(self, collection, uuid, title, doc_type, filename, content):
+    def update_document(self, collection, uuid, title, doc_type, filename, chunk=None, content=None):
         """
         Update a document in weaviate by its ID
         """
@@ -361,7 +451,7 @@ class Documents:
         while x:
             try:
                 self.delete_document(collection, uuid)
-                r = self.add_document(collection, title, doc_type, filename, content)
+                r = self.add_document(collection, title, doc_type, filename, chunk, content)
                 log(f"Document updated: {uuid}")
                 break
             except WeaviateConnectionError as er:
@@ -392,6 +482,12 @@ class Documents:
             elif filename.lower().endswith('.txt'):
                 # TXT document
                 return self.add_txt(collection, title, filename, tmp_file)
+            elif filename.lower().endswith('.html'):
+                # HTML document
+                return self.add_html(collection, title, filename, tmp_file)
+            elif filename.lower().endswith('.json'):
+                # JSON document
+                return self.add_json(collection, title, filename, tmp_file)
             else:
                 # Unsupported document
                 raise ValueError('Unsupported document format')
@@ -402,7 +498,7 @@ class Documents:
         """
         content = extract_from_url(url)
         if content:
-            return self.add_document(collection, title, "URL", url, content)
+            return self.add_document(collection, title, "URL", url, content=content)
         return None
 
     def add_pdf(self, collection, title, filename, tmp_file):
@@ -419,7 +515,7 @@ class Documents:
             pdf2text = page.extract_text() + "\n"
             # TODO: Break into chunks
             section = title + " - Page " + str(page.page_number+1)
-            r = self.add_document(collection, section, "PDF", filename, pdf2text)
+            r = self.add_document(collection, section, "PDF", filename, content=pdf2text)
         return r
 
     def add_docx(self, collection, title, filename, tmp_file):
@@ -429,7 +525,7 @@ class Documents:
         # Convert DOCX file to text document
         docx2text = pypandoc.convert_file(tmp_file, 'plain', format='docx')
         # TODO: Break into chunks
-        r = self.add_document(collection, title, "DOCX", filename, docx2text)
+        r = self.add_document(collection, title, "DOCX", filename, content=docx2text)
         return r
 
     def add_txt(self, collection, title, filename, tmp_file):
@@ -439,12 +535,54 @@ class Documents:
         # Read text from TXT file
         with open(tmp_file, 'r') as f:
             txt2text = f.read()
-        r = self.add_document(collection, title, "TXT", filename, txt2text)
+        r = self.add_document(collection, title, "TXT", filename, content=txt2text)
         return r
     
+    def add_html(self, collection, title, filename, tmp_file):
+        """
+        Add a HTML document
+        """
+        # Read and convert html to text
+        with open(tmp_file, 'r') as f:
+            html2text = f.read()
+        soup = BeautifulSoup(html2text, 'html.parser')
+        title = soup.title.string
+        paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
+        website_text = f"Document Title: {title}\nDocument Content:\n" + '\n\n'.join([p.get_text() for p in paragraphs])
+        r = self.add_document(collection, title, "HTML", filename, content=website_text)
+        return r
+    
+    def add_json(self, collection, title, filename, tmp_file):
+        """
+        Add a JSON document
+        """
+        # Read text from JSON file
+        with open(tmp_file, 'r') as f:
+            json2text = f.read()
+        r = self.add_document(collection, title, "JSON", filename, content=json2text)
+        return r
+    
+
 # End of document class
 
 # Utility functions
+
+# Function to break up content into chunks
+def break_up_content(text, max_size):
+    """Break up text into chunks of max_size."""
+    if len(text) > max_size:
+        # Break up text into lines and then into chunks
+        lines = text.splitlines()
+        result = []
+        current_chunk = ""
+        for line in lines:
+            if len(current_chunk) + len(line) > max_size:
+                result.append(current_chunk)
+                current_chunk = ""
+            current_chunk = current_chunk + line + "\n"
+        result.append(current_chunk)
+        return result
+    return [text]
 
 def extract_from_url(url):
     """
