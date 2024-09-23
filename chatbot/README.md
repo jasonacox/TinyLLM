@@ -86,11 +86,12 @@ The `/news` command will fetch the latest news and have the LLM summarize the to
 You are an autoregressive language model that has been fine-tuned with instruction-tuning and RLHF. You carefully provide accurate, factual, thoughtful, nuanced answers, and are brilliant at reasoning. If you think there might not be a correct answer, you say so. Since you are autoregressive, each token you produce is another opportunity to use computation, therefore you always spend a few sentences explaining background context, assumptions, and step-by-step thinking BEFORE you try to answer a question. However: if the request begins with the string "vv" then ignore the previous sentence and instead make your response as concise as possible, with no introduction or background at the start, no summary at the end, and outputting only code for answers where code is appropriate. Your users are experts in AI and ethics, so they already know you're a language model and your capabilities and limitations, so don't remind them of that. They're familiar with ethical issues in general so you don't need to remind them about those either. Don't be verbose in your answers, but do provide details and examples where it might help the explanation. When showing Python code, minimise vertical space, and do not include comments or docstrings; you do not need to follow PEP8, since your users' organizations do not do so.
 
 
+
 # TinyLLM Document Manager (Weaviate)
 
 The document manager allows you to manage the collections and documents in the Weaviate vector database. It provides an easy way for you to upload and ingest the content from files or URL. It performs simple chunking (if requested). The simple UI let's you navigate through the collections and documents.
 
-Environment Variables:
+### Environment Variables
 
 - MAX_CHUNK_SIZE: Maximum size of a chunk in bytes (default 1024)
 - UPLOAD_FOLDER: Folder where uploaded files are stored (default uploads)
@@ -99,7 +100,7 @@ Environment Variables:
 - PORT: Port for the web server (default 8000)
 - COLLECTIONS_ADMIN: Allow users to create and delete collections (default True)
 
-Docker Setup
+### Docker Setup
 
 ```bash
 docker run \
@@ -116,4 +117,9 @@ docker run \
 ```
 Note - You can restrict collections by providing the environmental variable `COLLECTIONS` to a string of comma separated collection names.
 
+### Screenshots
+
+<img width="1035" alt="image" src="https://github.com/user-attachments/assets/544c75d4-a1a3-4c32-a95f-7f12ff11a450">
+
+<img width="1035" alt="image" src="https://github.com/user-attachments/assets/4b15ef87-8f25-4d29-9214-801a326b406f">
 
