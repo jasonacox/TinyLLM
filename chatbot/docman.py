@@ -2,10 +2,10 @@
 """
 TinyLLM Document Manager
 
-This is a simple document manager that allows users to manage their collectsion
-of documents in a vector dtatabase (weaviate).  It allows users to upload files
-and view the contents of the files.  It is a simple web application that uses
-FastAPI and Jinja2 for the web interface.
+The document manager allows you to manage the collections and documents in the 
+Weaviate vector database. It provides an easy way for you to upload and ingest 
+the content from files or URL. It performs simple chunking (if requested). The 
+simple UI let's you navigate through the collections and documents.
 
 Environment Variables:
 - MAX_CHUNK_SIZE: Maximum size of a chunk in bytes (default 1024)
@@ -13,11 +13,15 @@ Environment Variables:
 - HOST: Weaviate host (default localhost)
 - COLLECTIONS: Comma separated list of collections allowed (default all)
 - PORT: Port for the web server (default 8000)
+- COLLECTIONS_ADMIN: Allow users to create and delete collections (default True)
 
 Setup:
-- pip install fastapi uvicorn jinja2 python-multipart requests beautifulsoup4
-- pip install weaviate-client
-- pip install pdfreader
+- pip install fastapi uvicorn jinja2 bs4 pypdf requests lxml aiohttp
+- pip install weaviate-client pdfreader pypandoc
+- pip install python-multipart
+
+Run:
+- uvicorn docman:app --reload 
 
 Author: Jason Cox
 Date: 2024-09-21
@@ -56,7 +60,8 @@ MAX_CHUNK_SIZE = int(os.getenv('MAX_CHUNK_SIZE', "1024"))
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
 HOST = os.getenv('HOST', 'localhost')
 COLLECTIONS = os.getenv('COLLECTIONS', None)
-PORT = os.getenv('PORT', 5001)
+PORT = int(os.getenv('PORT', "5001"))
+COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "false").lower() == "true"
 
 # Globals
 client = {}
@@ -194,8 +199,8 @@ async def embed_file(request: Request):
     # Delete the temporary file
     if tmp_filename and os.path.exists(tmp_filename):
         os.remove(tmp_filename)
-    # Redirect to the index page
-    return templates.TemplateResponse(request, "index.html")
+    # Redirect to the index page - send a 302 redirect
+    return templates.TemplateResponse(request, "redirect.html")
 
 @app.get("/view", response_class=HTMLResponse)
 async def view_file(request: Request):
@@ -269,7 +274,7 @@ async def get_uploaded_files(request: Request):
 async def select_collection(request: Request):
     form = await request.form()
     collection = form['collection']
-    response = templates.TemplateResponse("index.html", {"request": request})
+    response = templates.TemplateResponse(request, "index.html", {"request": request})
     response.set_cookie(key="collection", value=collection)
     return response
 
@@ -277,7 +282,44 @@ async def select_collection(request: Request):
 async def get_collections(request: Request):
     collections = documents.all_collections()
     documents.close()
-    return json.dumps(collections)
+    # Return the list of collections in alphabetical order
+    return json.dumps(sorted(collections))
+
+@app.post("/new_collection")
+async def new_collection(request: Request):
+    form = await request.form()
+    collection = form['collection']
+    # Verify user has access to create a collection
+    if not COLLECTIONS_ADMIN or (COLLECTIONS and collection not in COLLECTIONS.split(",")):
+        r = "You do not have permission to create this collection."
+    else:
+        # Create the collection
+        try:
+            r = f"Collection {collection} already exists."
+            if documents.create(collection):
+                r = f"Collection {collection} created."
+        except Exception as er:
+            r = f"Failed to create collection: {collection}"
+        documents.close()
+    return r
+
+@app.post("/delete_collection")
+async def delete_collection(request: Request):
+    form = await request.form()
+    collection = form['collection']
+    # Verify user has access to delete a collection
+    if not COLLECTIONS_ADMIN or (COLLECTIONS and collection not in COLLECTIONS.split(",")):
+        r = "You do not have permission to delete this collection."
+    else:
+        # Delete the collection
+        try:
+            r = f"Collection {collection} does not exist."
+            if documents.delete(collection):
+                r = f"Collection {collection} deleted."
+        except Exception as er:
+            r = f"Failed to delete collection: {collection}"
+        documents.close()
+    return r
 
 @app.post("/delete")
 async def delete_file(request: Request):

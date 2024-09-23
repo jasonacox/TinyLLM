@@ -135,6 +135,9 @@ class Documents:
     def all_collections(self):
         """
         List all collections in weaviate
+
+        Returns:
+            collections: List of collections
         """
         if not self.client:
             self.connect()
@@ -160,14 +163,18 @@ class Documents:
         """
         Create a collection in weaviate
         """
-        r = None
         x = self.retry
         if not self.client:
             self.connect()
+        # Verify it does not exist
+        collections = self.all_collections()
+        if collection.title() in collections:
+            log(f"Collection already exists: {collection}")
+            return False
         # Create a collection
         while x: # retry until success
             try:
-                r = self.client.collections.create(
+                self.client.collections.create(
                     name=collection,
                     vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_transformers()
                 )
@@ -180,20 +187,24 @@ class Documents:
                 x -= 1
         if not x:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
-        return r
+        return True
 
     def delete(self, collection):
         """
         Delete a collection in weaviate
         """
-        r = None
         x = self.retry
         if not self.client:
             self.connect()
+        # Verify it does not exist
+        collections = self.all_collections()
+        if not collection.title() in collections:
+            log(f"Collection does not exist: {collection}")
+            return False
         # Delete a collection
         while x:
             try:
-                r = self.client.collections.delete(collection)
+                self.client.collections.delete(collection)
                 log(f"Collection deleted: {collection}")
                 break
             except WeaviateConnectionError as er:
@@ -203,7 +214,7 @@ class Documents:
                 time.sleep(1)
         if not x:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
-        return r
+        return True
 
     def list_documents(self, collection=None):
         """

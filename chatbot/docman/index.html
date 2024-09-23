@@ -183,6 +183,12 @@
                             Five
                         </label>
                     </form>
+                    <!-- Form to create a new collection -->
+                    <br>
+                    <form id="new-collection-form">
+                        <input type="text" id="new-collection-input" placeholder="New Collection Name">
+                        <button type="button" id="new-collection-button" onclick="newCollection()">Create</button>
+                    </form>
                 </ul>
             </div>
 
@@ -229,6 +235,13 @@
             <button id="cancelDelete" style="background:gray; color:white; padding:10px 20px;">Cancel</button>
         </div>
     </div>
+    <!-- Pop up to provide server message to user -->
+    <div id="messageModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.5);">
+        <div style="background:#fff; padding:20px; max-width:400px; margin:100px auto; text-align:center;">
+            <p id="server_message">Server message</p>
+            <button id="closeMessage" style="background:gray; color:white; padding:10px 20px;">Close</button>
+        </div>
+    </div>
 
     <script>
         const dropArea = document.getElementById('drop-area');
@@ -237,6 +250,7 @@
         const uploadedFilesList = document.getElementById('uploaded-files-list');
         const uploadButton = document.getElementById('upload-button');
         const collectionList = document.getElementById('collection-selector');
+        const newCollectionForm = document.getElementById('new-collection-form');
         let files = [];
         let collectionValue = '';
 
@@ -297,12 +311,12 @@
         // Handle file upload when the "Upload" button is clicked
         uploadButton.addEventListener('click', () => {
             if (files.length === 0 && document.getElementById('url-input').value === '') {
-                alert('Please enter URL or select a file.');
+                showMessage('Please enter URL or select a file.');
                 return;
             }
             // We can only upload one file - check
             if (files.length > 1) {
-                alert('Please select only one file.');
+                showMessage('Please select only one file.');
                 return;
             }
             // Upload the file
@@ -312,6 +326,19 @@
             previewList.innerHTML = '';
             
         });
+
+        // Function to display a message to the user
+        function showMessage(message) {
+            // Show the message modal
+            document.getElementById('messageModal').style.display = 'block';
+            // Set the message
+            document.getElementById('server_message').textContent = message;
+            // Set the close message action
+            document.getElementById('closeMessage').onclick = function() {
+                // Hide the modal
+                document.getElementById('messageModal').style.display = 'none';
+            };
+        }
 
         // Function to handle file upload and load the new HTML page
         function uploadFile(file) {
@@ -404,6 +431,60 @@
             }
         }
 
+        // Delete Collection confirmation
+        async function deleteCollection(collection) {
+            // Use a modal to confirm the delete action
+            const modal = document.getElementById('deleteModal');
+            const confirmDelete = document.getElementById('confirmDelete');
+            const cancelDelete = document.getElementById('cancelDelete');
+            const modalMessage = document.getElementById('modalMessage');
+            // Show the modal
+            document.getElementById('deleteModal').style.display = 'block';
+            // Set the message
+            modalMessage.textContent = `Are you sure you want to delete the collection ${collection}?`;
+            // Set the confirm delete action
+            confirmDelete.onclick = async function() {
+                await deleteCollectionRequest(collection);
+                // Hide the modal
+                modal.style.display = 'none';
+            };
+            // Set the cancel delete action
+            cancelDelete.onclick = function() {
+                // Hide the modal
+                modal.style.display = 'none';
+            };
+        }
+
+        // Delete Collection request
+        async function deleteCollectionRequest(collection) {
+            // create a FormData object and submit the collection to the server
+            const formData = new FormData();
+            formData.append('collection', collection);
+
+            try {
+                // Await the fetch request to the server
+                const response = await fetch('/delete_collection', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error deleting collection.');
+                }
+
+                // Await the response text to complete (HTML page in this case)
+                const text = await response.text();
+                if (text !== '') {
+                    showMessage(text);
+                }
+                // Assuming you're refreshing or reloading the page or part of the page here
+                refreshCollections();
+            } catch (error) {
+                // Handle any error that occurs during the process
+                console.error('Error deleting collection:', error);
+            }
+        }
+
         // Update the "Collection List" form radio boxes in the UI
         function updateCollectionsUI(collectionsData) {
             collectionList.innerHTML = '';  // Clear the current list
@@ -421,7 +502,15 @@
                 input.value = collection;
                 input.onclick = () => selectCollection(collection);
                 label.appendChild(input);
-                label.appendChild(document.createTextNode(collection));
+                label.appendChild(document.createTextNode(collection + ' '));
+                // Add an [x] suffix that is an a tag to delete the collection
+                const deleteLink = document.createElement('a');
+                deleteLink.href = '#';
+                deleteLink.onclick = function() {
+                    deleteCollection(collection);
+                };
+                deleteLink.textContent = '[x]';
+                label.appendChild(deleteLink);
                 // select checked if collectionValue matches
                 if (collection === collectionValue) {
                     input.checked = true;
@@ -541,6 +630,38 @@
                 collectionValue = cookiePart.substring('collection='.length);
                 break;
             }
+        }
+
+        // New collection
+        function newCollection() {
+            const newCollectionInput = document.getElementById('new-collection-input');
+            const newCollectionName = newCollectionInput.value;
+            if (newCollectionName === '') {
+                showMessage('Please enter a collection name.');
+                return;
+            }
+            // Post the new collection name to the server and get the response
+            const formData = new FormData();
+            formData.append('collection', newCollectionName);
+            fetch('/new_collection', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.ok) {
+                    return response.text();  // Fetch the HTML response as text
+                } else {
+                    throw new Error('Failed to create the collection.');
+                }
+            }).then(text => {
+                message = text;
+                if (message !== '') {
+                    showMessage(message);
+                }
+            }).catch(error => {
+                console.error('Error creating collection:', error);
+            });
+            // Refresh the collections list
+            refreshCollections();
         }
 
         // Send server the collectionValue

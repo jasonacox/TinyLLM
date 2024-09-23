@@ -114,7 +114,7 @@
                         <input type="text" id="title" name="title" value="{{ title }}" style="width: 100%; "><br><br>
                         <!-- Toggle switches for LLM generated and auto-chunk -->
                         <label for="llm_generated">LLM Generated Chunks:</label><br>
-                        <input type="checkbox" id="llm_generated" name="llm_generated" value="1"><br><br>
+                        <input type="checkbox" id="llm_generated" name="llm_generated" value="1" disabled><br><br>
                         <label for="auto_chunk">Auto Chunk:</label><br>
                         <input type="checkbox" id="auto_chunk" name="auto_chunk" value="1" checked><br><br>
                         <label for="chunk_size">Chunk Size:</label><br>
@@ -123,7 +123,16 @@
                         <input type="hidden" id="filename" name="filename" value="{{ filename }}">
                         <input type="hidden" id="tmp_filename" name="tmp_filename" value="{{ tmp_filename }}">
                         <input type="hidden" id="collection" name="collection" value="{{ collection }}">
-                        <p style="text-align: center;"><input type="submit" class="save-button" value="Save"></p>
+                        <p style="text-align: center;">
+                            <input type="submit" class="save-button" value="Save" id="saveButton">
+                            <span id="spinner" style="display: none;">&#x1F311; Saving...</span>
+                        </p>
+                        <script>
+                            document.querySelector('form').addEventListener('submit', function() {
+                                document.getElementById('saveButton').disabled = true;
+                                document.getElementById('spinner').style.display = 'inline';
+                            });
+                        </script>
                     </div>
                 </form>
             </ul>

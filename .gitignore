@@ -175,3 +175,4 @@ agents/r
 chatbot/tlocal
 chatbot/tt
 lab/t
+chatbot/uploads/?*.*

@@ -12,6 +12,7 @@ ENV MAX_CHUNK_SIZE 1024
 ENV UPLOAD_FOLDER uploads
 ENV HOST localhost
 ENV PORT 5001
+ENV COLLECTIONS_ADMIN true
 
 # Set the working directory
 WORKDIR /app
@@ -19,6 +20,7 @@ WORKDIR /app
 # Install depencencies
 RUN pip install fastapi uvicorn jinja2 bs4 pypdf requests lxml aiohttp
 RUN pip install weaviate-client pdfreader pypandoc
+RUN pip install python-multipart
 
 # Copy local files into container
 COPY docman.py /app/docman.py
