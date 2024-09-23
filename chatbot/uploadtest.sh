@@ -13,12 +13,13 @@ echo ""
 echo "Which container do you want to build?"
 echo "1. jasonacox/chatbot"
 echo "2. jasonacox/docman"
+echo "3. both"
 echo ""
 read -p "Enter selection: " container
 echo ""
 
-# If the user selects jasonacox/chatbot
-if [ $container -eq 1 ]; then
+# If the user selects jasonacox/chatbot or 3
+if [ $container -eq 1 ] || [ $container -eq 3 ]; then
     # Build jasonacox/chatbot:x.y.z
     echo "* BUILD jasonacox/chatbot:${VER}"
     docker buildx build --no-cache --platform linux/amd64,linux/arm64 --push -t jasonacox/chatbot:${VER} .
@@ -30,7 +31,7 @@ if [ $container -eq 1 ]; then
     echo ""
 fi
 
-if [ $container -eq 2 ]; then
+if [ $container -eq 2 ] || [ $container -eq 3 ]; then
     # Build jasonacox/docman:x.y.z
     echo "* BUILD jasonacox/docman:${VER}"
     docker buildx build --no-cache --platform linux/amd64,linux/arm64 --push -t jasonacox/docman:${VER} -f Dockerfile-docman .

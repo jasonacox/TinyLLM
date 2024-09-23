@@ -11,12 +11,13 @@ echo ""
 echo "Which container do you want to build?"
 echo "1. jasonacox/chatbot"
 echo "2. jasonacox/docman"
+echo "3. both"
 echo ""
 read -p "Enter selection: " container
 echo ""
 
-# If the user selects jasonacox/chatbot
-if [ $container -eq 1 ]; then
+# If the user selects 1 jasonacox/chatbot or 3
+if [ $container -eq 1 ] || [ $container -eq 3 ]; then
     echo "Build and Push jasonacox/chatbot to Docker Hub"
     echo ""
 
@@ -38,7 +39,7 @@ if [ $container -eq 1 ]; then
     echo ""
 fi
 
-if [ $container -eq 2 ]; then
+if [ $container -eq 2 ] || [ $container -eq 3 ]; then
     echo "Build and Push jasonacox/docman to Docker Hub"
     echo ""
 
