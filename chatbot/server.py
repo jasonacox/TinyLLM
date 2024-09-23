@@ -133,14 +133,18 @@ else:
 
 # RAG Configuration Settings
 WEAVIATE_HOST = os.environ.get("WEAVIATE_HOST", "")                         # Empty = no Weaviate support
+WEAVIATE_GRPC_HOST = os.environ.get("WEAVIATE_GRPC_HOST", WEAVIATE_HOST)    # Empty = no Weaviate gRPC support
+WEAVIATE_PORT = os.getenv('WEAVIATE_PORT', '8080')
+WEAVIATE_GRPC_PORT = os.getenv('WEAVIATE_GRPC_PORT', '50051')
 WEAVIATE_LIBRARY = os.environ.get("WEAVIATE_LIBRARY", "tinyllm")            # Weaviate library to use
 RESULTS = int(os.environ.get("RESULTS", 1))                                 # Number of results to return from RAG query
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Optional - Alpha Vantage API Key
 UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/tmp")                     # Folder to store uploaded documents
 
 # Document Management Settings
-rag_documents = Documents(WEAVIATE_HOST, filepath=UPLOAD_FOLDER)
-   
+rag_documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, 
+                          grpc_port=WEAVIATE_GRPC_PORT, retry=3, filepath=UPLOAD_FOLDER)
+
 # Prompt Defaults
 default_prompts = {}
 default_prompts["greeting"] = "Hi"
@@ -591,6 +595,9 @@ async def home(format: str = None):
         "Run without conversation context (ONESHOT).": ONESHOT,
         "RAG: Run in RAG Only Mode (RAG_ONLY)": RAG_ONLY,
         "RAG: Weaviate (WEAVIATE_HOST)": WEAVIATE_HOST,
+        "RAG: Weaviate gRPC (WEAVIATE_GRPC_HOST)": WEAVIATE_GRPC_HOST,
+        "RAG: Weaviate Port (WEAVIATE_PORT)": WEAVIATE_PORT,
+        "RAG: Weaviate gRPC Port (WEAVIATE_GRPC_PORT)": WEAVIATE_GRPC_PORT,
         "RAG: default Library (WEAVIATE_LIBRARY)": WEAVIATE_LIBRARY,
         "RAG: Default Results Retrieved (RESULTS)": RESULTS,
         "Alpha Vantage API Key (ALPHA_KEY)": "************" if ALPHA_KEY != "" else "Not Set",

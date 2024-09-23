@@ -59,7 +59,10 @@ stats = {"start_time": time.time()}
 # Environment variables
 MAX_CHUNK_SIZE = int(os.getenv('MAX_CHUNK_SIZE', "1024"))
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
-HOST = os.getenv('HOST', 'localhost')
+WEAVIATE_HOST = os.getenv('WEAVIATE_HOST', 'localhost')
+WEAVIATE_GRPC_HOST = os.getenv('WEAVIATE_GRPC_HOST', 'localhost')
+WEAVIATE_PORT = os.getenv('WEAVIATE_PORT', '8080')
+WEAVIATE_GRPC_PORT = os.getenv('WEAVIATE_GRPC_PORT', '50051')
 COLLECTIONS = os.getenv('COLLECTIONS', None)
 PORT = int(os.getenv('PORT', "5001"))
 COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true"
@@ -68,7 +71,7 @@ COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true
 client = {}
 
 # Create a new instance of the Documents class to manage the database
-documents = Documents(host=HOST)
+documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, grpc_port=WEAVIATE_GRPC_PORT)
 try:
     if not documents.connect():
         print("Failed to connect to the vector database")
@@ -230,15 +233,17 @@ async def view_file(request: Request):
     # Get the document from the database
     dlist = documents.get_documents(collection, filename=filename)
     # Sort based on creation_time if it exists
-    if dlist[0] and dlist[0].get('creation_time'):
-        dlist = sorted(dlist, key=lambda x: (x.get('creation_time')) or 0, reverse=False)
-    else:
-        dlist = sorted(dlist, key=lambda x: x.get('title'), reverse=False)
+    # is dlist a list of dictionaries?
+    if dlist and type(dlist) is dict:
+        if dlist[0] and dlist[0].get('creation_time'):
+            dlist = sorted(dlist, key=lambda x: (x.get('creation_time')) or 0, reverse=False)
+        else:
+            dlist = sorted(dlist, key=lambda x: x.get('title'), reverse=False)
     for d in dlist:
         zuuid = d.get('uuid', '')
-        title = d.get('title', '')
+        title = d.get('title') or 'No Title'
         doc_type = d.get('doc_type', '')
-        content = (d.get('content') or ' ').replace("\n", "\\n ")
+        content = d.get('content') or ' '
         creation_time = d.get('creation_time') or "0"
         chunks.append({"uuid": zuuid, "title": title, "doc_type": doc_type, 
                        "content": content, "creation_time": creation_time})
@@ -374,8 +379,15 @@ async def home(request: Request):
         "Start Time": datetime.datetime.fromtimestamp(stats["start_time"]).strftime("%Y-%m-%d %H:%M:%S"),
         "Uptime": str(datetime.timedelta(seconds=int(time.time() - stats["start_time"]))),
         "Collection": collection,
-        "HOST": HOST,
+        "WEAVIATE_HOST": WEAVIATE_HOST,
+        "WEAVIATE_GRPC_HOST": WEAVIATE_GRPC_HOST,
+        "WEAVIATE_PORT": WEAVIATE_PORT,
+        "WEAVIATE_GRPC_PORT": WEAVIATE_GRPC_PORT,
         "UPLOAD_FOLDER": UPLOAD_FOLDER,
+        "MAX_CHUNK_SIZE": MAX_CHUNK_SIZE,
+        "COLLECTIONS": COLLECTIONS,
+        "PORT": PORT,
+        "COLLECTIONS_ADMIN": COLLECTIONS_ADMIN,
     }
     # Build a simple HTML page based on data facets
     html = "<html><head><title>TinyLLM Document Managher</title>"

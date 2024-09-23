@@ -1,5 +1,10 @@
 # Releases
 
+## 0.15.2 - Weaviate Client Updates
+
+* Chatbot and DocMan: Provide control for WEAVIATE_HOST and WEAVIATE_GRPC_HOST (and PORTs) settings separately via environmental variables.
+* DocMan: Bug fixes
+
 ## 0.15.1 - Document Manager Updates
 
 * DocMan: Fix some bugs and add features to process more document types (file or URL).

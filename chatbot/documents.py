@@ -80,12 +80,13 @@ class Documents:
         client: Weaviate client object
     """
 
-    def __init__(self, host="localhost", filepath="/tmp", port=8080, grpc_port=50051, retry=3):
+    def __init__(self, host="localhost", grpc_host="localhost", port=8080, grpc_port=50051, retry=3, filepath="/tmp"):
         """
         Initialize the Document class
         """
         # Weaviate client object
         self.host = host                        # Weaviate host IP address
+        self.grpc_host = grpc_host              # Weaviate gRPC host IP address
         self.filepath = filepath                # File path for temporary document storage
         self.port = port                        # Weaviate port
         self.grpc_port = grpc_port              # Weaviate gRPC port
@@ -107,6 +108,7 @@ class Documents:
                 self.client = weaviate.connect_to_local(
                     host=self.host,
                     port=self.port,
+                    grpc_host=self.grpc_host,
                     grpc_port=self.grpc_port,
                     additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
                 )

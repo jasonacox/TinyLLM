@@ -106,8 +106,11 @@ The document manager allows you to manage the collections and documents in the W
 docker run \
     -d \
     -p 5001:5001 \
-    -e HOST="localhost" \
     -e PORT="5001" \
+    -e WEAVIATE_HOST="localhost" \
+    -e WEAVIATE_GRPC_HOST="localhost" \
+    -e WEAVIATE_PORT="8080" \
+    -e WEAVIATE_GRPC_PORT="50051" \
     -e MAX_CHUNK_SIZE="1024" \
     -e UPLOAD_FOLDER="uploads" \
     -e COLLECTIONS_ADMIN="true" \
