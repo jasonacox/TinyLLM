@@ -656,6 +656,13 @@
                 message = text;
                 if (message !== '') {
                     showMessage(message);
+                    // if "created" in message then set the collectionValue
+                    if (message.includes('created')) {
+                        // set the collectionValue but with title case
+                        collectionValue = newCollectionName.charAt(0).toUpperCase() + newCollectionName.slice(1);
+                        document.cookie = `collection=${collectionValue}`;
+                        refreshCollections();
+                    }
                 }
             }).catch(error => {
                 console.error('Error creating collection:', error);

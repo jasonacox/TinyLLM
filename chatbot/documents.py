@@ -26,7 +26,7 @@ Class Documents:
     add_txt: Add a TXT document
 
 Requirements:
-    !pip install weaviate-client pdfreader bs4 pypandoc pypdf requests
+    !pip install weaviate-client pdfreader bs4 pypandoc pypdf requests pandas openpyxl
 
 Run Test:
     WEAVIATE_HOST=localhost python3 documents.py
@@ -51,6 +51,7 @@ import requests
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
 import pypandoc
+import pandas as pd
 
 # optional - download pandoc
 #from pypandoc.pandoc_download import download_pandoc
@@ -501,18 +502,29 @@ class Documents:
             elif filename.lower().endswith('.json'):
                 # JSON document
                 return self.add_json(collection, title, filename, tmp_file)
+            elif filename.lower().endswith('.csv'):
+                # CSV document
+                return self.add_csv(collection, title, filename, tmp_file)
+            elif filename.lower().endswith('.xml'):
+                # XML document
+                return self.add_xml(collection, title, filename, tmp_file)
+            elif filename.lower().endswith('.xlsx') or filename.lower().endswith('.xls'):
+                # XLSX document
+                return self.add_xlsx(collection, title, filename, tmp_file)
             else:
                 # Unsupported document
-                raise ValueError('Unsupported document format')
+                return False
 
     def add_url(self, collection, title, url):
         """
-        Import URL document
+        Import URL document 
         """
-        content = extract_from_url(url)
+        content = extract_from_url(url, title)
         if content:
-            return self.add_document(collection, title, "URL", url, content=content)
-        return None
+            for i in range(len(content["page"])):
+                self.add_document(collection, content["title"][i], "URL", url, content=content["page"][i])
+            return True
+        return False
 
     def add_pdf(self, collection, title, filename, tmp_file):
         """
@@ -526,7 +538,6 @@ class Documents:
         reader = PdfReader(pdf_file)
         for page in reader.pages:
             pdf2text = page.extract_text() + "\n"
-            # TODO: Break into chunks
             section = title + " - Page " + str(page.page_number+1)
             r = self.add_document(collection, section, "PDF", filename, content=pdf2text)
         return r
@@ -537,7 +548,7 @@ class Documents:
         """
         # Convert DOCX file to text document
         docx2text = pypandoc.convert_file(tmp_file, 'plain', format='docx')
-        # TODO: Break into chunks
+        # TODO: Break into pages
         r = self.add_document(collection, title, "DOCX", filename, content=docx2text)
         return r
 
@@ -575,6 +586,39 @@ class Documents:
         r = self.add_document(collection, title, "JSON", filename, content=json2text)
         return r
     
+    def add_csv(self, collection, title, filename, tmp_file):
+        """
+        Add a CSV document
+        """
+        # Read text from CSV file
+        with open(tmp_file, 'r') as f:
+            csv2text = f.read()
+        r = self.add_document(collection, title, "CSV", filename, content=csv2text)
+        return r
+
+    def add_xml(self, collection, title, filename, tmp_file):
+        """
+        Add a XML document
+        """
+        # Read text from XML file
+        with open(tmp_file, 'r') as f:
+            xml2text = f.read()
+        r = self.add_document(collection, title, "XML", filename, content=xml2text)
+        return r
+    
+    def add_xlsx(self, collection, title, filename, tmp_file):
+        """
+        Add a XLSX document - Spreadsheet
+        """
+        # Read all sheets into a dictionary of DataFrames
+        sheets_dict = pd.read_excel(tmp_file, sheet_name=None)
+        # Iterate through each sheet
+        for sheet_name, df in sheets_dict.items():
+            # Convert the DataFrame to JSON
+            json_output = df.to_json(orient='records', indent=4)
+            title_sheet = title + " - " + sheet_name
+            r = self.add_document(collection, title_sheet, "XLSX", filename, content=json_output)
+        return r
 
 # End of document class
 
@@ -597,62 +641,89 @@ def break_up_content(text, max_size):
         return result
     return [text]
 
-def extract_from_url(url):
+def extract_from_url(url, title):
     """
     Extract text from a URL and return the content
     """
-    # Function - Extract text from PDF
-    def extract_text_from_pdf(response):
-        # Convert PDF to text
-        pdf_content = response.read
-        pdf2text = ""
-        pdf_f = io.BytesIO(pdf_content)
-        reader = PdfReader(pdf_f)
-        for page in reader.pages:
-            pdf2text = pdf2text + page.extract_text() + "\n"
-        pdf_f.close()
-        return pdf2text
+    try:
+        response = requests.get(url, allow_redirects=True)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        m = f"Failed to fetch the webpage. Error: {str(e)}"
+        log(m)
+        return None
+    # Route extraction based on content type
+    if ";" in response.headers["Content-Type"]:
+        content_type = response.headers["Content-Type"].split(";")[0]
+    else:
+        content_type = response.headers["Content-Type"]
+    content_handlers = {
+        "application/pdf": extract_text_from_pdf,
+        "text/plain": extract_text_from_text,
+        "text/csv": extract_text_from_text,
+        "text/xml": extract_text_from_text,
+        "application/json": extract_text_from_text,
+        "text/html": extract_text_from_html,
+        "application/xml": extract_text_from_text,
+    }
+    if content_type in content_handlers:
+        return content_handlers[content_type](response, title)
+    else:
+        return None
 
-    # Function - Extract text from text
-    def extract_text_from_text(response):
-        return response.text
+# Function - Extract text from PDF
+def extract_text_from_pdf(response, title):
+    # Convert PDF to text
+    pdf_content = response.content
+    chunked = {
+        "source": response.url,
+        "doc_type": "PDF",
+        "page": [],
+        "title": [],
+    }
+    pdf_f = io.BytesIO(pdf_content)
+    reader = PdfReader(pdf_f)
+    if not title:
+        title = "PDF Document {response.url}"
+    # Extract text from each page
+    for page in reader.pages:
+        page_text = page.extract_text()
+        title_prefix = f"{title} - Page {page.page_number+1}"
+        chunked["page"].append(page_text)
+        chunked["title"].append(title_prefix)
+    pdf_f.close()
+    return chunked
 
-    # Function - Extract text from HTML
-    def extract_text_from_html(response):
-        html_content = response.text
-        # get title of page from html
-        source = "Document Source: " + str(response.url)
-        soup = BeautifulSoup(html_content, 'html.parser')
-        title = ("Document Title: " + soup.title.string + "\n") if soup.title else ""
-        paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
-        website_text = f"{title}{source}\nDocument Content:\n" + '\n\n'.join([p.get_text() for p in paragraphs])
-        return website_text
+# Function - Extract text from text
+def extract_text_from_text(response, title):
+    chunked = {
+        "source": response.url,
+        "doc_type": "TXT",
+        "page": [],
+        "title": [],
+    }
+    chunked["page"].append(response.text)
+    chunked["title"].append(title)
+    return chunked
 
-    with requests.Session() as session:
-        response = session.get(url, allow_redirects=True)
-        if response.status_code == 200:
-            # Route extraction based on content type
-            if ";" in response.headers["Content-Type"]:
-                content_type = response.headers["Content-Type"].split(";")[0]
-            else:
-                content_type = response.headers["Content-Type"]
-            content_handlers = {
-                "application/pdf": extract_text_from_pdf,
-                "text/plain": extract_text_from_text,
-                "text/csv": extract_text_from_text,
-                "text/xml": extract_text_from_text,
-                "application/json": extract_text_from_text,
-                "text/html": extract_text_from_html,
-                "application/xml": extract_text_from_text,
-            }
-            if content_type in content_handlers:
-                return content_handlers[content_type](response)
-            else:
-                return "Unsupported content type"
-        else:
-            m = f"Failed to fetch the webpage. Status code: {response.status_code}"
-            log(m)
-            return m
+# Function - Extract text from HTML
+def extract_text_from_html(response, title):
+    chunked = {
+        "source": response.url,
+        "doc_type": "HTML",
+        "page": [],
+        "title": [],
+    }
+    html_content = response.text
+    # get title of page from html
+    source = "Document Source: " + str(response.url)
+    soup = BeautifulSoup(html_content, 'html.parser')
+    title = ("Document Title: " + soup.title.string + "\n") if soup.title else ""
+    paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
+    website_text = f"{title}{source}\nDocument Content:\n" + '\n\n'.join([p.get_text() for p in paragraphs])
+    chunked["page"].append(website_text)
+    chunked["title"].append(title)
+    return chunked
 
 # Main - Test
 if __name__ == "__main__":

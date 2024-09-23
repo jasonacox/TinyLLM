@@ -18,7 +18,7 @@ Environment Variables:
 Setup:
 - pip install fastapi uvicorn jinja2 bs4 pypdf requests lxml aiohttp
 - pip install weaviate-client pdfreader pypandoc
-- pip install python-multipart
+- pip install python-multipart openpyxl
 
 Run:
 - uvicorn docman:app --reload 
@@ -35,6 +35,7 @@ import time
 import sys
 import uuid
 import datetime
+from io import BytesIO
 
 from documents import Documents
 
@@ -61,7 +62,7 @@ UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
 HOST = os.getenv('HOST', 'localhost')
 COLLECTIONS = os.getenv('COLLECTIONS', None)
 PORT = int(os.getenv('PORT', "5001"))
-COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "false").lower() == "true"
+COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true"
 
 # Globals
 client = {}
@@ -117,6 +118,24 @@ def validate_collection(collection):
         return False
     return True
 
+# Get a title from a URL
+def get_title_from_url(url):
+    response = requests.get(url, verify=False)
+    if response.status_code != 200:
+        return None
+    content_type = response.headers.get('content-type', '')
+    print(content_type)
+    if 'pdf' in content_type:
+        pdf_content = BytesIO(response.content)
+        pdf = PdfReader(pdf_content)
+        print(pdf.metadata)
+        title = pdf.metadata.get('/Title') or pdf.metadata.get('/Subject') or pdf.metadata.get('/Author') or f'PDF Document {url}'
+        return title
+    elif 'html' in content_type:
+        soup = BeautifulSoup(response.content, 'html.parser')
+        return soup.title.string if soup.title else 'No title found'
+    return None
+
 #
 # FastAPI Routes
 #
@@ -165,8 +184,7 @@ async def upload_file(request: Request):
         # Get title by pulling URL
         response = requests.get(url, verify=False)
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            title = soup.title.string if soup.title else url
+            title = get_title_from_url(url)
     return templates.TemplateResponse(request, "embed.html", {"request": request,
                                                      "filename": filename,
                                                      "tmp_filename": tmp_filename,
@@ -211,11 +229,16 @@ async def view_file(request: Request):
         collection = 'test'
     # Get the document from the database
     dlist = documents.get_documents(collection, filename=filename)
+    # Sort based on creation_time if it exists
+    if dlist[0] and dlist[0].get('creation_time'):
+        dlist = sorted(dlist, key=lambda x: (x.get('creation_time')) or 0, reverse=False)
+    else:
+        dlist = sorted(dlist, key=lambda x: x.get('title'), reverse=False)
     for d in dlist:
         zuuid = d.get('uuid', '')
         title = d.get('title', '')
         doc_type = d.get('doc_type', '')
-        content = d.get('content', '')
+        content = (d.get('content') or ' ').replace("\n", "\\n ")
         creation_time = d.get('creation_time') or "0"
         chunks.append({"uuid": zuuid, "title": title, "doc_type": doc_type, 
                        "content": content, "creation_time": creation_time})
@@ -240,8 +263,8 @@ async def view_chunk(request: Request):
     filename = d.get('file', '')
     title = d.get('title', '')
     doc_type = d.get('doc_type', '')
-    content = d.get('content', '')
-    chunk = d.get('chunk', '')
+    content = (d.get('content') or ' ').replace("\n", "\\n ")
+    chunk = (d.get('chunk') or ' ').replace("\n", "\\n ")
     creation_time = d.get('creation_time') or "0"
     t = int(creation_time)
     creation_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
@@ -290,9 +313,7 @@ async def new_collection(request: Request):
     form = await request.form()
     collection = form['collection']
     # Verify user has access to create a collection
-    if not COLLECTIONS_ADMIN or (COLLECTIONS and collection not in COLLECTIONS.split(",")):
-        r = "You do not have permission to create this collection."
-    else:
+    if COLLECTIONS_ADMIN or (COLLECTIONS and collection in COLLECTIONS.split(",")):
         # Create the collection
         try:
             r = f"Collection {collection} already exists."
@@ -301,6 +322,8 @@ async def new_collection(request: Request):
         except Exception as er:
             r = f"Failed to create collection: {collection}"
         documents.close()
+    else:
+        r = "You do not have permission to create a collection."
     return r
 
 @app.post("/delete_collection")

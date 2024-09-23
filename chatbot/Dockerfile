@@ -28,6 +28,7 @@ WORKDIR /app
 # Install depencencies - Weaviate Vector Search
 RUN pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
 RUN pip install weaviate-client pdfreader pypandoc
+RUN pip install pandas openpyxl
 
 # Copy local files into container
 COPY server.py /app/server.py
