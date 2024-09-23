@@ -11,12 +11,14 @@ Class Documents:
     delete: Delete a collection in weaviate
     connect: Connect to the weaviate instance
     close: Close the weaviate connection
+    all_collections: List all collections in weaviate
     list_documents: List all documents in collection with file as the key
     get_document: Get a document by its ID
     get_documents: Get a document by ID or query
     delete_document: Delete a document by its ID
     add_document: Ingest a document into weaviate
     update_document: Update a document in weaviate by its ID
+    set_max_chunk_size: Set the maximum chunk size for document content
     add_file: Detect and convert document, filename argument
     add_url: Import URL document
     add_pdf: Add a PDF document
@@ -24,7 +26,7 @@ Class Documents:
     add_txt: Add a TXT document
 
 Requirements:
-    !pip install weaviate-client pdfreader bs4 pypandoc pypdf
+    !pip install weaviate-client pdfreader bs4 pypandoc pypdf requests
 
 Run Test:
     WEAVIATE_HOST=localhost python3 documents.py
