@@ -105,11 +105,13 @@ class Documents:
         # Connect to Weaviate
         while x:
             try:
-                self.client = weaviate.connect_to_local(
-                    host=self.host,
-                    port=self.port,
+                self.client = weaviate.connect_to_custom(
+                    http_host=self.host,
+                    http_port=self.port,
+                    http_secure=False,
                     grpc_host=self.grpc_host,
                     grpc_port=self.grpc_port,
+                    grpc_secure=False,
                     additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
                 )
                 log(f"Connected to Weaviate at {self.host}")
