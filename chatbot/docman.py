@@ -67,8 +67,9 @@ COLLECTIONS = os.getenv('COLLECTIONS', None)
 PORT = int(os.getenv('PORT', "5001"))
 COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true"
 
-# Globals
-client = {}
+# Set up pandocs - Needed to convert documents to text
+from pypandoc.pandoc_download import download_pandoc
+download_pandoc()
 
 # Create a new instance of the Documents class to manage the database
 documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, grpc_port=WEAVIATE_GRPC_PORT)
