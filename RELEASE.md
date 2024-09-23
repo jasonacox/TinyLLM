@@ -1,5 +1,10 @@
 # Releases
 
+## 0.15.0 - Document Manager
+
+* Chatbot: Using Document class for RAG functions.
+* DocMan: New web based UI for managing documents in the Weaviate vector database. Allows user to upload and embed content from URLs and uploaded files. Provides optional chunking and management of embedded documents.
+
 ## 0.14.13 - TPS Calculation
 
 * Chatbot: Fix a bug that was counting null tokens.
