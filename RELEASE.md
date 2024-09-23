@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.1 - Document Manager Updates
+
+* DocMan: Fix some bugs and add features to process more document types (file or URL).
+
 ## 0.15.0 - Document Manager
 
 * Chatbot: Using Document class for RAG functions.
