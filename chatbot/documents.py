@@ -801,7 +801,8 @@ def extract_text_from_html(response, title):
     # get title of page from html
     source = "Document Source: " + str(response.url)
     soup = BeautifulSoup(html_content, 'html.parser')
-    title = ("Document Title: " + soup.title.string + "\n") if soup.title else ""
+    if not title:
+        title = ("Document Title: " + soup.title.string + "\n") if soup.title else ""
     paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
     website_text = f"{title}{source}\nDocument Content:\n" + '\n\n'.join([p.get_text() for p in paragraphs])
     chunked["page"].append(website_text)
