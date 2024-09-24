@@ -251,8 +251,8 @@ def query_index(query, library, num_results=RESULTS):
         # Skip duplicates of content
         if ans['content'] == previous_content:
             continue
-        newcontent = ans['content']
-        if len(newcontent) > MAXTOKENS:
+        new_content = ans['content']
+        if len(new_content) > MAXTOKENS:
             log("RAG: Content size exceeded maximum size using chunk.")
             # Cut the middle and insert the chunk in the middle
             new_content = ans['content'][:MAXTOKENS//4] + "..." + (ans.get('chunk') or " ") + "..." + ans['content'][-MAXTOKENS//4:]
