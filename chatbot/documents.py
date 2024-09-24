@@ -3,27 +3,31 @@
 Web based ChatBot - Documents Handling Module
 
 This module is responsible for ingesting and managing documents in the
-vector database, weaviate. It uses the Weaviate Python client to interact
-with the weaviate instance.
+vector database, Weaviate. It uses the Weaviate Python client to interact
+with the Weaviate instance.
 
 Class Documents:
-    create: Create a collection in weaviate
-    delete: Delete a collection in weaviate
-    connect: Connect to the weaviate instance
-    close: Close the weaviate connection
-    all_collections: List all collections in weaviate
-    list_documents: List all documents in collection with file as the key
+    create: Create a collection in Weaviate
+    delete: Delete a collection in Weaviate
+    connect: Connect to the Weaviate instance
+    close: Close the Weaviate connection
+    all_collections: List all collections in Weaviate
+    list_documents: List all documents in a collection with file as the key
     get_document: Get a document by its ID
-    get_documents: Get a document by ID or query
-    delete_document: Delete a document by its ID
-    add_document: Ingest a document into weaviate
-    update_document: Update a document in weaviate by its ID
-    set_max_chunk_size: Set the maximum chunk size for document content
+    get_documents: Get documents by ID, query, or filename
+    delete_document: Delete a document by its ID or filename
+    add_document: Ingest a document into Weaviate
+    update_document: Update a document in Weaviate by its ID
     add_file: Detect and convert document, filename argument
     add_url: Import URL document
     add_pdf: Add a PDF document
     add_docx: Add a DOCX document
     add_txt: Add a TXT document
+    add_html: Add an HTML document
+    add_json: Add a JSON document
+    add_csv: Add a CSV document
+    add_xml: Add an XML document
+    add_xlsx: Add an XLSX document
 
 Requirements:
     !pip install weaviate-client pdfreader bs4 pypandoc pypdf requests pandas openpyxl
@@ -63,9 +67,80 @@ logger = logging.getLogger(__name__)
 
 def log(msg):
     logger.debug(msg)
+    print(msg)
 
 # Defaults
 MAX_CHUNK_SIZE=256*4
+
+# Data Schema
+schema_properties=[
+    {
+        "name": "title",                     
+        "description": "Title of Document",           
+        "dataType": ["text"],
+        "moduleConfig": {
+            "text2vec-transformers": {
+                "skip": False,
+                "vectorizePropertyName": False,
+            }
+        },
+    },
+    {
+        "name": "chunk",
+        "dataType": ["text"],
+        "description": "Chunk of Document",
+        "moduleConfig": {
+            "text2vec-transformers": {
+                "skip": False,
+                "vectorizePropertyName": False,
+            }
+        },
+    },
+    {
+        "name": "doc_type",
+        "dataType": ["text"],
+        "description": "Document Type",
+        "moduleConfig": {
+            "text2vec-transformers": {
+                "skip": True,
+                "vectorizePropertyName": False,
+            }
+        },
+    },
+    {
+        "name": "file",
+        "dataType": ["text"],
+        "description": "Document Filename",
+        "moduleConfig": {
+            "text2vec-transformers": {
+                "skip": True,
+                "vectorizePropertyName": False,
+            }
+        },
+    },
+    {
+        "name": "content",
+        "dataType": ["text"],
+        "description": "Full Document Content",
+        "moduleConfig": {
+            "text2vec-transformers": {
+                "skip": True,
+                "vectorizePropertyName": False,
+            }
+        },
+    },
+    {
+        "name": "creation_time",
+        "dataType": ["number"],
+        "description": "Document Creation Time",
+        "moduleConfig": {
+            "text2vec-transformers": {
+                "skip": True,
+                "vectorizePropertyName": False,
+            }
+        },
+    },
+]
 
 # Document class
 class Documents:
@@ -92,10 +167,9 @@ class Documents:
         self.grpc_port = grpc_port              # Weaviate gRPC port
         self.client = None                      # Weaviate client object
         self.retry = retry                      # Number of times to retry connection
-        self.max_chunk_size = MAX_CHUNK_SIZE    # Maximum chunk size for document content
         # Verify file path
         if not os.path.exists(filepath):
-            raise Exception('File path does not exist')
+            os.makedirs(filepath)
 
     def connect(self):
         """
@@ -133,12 +207,6 @@ class Documents:
             log("Connection to Weaviate closed")
             self.client = None
 
-    def set_max_chunk_size(self, size):
-        """
-        Set the maximum chunk size for document content
-        """
-        self.max_chunk_size = size
-        
     def all_collections(self):
         """
         List all collections in weaviate
@@ -181,10 +249,15 @@ class Documents:
         # Create a collection
         while x: # retry until success
             try:
-                self.client.collections.create(
-                    name=collection,
-                    vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_transformers()
-                )
+                schema = {
+                    "class": collection,
+                    "description": "AutoCreated by TinyLLM",
+                    "vectorizer": "text2vec-transformers",
+                    "properties": schema_properties,
+                }
+                self.client.collections.create_from_dict(schema)
+                #self.client.collections.create(    
+                #    vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_transformers())
                 log(f"Collection created: {collection}")
                 break
             except WeaviateConnectionError as er:
@@ -205,7 +278,7 @@ class Documents:
             self.connect()
         # Verify it does not exist
         collections = self.all_collections()
-        if not collection.title() in collections:
+        if collection.lower() not in [c.lower() for c in collections]:
             log(f"Collection does not exist: {collection}")
             return False
         # Delete a collection
@@ -391,7 +464,7 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
-    def add_document(self, collection, title, doc_type, filename, chunk=None, content=None):
+    def add_document(self, collection, title, doc_type, filename, chunk=None, content=None, chunk_size=MAX_CHUNK_SIZE):
         """
         Add a document into weaviate
 
@@ -403,6 +476,8 @@ class Documents:
             chunk: Document chunk - Part of the document
             content: Document content - Full text of the document
         """
+        log(f"Adding document: {filename} - {title} - {doc_type} - {chunk} - {content} - {chunk_size}")
+        log(f"Collection: {collection} - Doc size: {len(content)}")
         r = None
         dd = []
         if not chunk and not content:
@@ -411,13 +486,14 @@ class Documents:
             content = chunk
         if not (title and doc_type and filename and content):
             raise ValueError('Missing document properties')
-        if not chunk and self.max_chunk_size > 0:
+        if not chunk and chunk_size > 0:
             # Auto break up content into chunks
-            chunks = break_up_content(content, self.max_chunk_size)
+            chunks = break_up_content(content, chunk_size)
             ci = 0
             total_chunks = len(chunks)
             for chunk in chunks:
                 ci = ci + 1
+                log(f"Creating chunk {ci} of {total_chunks}")
                 if total_chunks > 1:
                     suffix = f" - Section {ci} of {total_chunks}"
                 else:
@@ -445,7 +521,10 @@ class Documents:
         while x:
             try:
                 c = self.client.collections.get(collection)
-                r = c.data.insert_many(dd)
+                # Do batches of 10 of dd at a time
+                for i in range(0, len(dd), 10):
+                    log(f"Embedding document batch: {i} to {i+10}")
+                    r = c.data.insert_many(dd[i:i+10])
                 log(f"Document added: {filename}")
                 break
             except WeaviateConnectionError as er:
@@ -481,56 +560,56 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
-    def add_file(self, collection, title, filename, tmp_file=None):
+    def add_file(self, collection, title, filename, tmp_file=None, chunk_size=None):
         """
         Detect and convert document into weaviate
         """
         # is filename a URL?
         if filename.startswith("http"):
             # TODO: Break into chunks
-            return self.add_url(collection, title, filename)
+            return self.add_url(collection, title, filename, chunk_size)
         else:
             # Detect what type of file (case insensitive)
             if filename.lower().endswith('.pdf'):
                 # PDF document
-                return self.add_pdf(collection, title, filename, tmp_file)
+                return self.add_pdf(collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.docx'):
                 # DOCX document
-                return self.add_docx(collection, title, filename, tmp_file)
+                return self.add_docx(collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.txt'):
                 # TXT document
-                return self.add_txt(collection, title, filename, tmp_file)
+                return self.add_txt(collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.html'):
                 # HTML document
-                return self.add_html(collection, title, filename, tmp_file)
+                return self.add_html(collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.json'):
                 # JSON document
-                return self.add_json(collection, title, filename, tmp_file)
+                return self.add_json(collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.csv'):
                 # CSV document
-                return self.add_csv(collection, title, filename, tmp_file)
+                return self.add_csv(collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.xml'):
                 # XML document
-                return self.add_xml(collection, title, filename, tmp_file)
+                return self.add_xml(collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.xlsx') or filename.lower().endswith('.xls'):
                 # XLSX document
-                return self.add_xlsx(collection, title, filename, tmp_file)
+                return self.add_xlsx(collection, title, filename, tmp_file, chunk_size)
             else:
                 # Unsupported document
                 return False
 
-    def add_url(self, collection, title, url):
+    def add_url(self, collection, title, url, chunk_size=None):
         """
         Import URL document 
         """
         content = extract_from_url(url, title)
         if content:
             for i in range(len(content["page"])):
-                self.add_document(collection, content["title"][i], "URL", url, content=content["page"][i])
+                self.add_document(collection, content["title"][i], "URL", url, content=content["page"][i], chunk_size=chunk_size)
             return True
         return False
 
-    def add_pdf(self, collection, title, filename, tmp_file):
+    def add_pdf(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a PDF document from a local file
         """
@@ -543,30 +622,30 @@ class Documents:
         for page in reader.pages:
             pdf2text = page.extract_text() + "\n"
             section = title + " - Page " + str(page.page_number+1)
-            r = self.add_document(collection, section, "PDF", filename, content=pdf2text)
+            r = self.add_document(collection, section, "PDF", filename, content=pdf2text, chunk_size=chunk_size)
         return r
 
-    def add_docx(self, collection, title, filename, tmp_file):
+    def add_docx(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a DOCX document
         """
         # Convert DOCX file to text document
         docx2text = pypandoc.convert_file(tmp_file, 'plain', format='docx')
         # TODO: Break into pages
-        r = self.add_document(collection, title, "DOCX", filename, content=docx2text)
+        r = self.add_document(collection, title, "DOCX", filename, content=docx2text, chunk_size=chunk_size)
         return r
 
-    def add_txt(self, collection, title, filename, tmp_file):
+    def add_txt(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a TXT document
         """
         # Read text from TXT file
         with open(tmp_file, 'r') as f:
             txt2text = f.read()
-        r = self.add_document(collection, title, "TXT", filename, content=txt2text)
+        r = self.add_document(collection, title, "TXT", filename, content=txt2text, chunk_size=chunk_size)
         return r
     
-    def add_html(self, collection, title, filename, tmp_file):
+    def add_html(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a HTML document
         """
@@ -577,40 +656,40 @@ class Documents:
         title = soup.title.string
         paragraphs = soup.find_all(['p', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol'])
         website_text = f"Document Title: {title}\nDocument Content:\n" + '\n\n'.join([p.get_text() for p in paragraphs])
-        r = self.add_document(collection, title, "HTML", filename, content=website_text)
+        r = self.add_document(collection, title, "HTML", filename, content=website_text, chunk_size=chunk_size)
         return r
-    
-    def add_json(self, collection, title, filename, tmp_file):
+
+    def add_json(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a JSON document
         """
         # Read text from JSON file
         with open(tmp_file, 'r') as f:
             json2text = f.read()
-        r = self.add_document(collection, title, "JSON", filename, content=json2text)
+        r = self.add_document(collection, title, "JSON", filename, content=json2text, chunk_size=chunk_size)
         return r
-    
-    def add_csv(self, collection, title, filename, tmp_file):
+
+    def add_csv(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a CSV document
         """
         # Read text from CSV file
         with open(tmp_file, 'r') as f:
             csv2text = f.read()
-        r = self.add_document(collection, title, "CSV", filename, content=csv2text)
+        r = self.add_document(collection, title, "CSV", filename, content=csv2text, chunk_size=chunk_size)
         return r
 
-    def add_xml(self, collection, title, filename, tmp_file):
+    def add_xml(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a XML document
         """
         # Read text from XML file
         with open(tmp_file, 'r') as f:
             xml2text = f.read()
-        r = self.add_document(collection, title, "XML", filename, content=xml2text)
+        r = self.add_document(collection, title, "XML", filename, content=xml2text, chunk_size=chunk_size)
         return r
-    
-    def add_xlsx(self, collection, title, filename, tmp_file):
+
+    def add_xlsx(self, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a XLSX document - Spreadsheet
         """
@@ -621,7 +700,7 @@ class Documents:
             # Convert the DataFrame to JSON
             json_output = df.to_json(orient='records', indent=4)
             title_sheet = title + " - " + sheet_name
-            r = self.add_document(collection, title_sheet, "XLSX", filename, content=json_output)
+            r = self.add_document(collection, title_sheet, "XLSX", filename, content=json_output, chunk_size=chunk_size)
         return r
 
 # End of document class

@@ -235,35 +235,37 @@ if WEAVIATE_HOST != "":
 def query_index(query, library, num_results=RESULTS):
     references = "References:"
     content = ""
-    if True:
-        try:
-            results = rag_documents.get_documents(library, query=query, num_results=num_results)
-        except Exception as err:
-            log(f"Error querying Weaviate: {str(err)}")
-            return None, None
-        previous_title = ""
-        previous_file = ""
-        previous_content = ""
-        for ans in results:
-            # Skip duplicate titles and files
-            if ans['title'] == previous_title and ans['file'] == previous_file:
-                continue
-            references = references + f"\n - {ans['title']} - {ans['file']}"
-            # Skip duplicates of content
-            if ans['content'] == previous_content:
-                continue
-            content = content + f"Document: {ans['title']}\nDocument Source: {ans['file']}\nContent: {ans['content']}\n---\n"
-            if (len(content)/4) > MAXTOKENS/2:
-                break
-            previous_title = ans['title']
-            previous_file = ans['file']
-            previous_content = ans['content']
-        rag_documents.close()
-        log(f"RAG: Retrieved: {references}")
-        return content, references
-    #except Exception as err:
-    #    log(f"Error querying Weaviate: {str(err)}")
-    #    return None, None
+    try:
+        results = rag_documents.get_documents(library, query=query, num_results=num_results)
+    except Exception as erro:
+        log(f"Error querying Weaviate: {str(erro)}")
+        return None, None
+    previous_title = ""
+    previous_file = ""
+    previous_content = ""
+    for ans in results:
+        # Skip duplicate titles and files
+        if ans['title'] == previous_title and ans['file'] == previous_file:
+            continue
+        references = references + f"\n - {ans['title']} - {ans['file']}"
+        # Skip duplicates of content
+        if ans['content'] == previous_content:
+            continue
+        newcontent = ans['content']
+        if len(newcontent) > MAXTOKENS:
+            log("RAG: Content size exceeded maximum size using chunk.")
+            # Cut the middle and insert the chunk in the middle
+            new_content = ans['content'][:MAXTOKENS//4] + "..." + (ans.get('chunk') or " ") + "..." + ans['content'][-MAXTOKENS//4:]
+        content = content + f"Document: {ans['title']}\nDocument Source: {ans['file']}\nContent: {new_content}\n---\n"
+        if (len(content)/4) > MAXTOKENS/2:
+            log("RAG: Content size reached maximum.")
+            break
+        previous_title = ans['title']
+        previous_file = ans['file']
+        previous_content = ans['content']
+    rag_documents.close()
+    log(f"RAG: Retrieved ({len(content)} bytes): {references}")
+    return content, references
 
 # Globals
 client = {}
@@ -369,15 +371,15 @@ async def ask(prompt, sid=None):
                 messages=client[sid]["context"],
                 extra_body=EXTRA_BODY,
             )
-        except openai.OpenAIError as err:
+        except openai.OpenAIError as erro:
             # If we get an error, try to recover
             client[sid]["context"].pop()
-            if "does not exist" in str(err):
+            if "does not exist" in str(erro):
                 await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'},room=sid)
                 log("Model does not exist - retrying")
                 test_model()
                 await sio.emit('update', {'update': mymodel, 'voice': 'model'})
-            elif "maximum context length" in str(err):
+            elif "maximum context length" in str(erro):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
@@ -523,8 +525,8 @@ async def extract_text_from_url(url):
                     m = f"Failed to fetch the webpage. Status code: {response.status}"
                     log(m)
                     return m
-    except Exception as err:
-        log(f"An error occurred: {str(err)}")
+    except Exception as erro:
+        log(f"An error occurred: {str(erro)}")
 
 # Function - Extract text from PDF
 async def extract_text_from_pdf(response):

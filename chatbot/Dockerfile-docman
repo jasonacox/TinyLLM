@@ -20,7 +20,8 @@ ENV COLLECTIONS_ADMIN true
 # Set the working directory
 WORKDIR /app
 
-# Install depencencies
+# Install dependencies
+RUN apt-get update && apt-get install -y binutils
 RUN pip install fastapi uvicorn jinja2 bs4 pypdf requests lxml aiohttp
 RUN pip install weaviate-client pdfreader pypandoc
 RUN pip install python-multipart
@@ -31,6 +32,10 @@ COPY docman.py /app/docman.py
 COPY documents.py /app/documents.py
 COPY version.py /app/version.py
 COPY docman /app/docman
+COPY setup_pandoc.py /app/setup_pandoc.py
+
+# Build Pandoc
+RUN python setup_pandoc.py
 
 # Network
 EXPOSE $PORT

@@ -68,8 +68,8 @@ PORT = int(os.getenv('PORT', "5001"))
 COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true"
 
 # Set up pandocs - Needed to convert documents to text
-from pypandoc.pandoc_download import download_pandoc
-download_pandoc()
+#from pypandoc.pandoc_download import download_pandoc
+#download_pandoc()
 
 # Create a new instance of the Documents class to manage the database
 documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, grpc_port=WEAVIATE_GRPC_PORT)
@@ -206,17 +206,16 @@ async def embed_file(request: Request):
     title = form['title']
     collection = form['collection']
     chunk_size = int(form['chunk_size']) or MAX_CHUNK_SIZE
-    llm_generated = form.get('llm_generated') == "on"
-    auto_chunk = form.get('auto_chunk') == "on"
+    llm_generated = form.get('llm_generated') == "1"
+    auto_chunk = form.get('auto_chunk') == "1"
     # Prepare the document for ingest
     # TODO: llm_generated
-    documents.set_max_chunk_size(chunk_size)
     if not auto_chunk:
-        documents.set_max_chunk_size(0)
+        chunk_size = 0
     collection = request.cookies.get('collection', collection)
     if not validate_collection(collection):
         collection = 'test'
-    documents.add_file(collection, title, filename, tmp_filename)
+    documents.add_file(collection, title, filename, tmp_filename, chunk_size=chunk_size)
     documents.close()
     # Delete the temporary file
     if tmp_filename and os.path.exists(tmp_filename):
