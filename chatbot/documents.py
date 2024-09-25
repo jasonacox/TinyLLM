@@ -155,7 +155,7 @@ class Documents:
         client: Weaviate client object
     """
 
-    def __init__(self, host="localhost", grpc_host="localhost", port=8080, grpc_port=50051, retry=3, filepath="/tmp"):
+    def __init__(self, host="localhost", grpc_host=None, port=8080, grpc_port=50051, retry=3, filepath="/tmp"):
         """
         Initialize the Document class
         """
@@ -167,6 +167,8 @@ class Documents:
         self.grpc_port = grpc_port              # Weaviate gRPC port
         self.client = None                      # Weaviate client object
         self.retry = retry                      # Number of times to retry connection
+        if not grpc_host:
+            self.grpc_host = host
         # Verify file path
         if not os.path.exists(filepath):
             os.makedirs(filepath)
