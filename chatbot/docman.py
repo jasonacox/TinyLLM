@@ -36,10 +36,12 @@ import sys
 import uuid
 import datetime
 from io import BytesIO
+import logging
 
 from documents import Documents
 
 import requests
+import socketio
 import uvicorn
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, Request
@@ -53,8 +55,20 @@ from documents import Documents
 # TinyLLM Doc Manager Version
 from version import VERSION
 
-# Stats
+# Set up logging
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s %(levelname)s %(message)s', 
+                    datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.info("TinyLLM Document Manager %s" % VERSION)
+
+def log(text):
+    logger.info(text)
+
+# Globals
 stats = {"start_time": time.time()}
+client = {}
 
 # Environment variables
 MAX_CHUNK_SIZE = int(os.getenv('MAX_CHUNK_SIZE', "1024"))
@@ -66,6 +80,7 @@ WEAVIATE_GRPC_PORT = os.getenv('WEAVIATE_GRPC_PORT', '50051')
 COLLECTIONS = os.getenv('COLLECTIONS', None)
 PORT = int(os.getenv('PORT', "5001"))
 COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true"
+MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000)) 
 
 # Set up pandocs - Needed to convert documents to text
 #from pypandoc.pandoc_download import download_pandoc
@@ -82,10 +97,13 @@ except Exception as e:
     sys.exit(1)
 documents.close()
 
-# Start the server
-#log("Starting server...")
-#sio = socketio.AsyncServer(async_mode="asgi")
-#socket_app = socketio.ASGIApp(sio)
+#
+# Configure FastAPI App and SocketIO
+#
+
+log("Starting server...")
+sio = socketio.AsyncServer(async_mode="asgi")
+socket_app = socketio.ASGIApp(sio)
 app = FastAPI()
 
 # Ensure the upload folder exists
@@ -128,11 +146,9 @@ def get_title_from_url(url):
     if response.status_code != 200:
         return None
     content_type = response.headers.get('content-type', '')
-    print(content_type)
     if 'pdf' in content_type:
         pdf_content = BytesIO(response.content)
         pdf = PdfReader(pdf_content)
-        print(pdf.metadata)
         title = pdf.metadata.get('/Title') or pdf.metadata.get('/Subject') or pdf.metadata.get('/Author') or f'PDF Document {url}'
         return title
     elif 'html' in content_type:
@@ -404,6 +420,74 @@ async def home(request: Request):
     html += "<script>setTimeout(function(){location.reload()},5000);</script>"
     html += "</body></html>"
     return HTMLResponse(content=html, status_code=200)
+
+# Serve static socket.io.js
+@app.get("/socket.io.js")
+def serve_socket_io_js():
+    return FileResponse("templates/socket.io.js", media_type="application/javascript")
+
+#
+# SocketIO Events
+#
+
+app.mount("/", socket_app)  # Here we mount socket app to main fastapi app
+
+# Client connected - start thread to send updates
+@sio.on('connect')
+async def handle_connect(session_id, env):
+    await sio.emit('connected', {'data': f'Connected to TinyLLM Document Manager {VERSION}',
+                                 'version': VERSION}, room=session_id)
+    if session_id in client:
+        log(f"Client reconnected: {session_id}")
+    else:
+        # New client connected
+        log(f"Client connected: {session_id}")
+        # Limit number of clients
+        if len(client) > MAXCLIENTS:
+            log(f"Too many clients connected: {len(client)}")
+            await sio.emit('update', {'update': 'Too many clients connected. Try again later.', 'voice': 'user'},room=session_id)
+            return
+        # Create client session
+        client[session_id]={}
+        # Initialize context for this client
+        client[session_id]["collection"] = None
+        client[session_id]["stop_thread_flag"] = False
+
+# Client disconnected
+@sio.on('disconnect')
+async def handle_disconnect(session_id):
+    log(f"Client disconnected: {session_id}")
+    # Remove client
+    if session_id in client:
+        # shutdown thread
+        client[session_id]["stop_thread_flag"] = True
+        client.pop(session_id)
+
+# Client sent a message - handle it
+@sio.on('message')
+async def handle_message(session_id, data):
+    log(f"Message from {session_id}: {data}")
+    # Ensure client is connected
+    if session_id not in client:
+        # Add client
+        client[session_id]={}
+        client[session_id]["stop_thread_flag"] = False
+    # Remember the collection
+    collection = data.get("collection")
+    if not validate_collection(collection):
+        collection = 'test'
+    client[session_id]["collection"] = collection
+    # Process the message
+    if data.get("request") == "refreshCollections":
+        # Get the list of collections
+        collections = documents.all_collections()
+        documents.close()
+        await sio.emit('refreshCollections', {'collections': collections})
+    elif data.get("request") == "refreshUploadedFiles":
+        # Get the list of uploaded files
+        file_entries = collection_files(collection)
+        await sio.emit('refreshUploadedFiles', {'files': file_entries})
+
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=PORT)

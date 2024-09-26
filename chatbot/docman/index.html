@@ -220,7 +220,7 @@
         <!-- Collection Documents box -->
         <div class="south" id="south">
             <div class="box">
-                <h2>Documents</h2>
+                <h2 id="headerDocuments">Documents</h2>
                 <ul id="uploaded-files-list">
                     <li>No documents uploaded yet.</li>
                 </ul>
@@ -242,7 +242,7 @@
             <button id="closeMessage" style="background:gray; color:white; padding:10px 20px;">Close</button>
         </div>
     </div>
-
+    <script src="/socket.io.js"></script>
     <script>
         const dropArea = document.getElementById('drop-area');
         const fileInput = document.getElementById('file-input');
@@ -253,6 +253,24 @@
         const newCollectionForm = document.getElementById('new-collection-form');
         let files = [];
         let collectionValue = '';
+
+        // Connect to the Socket.IO server
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        // Listen for messages from the server
+        socket.on('refreshUploadedFiles', function(data) {
+            console.log('Received message:', data);
+            updateUploadedFilesUI(data.files);
+        });
+
+        socket.on('refreshCollections', function(data) {
+            console.log('Received message:', data);
+            updateCollectionsUI(data.collections);
+        });
+        
+        socket.on('connected', function(data) {
+            console.log('Server:', data);
+        });
 
         // Highlight drop area when files are dragged over
         ['dragenter', 'dragover'].forEach(eventName => {
@@ -366,38 +384,20 @@
             });
         }
 
-        // Fetch updated list of uploaded files and refresh the UI
+        // Request updated list of collection documents from the server
         function refreshUploadedFiles() {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', '/get_uploaded_files', true);
-            
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    const filesData = JSON.parse(xhr.responseText);
-                    updateUploadedFilesUI(filesData);
-                } else {
-                    console.log('Failed to load the updated file list.');
-                }
-            };
-            
-            xhr.send();
+            socket.emit('message', {
+                request: "refreshUploadedFiles",
+                collection: collectionValue
+            });
         }
 
-        // Fetch list of collections and refresh the UI
+        // Request updated list of collections from the server
         function refreshCollections() {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', '/get_collections', true);
-            
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    const collectionsData = JSON.parse(xhr.responseText);
-                    updateCollectionsUI(collectionsData);
-                } else {
-                    console.log('Failed to load the updated collection list.');
-                }
-            };
-            
-            xhr.send();
+            socket.emit('message', {
+                request: "refreshCollections",
+                collection: collectionValue
+            });
         }
 
         // Update the "Uploaded Files" section in the UI
@@ -525,6 +525,7 @@
         // Select collection
         function selectCollection(collection) {
             console.log(collection);
+            collectionValue = collection;
             // Store selection in a cookie
             document.cookie = `collection=${collection}`;
             // Tell server to update the collection via POST request
@@ -544,7 +545,10 @@
             });
             
             // Refresh the uploaded files list
+            // First clear the list
+            uploadedFilesList.innerHTML = '';
             refreshUploadedFiles();
+            document.getElementById('headerDocuments').textContent = `Documents in ${collection}`;
         }
 
         // View file
@@ -668,14 +672,14 @@
                 console.error('Error creating collection:', error);
             });
             // Refresh the collections list
-            refreshCollections();
+            refreshCollections(collectionValue);
         }
 
         // Send server the collectionValue
         selectCollection(collectionValue);
 
         // First load
-        refreshUploadedFiles();
+        refreshUploadedFiles(collectionValue);
         refreshCollections(collectionValue);
     </script>
 
