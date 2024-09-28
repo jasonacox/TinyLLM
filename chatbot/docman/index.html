@@ -185,9 +185,9 @@
                     </form>
                     <!-- Form to create a new collection -->
                     <br>
-                    <form id="new-collection-form">
+                    <form id="new-collection-form" onsubmit="event.preventDefault(); newCollection();">
                         <input type="text" id="new-collection-input" placeholder="New Collection Name">
-                        <button type="button" id="new-collection-button" onclick="newCollection()">Create</button>
+                        <button type="submit" id="new-collection-button">Create</button>
                     </form>
                 </ul>
             </div>
@@ -687,6 +687,8 @@
             }).catch(error => {
                 console.error('Error creating collection:', error);
             });
+            // clear the input
+            newCollectionInput.value = '';
         }
 
         // Send server the collectionValue
