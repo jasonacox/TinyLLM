@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.5 - Async and SocketIO
+
+* DocMan - Switch to async and socket communication to more responsive UI. Bug fixes.
+
 ## 0.15.2 - Weaviate Client Updates
 
 * Chatbot and DocMan: Provide control for WEAVIATE_HOST and WEAVIATE_GRPC_HOST (and PORTs) settings separately via environmental variables.

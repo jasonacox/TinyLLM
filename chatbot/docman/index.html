@@ -265,6 +265,12 @@
 
         socket.on('refreshCollections', function(data) {
             console.log('Received message:', data);
+            // If collection is not empty, set the collectionValue
+            if (data.collection !== '') {
+                collectionValue = data.collection;
+                document.cookie = `collection=${collectionValue}`;
+                document.getElementById('headerDocuments').textContent = `Documents in ${collectionValue}`;
+            }
             updateCollectionsUI(data.collections);
         });
         
@@ -400,12 +406,21 @@
             });
         }
 
+        // Refresh everything
+        function refreshAll() {
+            // Clear collections and uploaded files
+            collectionList.innerHTML = 'Loading...';
+            uploadedFilesList.innerHTML = '<li>Loading...</li>';
+            refreshCollections();
+            refreshUploadedFiles();
+        }
+
         // Update the "Uploaded Files" section in the UI
         function updateUploadedFilesUI(filesData) {
             uploadedFilesList.innerHTML = '';  // Clear the current list
 
             if (filesData.length === 0) {
-                uploadedFilesList.innerHTML = '<li>No files uploaded yet.</li>';
+                uploadedFilesList.innerHTML = '<li>No documents uploaded yet.</li>';
             } else {
                 filesData.forEach(file => {
                     const li = document.createElement('li');
@@ -472,17 +487,17 @@
                     throw new Error('Error deleting collection.');
                 }
 
-                // Await the response text to complete (HTML page in this case)
+                // Await the response text to complete
                 const text = await response.text();
                 if (text !== '') {
                     showMessage(text);
                 }
-                // Assuming you're refreshing or reloading the page or part of the page here
-                refreshCollections();
+
             } catch (error) {
                 // Handle any error that occurs during the process
                 console.error('Error deleting collection:', error);
             }
+            refreshAll();
         }
 
         // Update the "Collection List" form radio boxes in the UI
@@ -490,7 +505,7 @@
             collectionList.innerHTML = '';  // Clear the current list
 
             if (collectionsData.length === 0) {
-            collectionList.innerHTML = '<li>No collections available.</li>';
+                collectionList.innerHTML = '<li>No collections available.</li>';
             } else {
             const fragment = document.createDocumentFragment();
             collectionsData.forEach(collection => {
@@ -511,7 +526,8 @@
                 };
                 deleteLink.textContent = '[x]';
                 label.appendChild(deleteLink);
-                // select checked if collectionValue matches
+                // select checked if collectionValue matches 
+                console.log(collectionValue);
                 if (collection === collectionValue) {
                     input.checked = true;
                 }
@@ -546,9 +562,9 @@
             
             // Refresh the uploaded files list
             // First clear the list
-            uploadedFilesList.innerHTML = '';
+            document.getElementById('headerDocuments').textContent = `Documents in ${collectionValue}`;
+            uploadedFilesList.innerHTML = '<li>Loading...</li>';
             refreshUploadedFiles();
-            document.getElementById('headerDocuments').textContent = `Documents in ${collection}`;
         }
 
         // View file
@@ -665,22 +681,19 @@
                         // set the collectionValue but with title case
                         collectionValue = newCollectionName.charAt(0).toUpperCase() + newCollectionName.slice(1);
                         document.cookie = `collection=${collectionValue}`;
-                        refreshCollections();
+                        refreshAll();
                     }
                 }
             }).catch(error => {
                 console.error('Error creating collection:', error);
             });
-            // Refresh the collections list
-            refreshCollections(collectionValue);
         }
 
         // Send server the collectionValue
         selectCollection(collectionValue);
 
         // First load
-        refreshUploadedFiles(collectionValue);
-        refreshCollections(collectionValue);
+        refreshAll();
     </script>
 
     <!-- Footer - Bottom of Screen add html file and link to TinyLLM-->

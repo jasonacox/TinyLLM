@@ -131,14 +131,17 @@ def create_title(filename):
         title = title.replace("  ", " ")
     return title
 
-# Validate access to collection
+# Validate access to collection or set to default
 def validate_collection(collection):
     if COLLECTIONS:
         if collection not in COLLECTIONS.split(","):
-            return False
-    if collection not in documents.all_collections():
-        return False
-    return True
+            # Select the first collection in the list
+            collection = COLLECTIONS.split(",")[0]
+    all_collections = documents.all_collections()
+    if collection not in all_collections:
+        # Select the first collection in the list
+        collection = all_collections[0] if all_collections else None
+    return collection
 
 # Get a title from a URL
 def get_title_from_url(url):
@@ -167,8 +170,7 @@ templates = Jinja2Templates(directory="docman")
 async def index(request: Request):
     # Check to see if the collection cookie is set
     collection = request.cookies.get('collection')
-    if validate_collection(collection):
-        collection = "test"
+    collection = validate_collection(collection)
     return templates.TemplateResponse(request, "index.html",
                                       {"request": request,
                                        "collection": collection,
@@ -229,8 +231,7 @@ async def embed_file(request: Request):
     if not auto_chunk:
         chunk_size = 0
     collection = request.cookies.get('collection', collection)
-    if not validate_collection(collection):
-        collection = 'test'
+    collection = validate_collection(collection)
     documents.add_file(collection, title, filename, tmp_filename, chunk_size=chunk_size)
     documents.close()
     # Delete the temporary file
@@ -244,8 +245,7 @@ async def view_file(request: Request):
     filename = request.query_params.get('filename')
     chunks = []
     collection = request.cookies.get('collection')
-    if not validate_collection(collection):
-        collection = 'test'
+    collection = validate_collection(collection)
     # Get the document from the database
     dlist = documents.get_documents(collection, filename=filename)
     # Sort based on creation_time if it exists
@@ -275,8 +275,7 @@ async def view_file(request: Request):
 async def view_chunk(request: Request):
     zuuid = request.query_params.get('uuid')
     collection = request.cookies.get('collection')
-    if not validate_collection(collection):
-        collection = 'test'
+    collection = validate_collection(collection)
     # Get the document from the database
     d = documents.get_documents(collection, uuid=zuuid)
     if d:
@@ -309,8 +308,7 @@ async def view_chunk(request: Request):
 @app.get("/get_uploaded_files", response_class=HTMLResponse)
 async def get_uploaded_files(request: Request):
     collection = request.cookies.get('collection')
-    if not validate_collection(collection):
-        collection = 'test'
+    collection = validate_collection(collection)
     file_entries = collection_files(collection)
     return json.dumps(file_entries)
 
@@ -370,8 +368,7 @@ async def delete_file(request: Request):
     form = await request.form()
     filename = form['filename']
     collection = request.cookies.get('collection')
-    if not validate_collection(collection):
-        collection = 'test'
+    collection = validate_collection(collection)
     # Delete the document from the database
     documents.delete_document(collection, filename=filename)
     documents.close()
@@ -387,8 +384,7 @@ async def version():
 async def home(request: Request):
     global stats
     collection = request.cookies.get('collection')
-    if not validate_collection(collection):
-        collection = 'test'
+    collection = validate_collection(collection)
     # Create a simple status page
     data = {
         "TinyLLM Chatbot Version": VERSION,
@@ -424,7 +420,7 @@ async def home(request: Request):
 # Serve static socket.io.js
 @app.get("/socket.io.js")
 def serve_socket_io_js():
-    return FileResponse("templates/socket.io.js", media_type="application/javascript")
+    return FileResponse("docman/socket.io.js", media_type="application/javascript")
 
 #
 # SocketIO Events
@@ -474,15 +470,21 @@ async def handle_message(session_id, data):
         client[session_id]["stop_thread_flag"] = False
     # Remember the collection
     collection = data.get("collection")
-    if not validate_collection(collection):
-        collection = 'test'
+    collection = validate_collection(collection)
     client[session_id]["collection"] = collection
     # Process the message
     if data.get("request") == "refreshCollections":
         # Get the list of collections
         collections = documents.all_collections()
+        current_collection = client[session_id]["collection"]
+        print(f"Current Collection: {current_collection}")
+        # Check for valid collection
+        if current_collection not in collections:
+            # Set to first collection
+            current_collection = collections[0] if len(collections) > 0 else ''
         documents.close()
-        await sio.emit('refreshCollections', {'collections': collections})
+        await sio.emit('refreshCollections', {'collections': collections,
+                                              'collection': current_collection})
     elif data.get("request") == "refreshUploadedFiles":
         # Get the list of uploaded files
         file_entries = collection_files(collection)

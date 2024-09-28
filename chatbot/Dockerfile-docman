@@ -26,6 +26,7 @@ RUN pip install fastapi uvicorn jinja2 bs4 pypdf requests lxml aiohttp
 RUN pip install weaviate-client pdfreader pypandoc
 RUN pip install python-multipart
 RUN pip install pandas openpyxl
+RUN pip install python-socketio
 
 # Copy local files into container
 COPY docman.py /app/docman.py
