@@ -136,7 +136,7 @@ Note - You can restrict collections by providing the environmental variable `COL
 
 ### Usage
 
-You can down create collections (libraries of content) and upload files and URLs to be ingest into the vector database for the Chatbot to reference.
+You can now create collections (libraries of content) and upload files and URLs to be stored into the vector database for the Chatbot to reference.
 
 <img width="1035" alt="image" src="https://github.com/user-attachments/assets/544c75d4-a1a3-4c32-a95f-7f12ff11a450">
 
@@ -144,10 +144,10 @@ You can down create collections (libraries of content) and upload files and URLs
 
 The Chatbot can use this information if you send the prompt command:
 
-```
-[Usage: /rag {library} {opt:number} {prompt}] 
+```bash
+# Usage: /rag {library} {opt:number} {prompt}
 
+# Examples:
 /rag records How much did we donate to charity in 2022?
-
 /rag blog 5 List some facts about solar energy.
 ```
