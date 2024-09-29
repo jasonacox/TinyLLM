@@ -13,6 +13,8 @@ Class Documents:
     close: Close the Weaviate connection
     all_collections: List all collections in Weaviate
     list_documents: List all documents in a collection with file as the key
+    list_documents_stream: List all documents in a collection and stream the results
+    list_chunks_stream: List all documents in a collection and stream the results
     get_document: Get a document by its ID
     get_documents: Get documents by ID, query, or filename
     delete_document: Delete a document by its ID or filename
