@@ -1,14 +1,18 @@
-# TinyLLM Web Based Chatbot
+# TinyLLM Web Based Chatbot and Document Manager
 
 Chatbot: ![Chatbot](https://img.shields.io/docker/pulls/jasonacox/chatbot) DocMan: ![DocMan](https://img.shields.io/docker/pulls/jasonacox/docman)
 
 The TinyLLM Chatbot is a web based python flask app that allows you to chat with a LLM using the OpenAI API.
 
-The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. With the Chatbot, we explore stitching context through conversational threads, rendering responses via realtime token streaming from LLM, and using external data to provide context for the LLM response (Retrieval Augmented Generation).
+The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. With the Chatbot, we explore stitching context through conversational threads, rendering responses via realtime token streaming from LLM, and using external data to provide context for the LLM response (Retrieval Augmented Generation). With the Document Manager, we explore uploading documents to a Vector Database to use in retrieval augmented generation, allowing our Chatbot to produce answers grounded in knowledge that we provide.
+
+Below are steps to get the Chatbot and Document Mangager running.
+
+## Chatbot
 
 The Chatbot can be launched as a Docker container or via command line.
 
-## Docker
+### Docker
 
 ```bash
 # Create placeholder prompts.json
@@ -27,7 +31,7 @@ docker run \
     jasonacox/chatbot
 ```
 
-## Command Line
+### Command Line
 
 ```bash
 # Install required packages
@@ -37,7 +41,7 @@ pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxm
 OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
 ```
 
-## Chat Commands and Retrieval Augmented Generation (RAG)
+### Chat Commands and Retrieval Augmented Generation (RAG)
 
 Some RAG (Retrieval Augmented Generation) features including:
 
@@ -57,29 +61,29 @@ Some RAG (Retrieval Augmented Generation) features including:
 
 See the [rag](../rag/) for more details about RAG.
 
-## Example Session
+### Example Session
 
 The examples below use a Llama 2 7B model served up with the OpenAI API compatible [llmserver](https://github.com/jasonacox/TinyLLM/tree/main/llmserver) on an Intel i5 systems with an Nvidia GeForce GTX 1060 GPU.
 
-### Chatbot
+#### Chatbot
 
 Open http://127.0.0.1:5000 - Example session:
 
 <img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
 
-### Read URL
+#### Read URL
 
 If a URL is pasted in the text box, the chatbot will read and summarize it.
 
 <img width="810" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/44d8a2f7-54c1-4b1c-8471-fdf13439be3b">
 
-### Current News
+#### Current News
 
 The `/news` command will fetch the latest news and have the LLM summarize the top ten headlines. It will store the raw feed in the context prompt to allow follow-up questions.
 
 <img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
 
-## Alternative System Prompts
+### Alternative System Prompts
 
 * A Hacker’s Guide to Language Models - Jeremy Howard [[link](https://www.youtube.com/watch?v=jkrNMKz9pWU&ab_channel=JeremyHoward)]
 
@@ -87,7 +91,7 @@ You are an autoregressive language model that has been fine-tuned with instructi
 
 
 
-# TinyLLM Document Manager (Weaviate)
+## Document Manager (Weaviate)
 
 The document manager allows you to manage the collections and documents in the Weaviate vector database. It provides an easy way for you to upload and ingest the content from files or URL. It performs simple chunking (if requested). The simple UI let's you navigate through the collections and documents.
 
@@ -101,6 +105,16 @@ The document manager allows you to manage the collections and documents in the W
 - COLLECTIONS_ADMIN: Allow users to create and delete collections (default True)
 
 ### Docker Setup
+
+The Document Manager uses a vector database to store the uploaded content. Set up the Weaviate vector database using this docker compose and the included [docker-compose.yml](docker-compose.yml) file.
+
+```bash
+# Setup and run Weaviate vector database on port 8080
+
+docker compose up -d
+```
+
+To run the Document Manager, run the following and adjust as needed. Once running, the document manager will be available at http://localhost:5001
 
 ```bash
 docker run \
@@ -120,9 +134,20 @@ docker run \
 ```
 Note - You can restrict collections by providing the environmental variable `COLLECTIONS` to a string of comma separated collection names.
 
-### Screenshots
+### Usage
+
+You can down create collections (libraries of content) and upload files and URLs to be ingest into the vector database for the Chatbot to reference.
 
 <img width="1035" alt="image" src="https://github.com/user-attachments/assets/544c75d4-a1a3-4c32-a95f-7f12ff11a450">
 
 <img width="1035" alt="image" src="https://github.com/user-attachments/assets/4b15ef87-8f25-4d29-9214-801a326b406f">
 
+The Chatbot can use this information if you send the prompt command:
+
+```
+[Usage: /rag {library} {opt:number} {prompt}] 
+
+/rag records How much did we donate to charity in 2022?
+
+/rag blog 5 List some facts about solar energy.
+```
