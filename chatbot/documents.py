@@ -155,7 +155,7 @@ class Documents:
         client: Weaviate client object
     """
 
-    def __init__(self, host="localhost", grpc_host=None, port=8080, grpc_port=50051, retry=3, filepath="/tmp"):
+    def __init__(self, host="localhost", grpc_host=None, port=8080, grpc_port=50051, retry=3, filepath="/tmp", cache_expire=60):
         """
         Initialize the Document class
         """
@@ -167,6 +167,8 @@ class Documents:
         self.grpc_port = grpc_port              # Weaviate gRPC port
         self.client = None                      # Weaviate client object
         self.retry = retry                      # Number of times to retry connection
+        self.cache = {}                         # Cache of documents
+        self.cache_expire = cache_expire        # Cache expiration time
         if not grpc_host:
             self.grpc_host = host
         # Verify file path
@@ -200,13 +202,21 @@ class Documents:
             raise WeaviateConnectionError(f"Unable to connect to Weaviate at {self.host}")
         return False
 
+    def is_connected(self):
+        """
+        Check if the weaviate connection is active
+        """
+        if self.client:
+            return True
+        return False
+
     def close(self):
         """
         Close the weaviate connection
         """
         if self.client:
             self.client.close()
-            log("Connection to Weaviate closed")
+            log("Weaviate connection closed")
             self.client = None
 
     def all_collections(self):
@@ -216,6 +226,9 @@ class Documents:
         Returns:
             collections: List of collections
         """
+        # Check cache
+        if "collections" in self.cache and self.cache["collections"]["expires"] > time.time():
+            return self.cache["collections"]["data"]
         if not self.client:
             self.connect()
         x = self.retry
@@ -234,6 +247,11 @@ class Documents:
                 x -= 1
         if not x:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
+        # Cache the result
+        self.cache["collections"] = {
+            "data": c,
+            "expires": time.time() + self.cache_expire
+        }
         return c
 
     def create(self, collection):
@@ -260,6 +278,9 @@ class Documents:
                 self.client.collections.create_from_dict(schema)
                 #self.client.collections.create(    
                 #    vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_transformers())
+                # Invalidate cache
+                if "collections" in self.cache:
+                    self.cache["collections"]["expires"] = 0
                 log(f"Collection created: {collection}")
                 break
             except WeaviateConnectionError as er:
@@ -288,6 +309,9 @@ class Documents:
             try:
                 self.client.collections.delete(collection)
                 log(f"Collection deleted: {collection}")
+                # Invalidate cache
+                if "collections" in self.cache:
+                    self.cache["collections"]["expires"] = 0
                 break
             except WeaviateConnectionError as er:
                 log(f"Connection error: {str(er)}")
@@ -302,13 +326,17 @@ class Documents:
         """
         List all documents in collection with file as the key
 
+        Args:
+            collection: Collection name
+
         Returns:
             documents: Dictionary of documents with filename as the key
             {
                 "filename.txt": {
                     "uuid": {
                         "title": "title", 
-                        "doc_type": "doc_type"
+                        "doc_type": "doc_type",
+                        "creation_time": creation_time
                     }
                 }
             }
@@ -345,6 +373,104 @@ class Documents:
         if not x:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return documents
+
+    def list_documents_stream(self, collection=None):
+        """
+        List all documents in collection and stream the results
+
+        Args:
+            collection: Collection name
+        """
+        x = self.retry
+        documents = {}
+        # List all documents in collection
+        if not self.client:
+            self.connect()
+        # Get list of documents in collection
+        while x:
+            try:
+                collection = self.client.collections.get(collection)
+                for o in collection.iterator():
+                    p = o.properties
+                    uuid = str(o.uuid)
+                    filename = p.get("file")
+                    title = p.get("title")
+                    doc_type = p.get("doc_type")
+                    creation_time = p.get("creation_time")
+                    if filename not in documents:
+                        documents[filename] = {}
+                    documents[filename][uuid] = {
+                        "title": title,
+                        "doc_type": doc_type,    
+                        "creation_time": creation_time            
+                    }
+                    yield { "filename": filename,
+                        "uuid": uuid,
+                        "title": title,
+                        "doc_type": doc_type,
+                        "creation_time": creation_time }
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error: {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
+
+    def list_chunks_stream(self, collection, filename=None):
+        """
+        List all documents in collection and stream the results
+
+        Args:
+            collection: Collection name
+            filename: Filename to filter on
+        """
+        x = self.retry
+        documents = []
+        # List all documents in collection
+        if not self.client:
+            self.connect()
+        # Get list of documents in collection
+        while x:
+            try:
+                collection = self.client.collections.get(collection)
+                for o in collection.iterator():
+                    p = o.properties
+                    fn = p.get("file")
+                    if filename and fn != filename:
+                        continue
+                    uuid = str(o.uuid)
+                    title = p.get("title")
+                    doc_type = p.get("doc_type")
+                    creation_time = p.get("creation_time")
+                    chunk = p.get("chunk") or " "
+                    chunk_size = len(chunk)
+                    content_size = len(p.get("content"))
+                    documents.append({
+                        "title": title,
+                        "doc_type": doc_type,    
+                        "creation_time": creation_time,
+                        "uuid": uuid,
+                        "chunk_size": chunk_size,
+                        "content_size": content_size
+                    })
+                    yield { 
+                        "title": title,
+                        "doc_type": doc_type,    
+                        "creation_time": creation_time,
+                        "uuid": uuid,
+                        "chunk_size": chunk_size,
+                        "content_size": content_size
+                    }
+                break
+            except WeaviateConnectionError as er:
+                log(f"Connection error: {str(er)}")
+                self.connect()
+                x -= 1
+                time.sleep(1)
+        if not x:
+            raise WeaviateConnectionError("Unable to connect to Weaviate")
 
     def get_document(self, collection, uuid):
         """
@@ -423,10 +549,14 @@ class Documents:
                 raise WeaviateConnectionError("Unable to connect to Weaviate")
         if filename:
             # Get a document by its filename
+            log(f"Getting documents by filename: {filename}")
             r = self.list_documents(collection)
+            log(f"Documents: {r}")
             for fn in r:
+                log(f"Checking filename: {fn}")
                 if fn == filename:
                     for uuid in r[fn]:
+                        log(f"Getting document by filename: {filename} - uuid: {uuid}")
                         dd.append(self.get_document(collection, uuid))
         return dd
 

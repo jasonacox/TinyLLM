@@ -22,6 +22,19 @@
             padding: 10px 0;
             font-size: small;
         }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table {
+            border-top: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+            border-collapse: collapse;
+        }
+        th, td {
+            border-top: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+        }
         .container {
             max-width: 800px;
             margin: 0 auto;
@@ -66,23 +79,21 @@
 <body>
 
     <div class="container">
-        <h1>File Details</h1>
+        <h1>Document Chunk Details</h1>
 
         <!-- File details box -->
         <div class="box file-details">
-            <h2>Details of File</h2>
+            <h2>Details of Document Chunks</h2>
             <ul>
-                <li><strong>Filename:</strong> <span>{{ filename }}</span></li>
-                <li><strong>Creation Time:</strong> <span>{{ creation_time }}</span></li>
+                <li><strong>Filename:</strong> <span id="filename">{{ filename }}</span></li>
+                <li><strong>Creation Time:</strong> <span id="creation_time">{{ creation_time }}</span></li>
                 <!-- Loop through chunks and display title and uuid -->
-                {% for chunk in chunks %}
-                    <li><strong>Chunk {{ loop.index }}:</strong> <span>{{ chunk.title }} - <a href="/view_chunk?uuid={{ chunk.uuid }}">{{ chunk.uuid }}</a></span></li>
-                {% endfor %}
+                <div id="chunkList">Loading...</div>
             </ul>
         </div>
 
         <!-- Back to files list button -->
-        <a href="/" class="back-button">Back to Files</a>
+        <a href="/" class="back-button">Back to Home</a>
     </div>
 
     <!-- Footer - Bottom of Screen add html file and link to TinyLLM-->
@@ -90,6 +101,111 @@
         <a href="/" style="color: white; font-size: small;">Home</a> | 
         <a href="https://github.com/jasonacox/TinyLLM" style="color: white; font-size: small;">TinyLLM Document Manager {{ version }}</a> - view.html
     </footer>
-    
+    <script src="/socket.io.js"></script>
+    <script>
+        
+        let files = [];
+        let collectionValue = '';
+        const chunkList = document.getElementById('chunkList');
+
+        // Connect to the Socket.IO server
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        // Function to compare to titles and return 1 or -1
+        function compareTitles(a, b) {
+            // Pad all numbers in the string with zeros so they are 4 characters long
+            function padNumbers(s) {
+                return s.replace(/\d+/g, function(n) {
+                    return n.replace(/(\d+)/, function(d) {
+                        return ('0000' + d).slice(-4);
+                    });
+                });
+            }
+            // Compare the padded titles
+            return padNumbers(a.title) > padNumbers(b.title) ? 1 : -1;
+        }
+
+        // Listen for messages from the server
+        socket.on('chunks', function(data) {
+            console.log('Received message:', data);
+            if (data.loading > 0) {
+                // Show the count of files being loaded
+                chunkList.innerHTML = `Loaded ${data.loading} chunks...`;
+            } else {
+                // Sort the chunks by title using compareTitles function
+                data.chunks.sort((a, b) => compareTitles(a, b));
+                // Create Table
+                chunkList.innerHTML = '';
+                let table = document.createElement('table');
+                // Table body
+                let tbody = document.createElement('tbody');
+                for (let i = 0; i < data.chunks.length; i++) {
+                    let chunk = data.chunks[i];
+                    let tr = document.createElement('tr');
+                    
+                    let tdIndex = document.createElement('td');
+                    tdIndex.textContent = `Chunk ${i+1}`;
+                    tr.appendChild(tdIndex);
+                    
+                    let tdTitle = document.createElement('td');
+                    tdTitle.textContent = chunk.title;
+                    tr.appendChild(tdTitle);
+
+                    let tdSize = document.createElement('td');
+                    if (chunk.chunk_size <= 1) {
+                        tdSize.textContent = ``;
+                    } else {
+                        tdSize.textContent = `(${chunk.chunk_size} bytes)`;
+                    }
+                    tr.appendChild(tdSize);
+                    
+                    let tdLink = document.createElement('td');
+                    tdLink.style.textAlign = 'right';
+                    let a = document.createElement('a');
+                    a.href = `/view_chunk?uuid=${chunk.uuid}`;
+                    a.textContent = '[View Chunk]';
+                    tdLink.appendChild(a);
+                    tr.appendChild(tdLink);
+                    
+                    tbody.appendChild(tr);
+                }
+                table.appendChild(tbody);
+                chunkList.appendChild(table);
+
+                
+            }
+        });
+
+        socket.on('connected', function(data) {
+            console.log('Server:', data);
+        });
+
+        // Set collectionValue from cookie
+        const cookie = document.cookie;
+        const cookieParts = cookie.split(';');
+        for (let i = 0; i < cookieParts.length; i++) {
+            const cookiePart = cookieParts[i].trim();
+            if (cookiePart.startsWith('collection=')) {
+                collectionValue = cookiePart.substring('collection='.length);
+                break;
+            }
+        }
+
+        // Request updated list of collections from the server
+        function loadDocuments() {
+            // Get filename from get parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const filename = urlParams.get('filename');
+            // Send message to server to load the list of documents for the collection           
+            socket.emit('loadDocuments', {
+                filename: filename,
+                collection: collectionValue
+            });
+        }
+
+        // Load the list of documents
+        loadDocuments();
+
+    </script>
 </body>
 </html>

@@ -48,6 +48,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 from pypdf import PdfReader
 
 from documents import Documents
@@ -95,7 +96,6 @@ try:
 except Exception as e:
     print(f"Failed to connect to the vector database: {e}")
     sys.exit(1)
-documents.close()
 
 #
 # Configure FastAPI App and SocketIO
@@ -106,6 +106,15 @@ sio = socketio.AsyncServer(async_mode="asgi")
 socket_app = socketio.ASGIApp(sio)
 app = FastAPI()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log("Starting up...")
+    yield
+    log("Shutting down...")
+    documents.close()
+
+app.router.lifespan_context = lifespan
+
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -114,7 +123,6 @@ def collection_files(collection=None):
     if not collection:
         return []
     d = documents.list_documents(collection)
-    documents.close()
     file_entries = []
     for doc in d:
         filename = doc
@@ -233,7 +241,6 @@ async def embed_file(request: Request):
     collection = request.cookies.get('collection', collection)
     collection = validate_collection(collection)
     documents.add_file(collection, title, filename, tmp_filename, chunk_size=chunk_size)
-    documents.close()
     # Delete the temporary file
     if tmp_filename and os.path.exists(tmp_filename):
         os.remove(tmp_filename)
@@ -243,31 +250,11 @@ async def embed_file(request: Request):
 @app.get("/view", response_class=HTMLResponse)
 async def view_file(request: Request):
     filename = request.query_params.get('filename')
-    chunks = []
     collection = request.cookies.get('collection')
     collection = validate_collection(collection)
-    # Get the document from the database
-    dlist = documents.get_documents(collection, filename=filename)
-    # Sort based on creation_time if it exists
-    # is dlist a list of dictionaries?
-    if dlist and type(dlist) is dict:
-        if dlist[0] and dlist[0].get('creation_time'):
-            dlist = sorted(dlist, key=lambda x: (x.get('creation_time')) or 0, reverse=False)
-        else:
-            dlist = sorted(dlist, key=lambda x: x.get('title'), reverse=False)
-    for d in dlist:
-        zuuid = d.get('uuid', '')
-        title = d.get('title') or 'No Title'
-        doc_type = d.get('doc_type', '')
-        content = d.get('content') or ' '
-        creation_time = d.get('creation_time') or "0"
-        chunks.append({"uuid": zuuid, "title": title, "doc_type": doc_type, 
-                       "content": content, "creation_time": creation_time})
-    documents.close()
     # display view.html
     return templates.TemplateResponse(request, "view.html", {"request": request, 
                                                     "filename": filename, 
-                                                    "chunks": chunks,
                                                     "collection": collection,
                                                     "version": VERSION})
 
@@ -288,7 +275,6 @@ async def view_chunk(request: Request):
     creation_time = d.get('creation_time') or "0"
     t = int(creation_time)
     creation_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
-    documents.close()
     # display view_chunk.html
     return templates.TemplateResponse(request, "view_chunk.html", {"request": request,
                                                           "uuid": zuuid,
@@ -323,7 +309,6 @@ async def select_collection(request: Request):
 @app.get("/get_collections", response_class=HTMLResponse)
 async def get_collections(request: Request):
     collections = documents.all_collections()
-    documents.close()
     # Return the list of collections in alphabetical order
     return json.dumps(sorted(collections))
 
@@ -340,7 +325,6 @@ async def new_collection(request: Request):
                 r = f"Collection {collection} created."
         except Exception as er:
             r = f"Failed to create collection: {collection}"
-        documents.close()
     else:
         r = "You do not have permission to create a collection."
     return r
@@ -360,7 +344,6 @@ async def delete_collection(request: Request):
                 r = f"Collection {collection} deleted."
         except Exception as er:
             r = f"Failed to delete collection: {collection}"
-        documents.close()
     return r
 
 @app.post("/delete")
@@ -371,7 +354,6 @@ async def delete_file(request: Request):
     collection = validate_collection(collection)
     # Delete the document from the database
     documents.delete_document(collection, filename=filename)
-    documents.close()
     return json.dumps({"status": "ok"})
 
 # Version
@@ -382,7 +364,7 @@ async def version():
 # Display settings and stats
 @app.get("/stats")
 async def home(request: Request):
-    global stats
+    global stats, client
     collection = request.cookies.get('collection')
     collection = validate_collection(collection)
     # Create a simple status page
@@ -400,6 +382,10 @@ async def home(request: Request):
         "COLLECTIONS": COLLECTIONS,
         "PORT": PORT,
         "COLLECTIONS_ADMIN": COLLECTIONS_ADMIN,
+        "MAXCLIENTS": MAXCLIENTS,
+        "Session Count": len(client),
+        "Connected": documents.is_connected(),
+        "Collections": documents.all_collections(),
     }
     # Build a simple HTML page based on data facets
     html = "<html><head><title>TinyLLM Document Managher</title>"
@@ -459,7 +445,7 @@ async def handle_disconnect(session_id):
         client[session_id]["stop_thread_flag"] = True
         client.pop(session_id)
 
-# Client sent a message - handle it
+# Client request for refreshCollections
 @sio.on('message')
 async def handle_message(session_id, data):
     log(f"Message from {session_id}: {data}")
@@ -475,6 +461,7 @@ async def handle_message(session_id, data):
     # Process the message
     if data.get("request") == "refreshCollections":
         # Get the list of collections
+        client[session_id]["stop_thread_flag"] = True
         collections = documents.all_collections()
         current_collection = client[session_id]["collection"]
         print(f"Current Collection: {current_collection}")
@@ -482,17 +469,75 @@ async def handle_message(session_id, data):
         if current_collection not in collections:
             # Set to first collection
             current_collection = collections[0] if len(collections) > 0 else ''
-        documents.close()
         await sio.emit('refreshCollections', {'collections': collections,
-                                              'collection': current_collection})
-    elif data.get("request") == "refreshUploadedFiles":
-        # Get the list of uploaded files
-        file_entries = collection_files(collection)
-        await sio.emit('refreshUploadedFiles', {'files': file_entries})
+                                              'collection': current_collection}, room=session_id)
+        client[session_id]["stop_thread_flag"] = False
+    elif data.get("request") == "refreshUploadedDocuments":
+        if not documents.is_connected():
+            documents.connect()
+        # Get the handle of the file list generator and send the files as they are generated
+        file_entries = {}
+        payload = []
+        number_of_docs = 0
+        d = documents.list_documents_stream(collection)
+        for doc in d:
+            if session_id not in client:
+                break
+            if client[session_id]["stop_thread_flag"]:
+                client[session_id]["stop_thread_flag"] = False
+                break
+            number_of_docs += 1
+            filename = doc["filename"]
+            if filename not in file_entries:
+                file_entries[filename] = 0
+            file_entries[filename] += 1
+            # Build payload
+            payload = []
+            for filename in file_entries:
+                count = file_entries[filename]
+                payload.append(({"filename": filename, "count": count}))
+            # Send update on number of docs loaded
+            await sio.emit('refreshUploadedDocuments', {'files': [], 'collection': collection, 'loading': number_of_docs}, room=session_id)
+        # Send the list of documents
+        await sio.emit('refreshUploadedDocuments', {'files': payload, 'collection': collection}, room=session_id)
+        # Check for empty list and send empty list
+        if not file_entries:
+            await sio.emit('refreshUploadedDocuments', {'files': [], 'collection': collection}, room=session_id)
 
+# Client request for loadDocuments
+@sio.on('loadDocuments')
+async def handle_load_documents(session_id, data):
+    log(f"Load Documents from {session_id}: {data}")
+    filename = data.get("filename")
+    collection = data.get("collection")
+    collection = validate_collection(collection)
+    # Get the list of documents
+    chunks = []
+    num = 0
+    dlist = documents.list_chunks_stream(collection, filename)
+    for d in dlist:
+        num += 1
+        zuuid = d.get('uuid', '')
+        title = d.get('title') or 'No Title'
+        doc_type = d.get('doc_type', '')
+        content = d.get('content') or ' '
+        creation_time = d.get('creation_time') or "0"
+        chunk_size = d.get('chunk_size') or 0
+        chunks.append({"uuid": zuuid, "title": title, "doc_type": doc_type, 
+                       "content": content, "creation_time": creation_time,
+                       "chunk_size": chunk_size})
+        await sio.emit('chunks', {'chunks': [], 'collection': collection,
+                            'loading': num, 'filename': filename,
+                            'creation_time': creation_time}, room=session_id)
+    # Send the full list of documents
+    await sio.emit('chunks', {'chunks': chunks, 'collection': collection,
+                        'loading': 0, 'filename': filename,
+                        'creation_time': creation_time}, room=session_id)
 
+# Start the server
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=PORT)
+    documents.close()
 
 # To start the server, run the following command:
 # uvicorn docman:app --reload

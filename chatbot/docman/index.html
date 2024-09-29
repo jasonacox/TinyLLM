@@ -222,7 +222,7 @@
             <div class="box">
                 <h2 id="headerDocuments">Documents</h2>
                 <ul id="uploaded-files-list">
-                    <li>No documents uploaded yet.</li>
+                    No documents uploaded yet.
                 </ul>
             </div>
         </div>
@@ -258,13 +258,18 @@
         const socket = io.connect('http://' + document.domain + ':' + location.port);
 
         // Listen for messages from the server
-        socket.on('refreshUploadedFiles', function(data) {
-            console.log('Received message:', data);
-            updateUploadedFilesUI(data.files);
+        socket.on('refreshUploadedDocuments', function(data) {
+            // console.log('Received message:', data);
+            if (data.loading > 0) {
+                // Show the count of files being loaded
+                uploadedFilesList.innerHTML = `Loaded ${data.loading} documents...`;
+            } else {
+                updateUploadedDocsUI(data.files);
+            }
         });
 
         socket.on('refreshCollections', function(data) {
-            console.log('Received message:', data);
+            // console.log('Received message:', data);
             // If collection is not empty, set the collectionValue
             if (data.collection !== '') {
                 collectionValue = data.collection;
@@ -391,9 +396,9 @@
         }
 
         // Request updated list of collection documents from the server
-        function refreshUploadedFiles() {
+        function refreshUploadedDocuments() {
             socket.emit('message', {
-                request: "refreshUploadedFiles",
+                request: "refreshUploadedDocuments",
                 collection: collectionValue
             });
         }
@@ -410,17 +415,17 @@
         function refreshAll() {
             // Clear collections and uploaded files
             collectionList.innerHTML = 'Loading...';
-            uploadedFilesList.innerHTML = '<li>Loading...</li>';
+            uploadedFilesList.innerHTML = 'Loading...';
             refreshCollections();
-            refreshUploadedFiles();
+            refreshUploadedDocuments();
         }
 
         // Update the "Uploaded Files" section in the UI
-        function updateUploadedFilesUI(filesData) {
+        function updateUploadedDocsUI(filesData) {
             uploadedFilesList.innerHTML = '';  // Clear the current list
 
             if (filesData.length === 0) {
-                uploadedFilesList.innerHTML = '<li>No documents uploaded yet.</li>';
+                uploadedFilesList.innerHTML = 'No documents uploaded yet.';
             } else {
                 filesData.forEach(file => {
                     const li = document.createElement('li');
@@ -505,7 +510,7 @@
             collectionList.innerHTML = '';  // Clear the current list
 
             if (collectionsData.length === 0) {
-                collectionList.innerHTML = '<li>No collections available.</li>';
+                collectionList.innerHTML = 'No collections available.';
             } else {
             const fragment = document.createDocumentFragment();
             collectionsData.forEach(collection => {
@@ -564,7 +569,7 @@
             // First clear the list
             document.getElementById('headerDocuments').textContent = `Documents in ${collectionValue}`;
             uploadedFilesList.innerHTML = '<li>Loading...</li>';
-            refreshUploadedFiles();
+            refreshUploadedDocuments();
         }
 
         // View file
@@ -620,7 +625,7 @@
                 const html = await response.text();
 
                 // Assuming you're refreshing or reloading the page or part of the page here
-                refreshUploadedFiles();
+                refreshUploadedDocuments();
             } catch (error) {
                 // Handle any error that occurs during the process
                 console.error('Error deleting file:', error);
