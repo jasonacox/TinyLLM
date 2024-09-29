@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.6 - Progressive Loading
+
+* DocMan - Updated to use progressive loading to help with larger document and chunk lists. Performance and bug fixes.
+
 ## 0.15.5 - Async and SocketIO
 
 * DocMan - Switch to async and socket communication to more responsive UI. Bug fixes.
