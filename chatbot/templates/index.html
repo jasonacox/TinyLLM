@@ -309,6 +309,8 @@
         </div>
     </div>
     <script>
+        // Pop-up dialogue functions
+
         function openDialogue() {
             document.getElementById("dialogueOverlay").style.display = "flex";
             // First clear the form from any previous settings
@@ -421,7 +423,7 @@
             <div class="user-input">
                 <div class="textarea-wrapper">
                     <div class="resize-handle" id="resize-handle"></div>
-                    <textarea id="messageInput" placeholder="Type a message, slash command, or URL..." onkeydown="checkEnter(event)"></textarea>
+                    <textarea id="messageInput" placeholder="Enter a message, slash command, URL, or drop an image..." onkeydown="checkEnter(event)"></textarea>
                 </div>
                 <div class="button-container">
                     <button onclick="sendMessage()">Send</button>
@@ -436,6 +438,86 @@
         let isResizing = false;
         let startY;
         let startHeight;
+
+        // Image upload functions
+        const dropArea = document.getElementById('messageInput');
+
+        // Prevent default behaviors for drag/drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            window.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Turn the background of the drop area yellow on dragover
+        ['dragenter', 'dragover'].forEach(eventName => {
+            window.addEventListener(eventName, () => dropArea.style.backgroundColor = '#ffffcc', false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            window.addEventListener(eventName, () => dropArea.style.backgroundColor = '', false);
+        });
+
+        // Handle file drop
+        window.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            console.log('File dropped');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+            const file = files[0];
+            uploadFile(file);
+            }
+        }
+
+        // Upload file via Socket.IO - NOT USED due to payload size limitations
+        function uploadFileSocket(file) {
+            const updateContainer = document.getElementById('messageContainer');
+            const reader = new FileReader();
+            reader.readAsDataURL(file); // Convert the file to base64-encoded string
+            reader.onloadend = function() {
+                console.log('File uploaded:', file.name, 'size:', file.size);
+                socket.emit('image_upload', {
+                    fileName: file.name,
+                    data: reader.result
+                });
+                updateContainer.innerHTML += `<p class='user-text'>Uploaded image: ${file.name}</p>`;
+                updateContainer.innerHTML += `<img src="${reader.result}" style="max-width: 50%; height: auto;">`;
+            };
+        }
+
+        // Upload file via POST request
+        function uploadFile(file) {
+            const sessionId = socket.id;  // Get the session ID from the socket connection
+            const updateContainer = document.getElementById('messageContainer');
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append("session_id", sessionId);
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    // Check data.result for success or failure
+                    if (data.result === 'Success') {
+                        // Convert the image data to base64 image format
+                        console.log('File uploaded:', data.filename, 'size:', data.size);
+                        updateContainer.innerHTML += `<img src="data:image/png;base64,${data.image_data}" style="max-width: 50%; height: auto;">`;
+                        // Make sure the image is visible
+                        updateContainer.scrollTop = updateContainer.scrollHeight;
+                    } else {
+                        console.error('Error uploading file:', data.error);
+                        updateContainer.innerHTML += `<p class='user-text'>Error uploading file: ${data.error}</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error uploading file:', error);
+                });
+        }
 
         // Handle the mousedown event on the resize handle
         document.getElementById('resize-handle').addEventListener('mousedown', (e) => {
@@ -595,6 +677,12 @@
                 document.getElementById("conversation").innerHTML = `
                     <pre style='white-space: pre-wrap'>${JSON.stringify(data.update, null, 2)}</pre>
                 `;
+            }
+
+            if (data.voice === "image") {
+                // Display filename and image
+                updateContainer.innerHTML += `<p>Uploaded image: ${data.filename}</p>`;
+                updateContainer.innerHTML += `<img src="data:image/png;base64,${data.image_data}" style="max-width: 50%; height: auto;">`;
             }
 
             // Ensure we always show the latest

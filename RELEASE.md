@@ -1,8 +1,13 @@
 # Releases
 
+## 0.15.7 - Vision Model Support
+
+* Chatbot - Allows user to drag and drop images into the context window for multi-modal vision LLMs.
+
 ## 0.15.6 - Progressive Loading
 
 * DocMan - Updated to use progressive loading to help with larger document and chunk lists. Performance and bug fixes.
+* Chatbot - Updated /rag commands to allow turning auto-RAG on and off, setting the collection and result number.
 
 ## 0.15.5 - Async and SocketIO
 

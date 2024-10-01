@@ -69,6 +69,7 @@ import logging
 import os
 import time
 import re
+import base64
 
 from documents import Documents
 
@@ -77,10 +78,11 @@ import requests
 import socketio
 import uvicorn
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, File, UploadFile, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 from pypdf import PdfReader
 import aiohttp
 
@@ -263,7 +265,6 @@ def query_index(query, library, num_results=RESULTS):
         previous_title = ans['title']
         previous_file = ans['file']
         previous_content = ans['content']
-    rag_documents.close()
     log(f"RAG: Retrieved ({len(content)} bytes): {references}")
     return content, references
 
@@ -280,11 +281,18 @@ stats = {
 #
 # Configure FastAPI App and SocketIO
 #
-
-log("Starting server...")
 sio = socketio.AsyncServer(async_mode="asgi")
 socket_app = socketio.ASGIApp(sio)
 app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log("Starting chatbot...")
+    yield
+    log("Shutting down chatbot...")
+    rag_documents.close()
+
+app.router.lifespan_context = lifespan
 
 # Load system prompts from PROMPT_FILE
 def load_prompts():
@@ -357,10 +365,22 @@ async def ask(prompt, sid=None):
     log(f"Context size = {len(client[sid]['context'])}")
     while not response:
         try:
-            # remember context
+            # Remember context
             if ONESHOT:
                 client[sid]["context"] = base_prompt()
-            client[sid]["context"].append({"role": "user", "content": prompt})
+            # Process image upload if present
+            if client[sid]["image_data"]:
+                message = {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{client[sid]['image_data']}"}}
+                    ]
+                }
+                client[sid]["image_data"] = ""
+                client[sid]["context"].append(message)
+            else:
+                client[sid]["context"].append({"role": "user", "content": prompt})
             log(f"messages = {client[sid]['context']} - model = {mymodel}")
             llm = openai.OpenAI(api_key=api_key, base_url=api_base)
             response = llm.chat.completions.create(
@@ -694,6 +714,36 @@ async def alert(data: dict):
         log(f"Invalid token or missing message: {data}")
         return ({'status': 'Invalid Token or missing message'})
 
+# Upload a file
+@app.post('/upload')
+async def upload_file(file: UploadFile = File(...), session_id: str = Form(...)):
+    global client
+    file_name = file.filename
+    session_id = session_id.strip()
+    content = await file.read()  # Read file content
+    image_data = base64.b64encode(content).decode('utf-8') # Convert to base64
+    # Validate session
+    if session_id not in client:
+        log(f"Invalid session {session_id}")
+        return {"result": "Bad Session ID", "filename": file.filename, "size": len(content)}
+    # TODO: Verify that this is a valid image
+    log(f"Received image upload from {session_id} - {file_name} [{len(image_data)} bytes]")
+    # Add to client session
+    if client[session_id]["image_data"]:
+        await sio.emit('update', {'update': 'Replacing previous image', 'voice': 'user'}, room=session_id)
+    client[session_id]["image_data"] = image_data
+    # Determine file size in a human-readable format
+    file_size = len(content)
+    if file_size < 1024:
+        file_size = f"{file_size} bytes"
+    elif file_size < 1024 * 1024:
+        file_size = f"{file_size / 1024:.1f} KB"
+    else:
+        file_size = f"{file_size / 1024 / 1024:.1f} MB"    
+    update = f"Uploaded image: {file_name} [{file_size}]"
+    await sio.emit('update', {'update': update, 'voice': 'user'}, room=session_id)
+    return {"result": "Success", "filename": file.filename, "size": len(content), "image_data": image_data}
+
 #
 # SocketIO Events
 #
@@ -759,9 +809,9 @@ async def handle_connect(session_id, env):
                         if not ONESHOT:
                             # remember context
                             client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
-                    except Exception as err:
+                    except Exception as erro:
                         # Unable to process prompt, give error
-                        log(f"ERROR {er}")
+                        log(f"ERROR {erro}")
                         await sio.emit('update', {'update': 'An error occurred - unable to complete.', 'voice': 'ai'},room=session_id)
                         # Reset context
                         client[session_id]["context"] = base_prompt()
@@ -772,8 +822,8 @@ async def handle_connect(session_id, env):
                         print(f"AI: {completion_text}")
         except KeyError:
             log(f"Thread ended: {session_id}")
-        except Exception as err:
-            log(f"Thread error: {err}")
+        except Exception as erro:
+            log(f"Thread error: {erro}")
 
     if session_id in client:
         # Client reconnected - restart thread
@@ -798,6 +848,10 @@ async def handle_connect(session_id, env):
         client[session_id]["references"] = ""
         client[session_id]["links"] = {}
         client[session_id]["toxicity"] = 0.0
+        client[session_id]["rag_only"] = False
+        client[session_id]["library"] = WEAVIATE_LIBRARY
+        client[session_id]["results"] = RESULTS
+        client[session_id]["image_data"] = ""
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -835,6 +889,26 @@ async def handle_message(session_id, data):
     else:
         await handle_normal_prompt(session_id, p)
     return {'status': 'Message received'}
+
+# Upload an image to context via socket - NOT USED
+@sio.on('image_upload')
+async def handle_image_upload(session_id, data):
+    global client
+    await sio.emit('update', {'update': 'Image uploaded', 'voice': 'user'}, room=session_id)
+    file_name = data['fileName']
+    image_data = data['data'].split(",")[1]  # Extract base64 part of the image
+    log(f"Received image upload from {session_id} - {file_name} [{len(image_data)} bytes]")
+    # Verify that this is a valid image
+    if not image_data.startswith("iVBORw0KGgoAAAANSUhE"):
+        log(f"Invalid image data: {image_data[:20]}")
+        await sio.emit('update', {'update': 'Invalid image data', 'voice': 'user'}, room=session_id)
+        return
+    # Add to client session
+    client[session_id]["image_data"] = image_data
+    # Send image back to client to display
+    #await sio.emit('update', {'filename': file_name,
+    #                            'image_data': image_data,
+    #                            'voice': 'image'}, room=session_id)
 
 # Client sent a request for conversation thread
 @sio.on('request_conversation')
@@ -919,9 +993,46 @@ async def fetch_news(session_id, p):
     client[session_id]["prompt"] = expand_prompt(prompts["news"], {"context_str": context_str})
 
 async def handle_rag_command(session_id, p):
+    """
+    Options:
+    /rag {library} {opt:number} {prompt}
+    /rag on {library} {opt:number}
+    /rag off
+    /rag list
+    """
+    # If WEAVIATE_HOST is not set, return
+    if not WEAVIATE_HOST:
+        await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'}, room=session_id)
+        return
     rag = p[4:].strip()
     parts = rag.split()
     library = ""
+    # Do we have /rag on? - Get library and number - client session only not global
+    if parts and parts[0] == "on":
+        library = WEAVIATE_LIBRARY
+        number = RESULTS
+        if len(parts) >= 2:
+            library = parts[1]
+        if len(parts) >= 3 and parts[2].isdigit():
+            number = int(parts[2])
+        # Set mode in client session
+        client[session_id]["rag_only"] = True
+        client[session_id]["library"] = library
+        client[session_id]["results"] = number
+        await sio.emit('update', {'update': '[Auto-RAG On]', 'voice': 'user'}, room=session_id)
+        return
+    elif parts and parts[0] == "off":
+        # Turn off RAG mode
+        client[session_id]["rag_only"] = False
+        await sio.emit('update', {'update': '[Auto-RAG Off]', 'voice': 'user'}, room=session_id)
+        return
+    elif parts and parts[0] == "list":
+        # List available libraries
+        array_of_libraries = rag_documents.all_collections()
+        # convert array into string
+        mes = f'[Available Libraries: {", ".join(array_of_libraries)}]'
+        await sio.emit('update', {'update': mes, 'voice': 'user'}, room=session_id)
+        return
     if len(parts) >= 2:
         library = parts[0]
         if parts[1].isdigit():
@@ -931,7 +1042,14 @@ async def handle_rag_command(session_id, p):
             number = RESULTS
             prompt = ' '.join(parts[1:])
     if not library or not prompt:
-        await sio.emit('update', {'update': '[Usage: /rag {library} {opt:number} {prompt}] - Import and summarize topic from library.', 'voice': 'user'}, room=session_id)
+        if RAG_ONLY:
+            mes = f'Auto-RAG On: All prompts are processed by RAG using library {WEAVIATE_LIBRARY}\n.'
+        else:
+            library = WEAVIATE_LIBRARY if RAG_ONLY else client[session_id]["library"]
+            number = RESULTS if RAG_ONLY else client[session_id]["results"]
+            rag_state = f"[Auto-RAG is {'On' if client[session_id]['rag_only'] or RAG_ONLY else 'Off'} - Library: {library} - Results: {number}]\n\n"
+            mes = rag_state + 'RAG Commands:\n * /rag {library} {opt:number} {prompt}\n * /rag on {library} {opt:number}\n * /rag off\n * /rag list\n'
+        await sio.emit('update', {'update': mes, 'voice': 'user'}, room=session_id)
     else:
         if WEAVIATE_HOST:
             log(f"Pulling {number} entries from {library} with prompt {prompt}")
@@ -990,6 +1108,10 @@ async def handle_normal_prompt(session_id, p):
     if WEAVIATE_HOST and RAG_ONLY and p is not prompts["greeting"]:
         # Activate RAG every time
         await handle_rag_command(session_id, f"/rag {WEAVIATE_LIBRARY} {RESULTS} {p}")
+        return
+    if client[session_id]["rag_only"]:
+        # Use RAG
+        await handle_rag_command(session_id, f"/rag {client[session_id]['library']} {client[session_id]['results']} {p}")
         return
     if TOXIC_THRESHOLD != 99:
         # Test toxicity of prompt
