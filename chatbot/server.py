@@ -762,11 +762,8 @@ async def upload_file(file: UploadFile = File(...), session_id: str = Form(...))
     if session_id not in client:
         log(f"Invalid session {session_id}")
         return {"result": "Bad Session ID", "filename": file.filename, "size": len(content)}
-    # TODO: Verify that this is a valid image
     debug(f"Received image upload from {session_id} - {file_name} [{len(image_data)} bytes]")
     # Add to client session
-    if client[session_id]["image_data"]:
-        await sio.emit('update', {'update': 'Replacing previous image', 'voice': 'user'}, room=session_id)
     client[session_id]["image_data"] = image_data
     # Determine file size in a human-readable format
     file_size = len(content)
@@ -775,7 +772,7 @@ async def upload_file(file: UploadFile = File(...), session_id: str = Form(...))
     elif file_size < 1024 * 1024:
         file_size = f"{file_size / 1024:.1f} KB"
     else:
-        file_size = f"{file_size / 1024 / 1024:.1f} MB"    
+        file_size = f"{file_size / 1024 / 1024:.1f} MB"
     update = f"Uploaded image: {file_name} [{file_size}]"
     await sio.emit('update', {'update': update, 'voice': 'user'}, room=session_id)
     return {"result": "Success", "filename": file.filename, "size": len(content), "image_data": image_data}
