@@ -150,13 +150,15 @@ WEAVIATE_GRPC_HOST = os.environ.get("WEAVIATE_GRPC_HOST", WEAVIATE_HOST)    # Em
 WEAVIATE_PORT = os.getenv('WEAVIATE_PORT', '8080')
 WEAVIATE_GRPC_PORT = os.getenv('WEAVIATE_GRPC_PORT', '50051')
 WEAVIATE_LIBRARY = os.environ.get("WEAVIATE_LIBRARY", "tinyllm")            # Weaviate library to use
+WEAVIATE_AUTH_KEY = os.getenv('WEAVIATE_AUTH_KEY', None)                    # Weaviate Auth Key
 RESULTS = int(os.environ.get("RESULTS", 1))                                 # Number of results to return from RAG query
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Optional - Alpha Vantage API Key
 UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/tmp")                     # Folder to store uploaded documents
 
 # Document Management Settings
-rag_documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, 
-                          grpc_port=WEAVIATE_GRPC_PORT, retry=3, filepath=UPLOAD_FOLDER)
+rag_documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT,
+                          grpc_port=WEAVIATE_GRPC_PORT, retry=3, filepath=UPLOAD_FOLDER, 
+                          auth_key=WEAVIATE_AUTH_KEY)
 
 # Prompt Defaults
 default_prompts = {}

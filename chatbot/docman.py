@@ -78,6 +78,7 @@ WEAVIATE_HOST = os.getenv('WEAVIATE_HOST', 'localhost')
 WEAVIATE_GRPC_HOST = os.getenv('WEAVIATE_GRPC_HOST', WEAVIATE_HOST)
 WEAVIATE_PORT = os.getenv('WEAVIATE_PORT', '8080')
 WEAVIATE_GRPC_PORT = os.getenv('WEAVIATE_GRPC_PORT', '50051')
+WEAVIATE_AUTH_KEY = os.getenv('WEAVIATE_AUTH_KEY', None)
 COLLECTIONS = os.getenv('COLLECTIONS', None)
 PORT = int(os.getenv('PORT', "5001"))
 COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true"
@@ -88,7 +89,8 @@ MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))
 #download_pandoc()
 
 # Create a new instance of the Documents class to manage the database
-documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, grpc_port=WEAVIATE_GRPC_PORT)
+documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, 
+                      grpc_port=WEAVIATE_GRPC_PORT, auth_key=WEAVIATE_AUTH_KEY)
 try:
     if not documents.connect():
         print("Failed to connect to the vector database")

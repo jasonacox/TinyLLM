@@ -53,6 +53,7 @@ import weaviate.classes as wvc
 import weaviate
 from weaviate.exceptions import WeaviateConnectionError
 from weaviate.classes.query import Filter
+from weaviate.classes.init import Auth
 import requests
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
@@ -157,7 +158,8 @@ class Documents:
         client: Weaviate client object
     """
 
-    def __init__(self, host="localhost", grpc_host=None, port=8080, grpc_port=50051, retry=3, filepath="/tmp", cache_expire=60):
+    def __init__(self, host="localhost", grpc_host=None, port=8080, grpc_port=50051, retry=3, filepath="/tmp", 
+                 cache_expire=60, auth_key=None):
         """
         Initialize the Document class
         """
@@ -171,6 +173,7 @@ class Documents:
         self.retry = retry                      # Number of times to retry connection
         self.cache = {}                         # Cache of documents
         self.cache_expire = cache_expire        # Cache expiration time
+        self.auth_key = auth_key                # Weaviate API key
         if not grpc_host:
             self.grpc_host = host
         # Verify file path
@@ -192,6 +195,7 @@ class Documents:
                     grpc_host=self.grpc_host,
                     grpc_port=self.grpc_port,
                     grpc_secure=False,
+                    auth_credentials=(Auth.api_key(self.auth_key) if self.auth_key else None),  # API key for authentication
                     additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
                 )
                 log(f"Connected to Weaviate at {self.host}")
