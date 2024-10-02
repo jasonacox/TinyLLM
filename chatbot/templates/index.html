@@ -333,7 +333,7 @@
                             <tr>
                                 <td>${name}</td>
                                 <td>
-                                    <textarea id="${name}" class="prompt-value" oninput="highlightTextarea(this)">${value}</textarea>
+                                    <textarea id="${name}" class="prompt-value" oninput="highlightTextarea(this)" onpaste="handlePaste(event)">${value}</textarea>
                                 </td>
                             </tr>
                         `;
@@ -472,6 +472,25 @@
             uploadFile(file);
             }
         }
+        function handlePaste(event) {
+            // Detect if paste is an image
+            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+            for (const item of items) {
+            if (item.kind === 'file' && item.type.includes('image')) {
+                const file = item.getAsFile();
+                uploadFile(file);
+            }
+            }
+            // Otherwise paste as text
+            const text = (event.clipboardData || event.originalEvent.clipboardData).getData('text');
+            if (text) {
+            event.target.value += text;
+            }
+            event.preventDefault();
+        }
+
+        // Add event listener for paste event
+        document.getElementById('messageInput').addEventListener('paste', handlePaste);
 
         // Upload file via Socket.IO - NOT USED due to payload size limitations
         function uploadFileSocket(file) {
@@ -636,10 +655,14 @@
             if (data.voice === "user") {
                 // Encode html tags and newlines
                 data.update = data.update.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/[\n\r]/g, "<br>");
+                // Preserve spaces at the beginning of the line
+                data.update = data.update.replace(/ /g, "&nbsp;");
                 updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
             }
 
             if (data.voice === "ai") {
+                // Encode html tags and newlines
+                data.update = data.update.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>\n");
             }
 
@@ -675,8 +698,17 @@
                 document.getElementById("debugOverlay").style.display = "flex";
                 // First clear the form from any previous settings
                 document.getElementById("conversation").innerHTML = `
-                    <pre style='white-space: pre-wrap'>${JSON.stringify(data.update, null, 2)}</pre>
+                    <pre style='white-space: pre-wrap'>${escapeHtml(JSON.stringify(data.update, null, 2))}</pre>
                 `;
+            }
+
+            function escapeHtml(unsafe) {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
             }
 
             if (data.voice === "image") {

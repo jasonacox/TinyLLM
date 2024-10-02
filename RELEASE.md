@@ -1,5 +1,10 @@
 # Releases
 
+## 0.15.8 - Enhance Image Processing
+
+* Chatbot - Add support for HEIC file type and resize all images to max dimensions of 1024. Handle image pasting into input field. Remove previous images from context thread.
+* Chatbot - Clean up logging: non-critical logs are moved to DEBUG level.
+
 ## 0.15.7 - Vision Model Support
 
 * Chatbot - Allows user to drag and drop images into the context window for multi-modal vision LLMs.

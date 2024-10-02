@@ -17,7 +17,10 @@ Features:
 
 Requirements:
     * pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp
-    * pip install weaviate-client
+    * pip install weaviate-client pdfreader pypandoc
+    * pip install pandas openpyxl
+    * pip install python-multipart
+    * pip install pillow-heif
 
 Environmental variables:
     * PORT - Port that Chatbot will listen on
@@ -88,6 +91,11 @@ import aiohttp
 
 # TinyLLM Version
 from version import VERSION
+from PIL import Image
+import pillow_heif
+
+# Ensure pillow_heif is properly registered with PIL
+pillow_heif.register_heif_opener()
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -99,6 +107,9 @@ logger.info("TinyLLM %s" % VERSION)
 
 def log(text):
     logger.info(text)
+
+def debug(text):
+    logger.debug(text)
 
 # Configuration Settings
 api_key = os.environ.get("OPENAI_API_KEY", "open_api_key")                  # Required, use bogus string for Llama.cpp
@@ -181,8 +192,8 @@ def test_model():
             models = llm.models.list()
             if len(models.data) == 0:
                 log("LLM: No models available - proceeding.")
-        except Exception as err:
-            log(f"LLM: Unable to get models, using default: {str(err)}")
+        except Exception as erro:
+            log(f"LLM: Unable to get models, using default: {str(erro)}")
             models = mymodel
         else:
             # build list of models
@@ -207,10 +218,10 @@ def test_model():
             extra_body=EXTRA_BODY,
         )
         return True
-    except Exception as err:
-        log("OpenAI API Error: %s" % err)
+    except Exception as err0:
+        log("OpenAI API Error: %s" % erro)
         log(f"Unable to connect to OpenAI API at {api_base} using model {mymodel}.")
-        if "maximum context length" in str(err):
+        if "maximum context length" in str(erro):
             if MAXTOKENS > 1024:
                 MAXTOKENS = int(MAXTOKENS / 2)
                 log(f"LLM: Maximum context length exceeded reducing MAXTOKENS to {MAXTOKENS}.")
@@ -255,17 +266,17 @@ def query_index(query, library, num_results=RESULTS):
             continue
         new_content = ans['content']
         if len(new_content) > MAXTOKENS:
-            log("RAG: Content size exceeded maximum size using chunk.")
+            debug("RAG: Content size exceeded maximum size using chunk.")
             # Cut the middle and insert the chunk in the middle
             new_content = ans['content'][:MAXTOKENS//4] + "..." + (ans.get('chunk') or " ") + "..." + ans['content'][-MAXTOKENS//4:]
         content = content + f"Document: {ans['title']}\nDocument Source: {ans['file']}\nContent: {new_content}\n---\n"
         if (len(content)/4) > MAXTOKENS/2:
-            log("RAG: Content size reached maximum.")
+            debug("RAG: Content size reached maximum.")
             break
         previous_title = ans['title']
         previous_file = ans['file']
         previous_content = ans['content']
-    log(f"RAG: Retrieved ({len(content)} bytes): {references}")
+    debug(f"RAG: Retrieved ({len(content)} bytes)")
     return content, references
 
 # Globals
@@ -362,7 +373,7 @@ async def ask(prompt, sid=None):
     global client, stats
     stats["ask"] += 1
     response = False
-    log(f"Context size = {len(client[sid]['context'])}")
+    debug(f"Context size = {len(client[sid]['context'])}")
     while not response:
         try:
             # Remember context
@@ -370,6 +381,12 @@ async def ask(prompt, sid=None):
                 client[sid]["context"] = base_prompt()
             # Process image upload if present
             if client[sid]["image_data"]:
+                # Remove previous image data from context
+                for turn in client[sid]["context"]:
+                    # if turn["content"] is a list, remove image_url
+                    if "content" in turn and isinstance(turn["content"], list):
+                        # convert list to string of text
+                        turn["content"] = ' '.join([x.get("text", "") for x in turn["content"]])
                 message = {
                     "role": "user",
                     "content": [
@@ -381,7 +398,7 @@ async def ask(prompt, sid=None):
                 client[sid]["context"].append(message)
             else:
                 client[sid]["context"].append({"role": "user", "content": prompt})
-            log(f"messages = {client[sid]['context']} - model = {mymodel}")
+            debug(f"messages = {client[sid]['context']} - model = {mymodel}")
             llm = openai.OpenAI(api_key=api_key, base_url=api_base)
             response = llm.chat.completions.create(
                 model=mymodel,
@@ -403,19 +420,19 @@ async def ask(prompt, sid=None):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
-                    log(f"Reduce prompt size - now ~{len(prompt)/4}")
+                    debug(f"Reduce prompt size - now ~{len(prompt)/4}")
                 elif len(client[sid]["context"]) > 4:
                     # our context has grown too large, truncate the top
                     client[sid]["context"] = client[sid]["context"][:1] + client[sid]["context"][3:]
-                    log(f"Truncate context: ~{len(client[sid]['context'])/4}")
+                    debug(f"Truncate context: ~{len(client[sid]['context'])/4}")
                 else:
                     # our context has grown too large, reset
                     client[sid]["context"] = base_prompt()   
-                    log(f"Reset context ~{len(client[sid]['context'])/4}")
+                    debug(f"Reset context ~{len(client[sid]['context'])/4}")
             else:
-                log(f"ERROR: {e}")
+                log(f"ERROR: {str(erro)}")
                 stats["errors"] += 1
-                await sio.emit('update', {'update': e, 'voice': 'user'},room=sid)
+                await sio.emit('update', {'update': str(erro), 'voice': 'user'},room=sid)
 
     if not client[sid]["remember"]:
         client[sid]["remember"] =True
@@ -431,7 +448,7 @@ async def ask_llm(query, format=""):
         format = f"Respond in {format}."
     content = base_prompt(expand_prompt(prompts["clarify"], {"format": format})) + [{"role": "user",
                 "content": query}]
-    log(f"ask_llm: {content}")
+    debug(f"ask_llm: {content}")
     llm = openai.AsyncOpenAI(api_key=api_key, base_url=api_base)
     response = await llm.chat.completions.create(
         model=mymodel,
@@ -441,7 +458,7 @@ async def ask_llm(query, format=""):
         messages=content,
         extra_body=EXTRA_BODY,
     )
-    log(f"ask_llm -> {response.choices[0].message.content.strip()}")
+    debug(f"ask_llm -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
 # Function - Get weather for location
@@ -451,7 +468,7 @@ async def get_weather(location):
         location = "Los Angeles"
     location = location.replace(" ", "+")
     url = "https://wttr.in/%s?format=j2" % location
-    log(f"Fetching weather for {location} from {url}")
+    debug(f"Fetching weather for {location} from {url}")
     response = requests.get(url)
     if response.status_code == 200:
         return response.text
@@ -475,7 +492,7 @@ async def get_stock(company):
     symbol = ''.join(e for e in symbol if e.isalnum())
     # Now get the stock price
     url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s" % (symbol.upper(), ALPHA_KEY)
-    log(f"Fetching stock price for {company} from {url}")
+    debug(f"Fetching stock price for {company} from {url}")
     response = requests.get(url)
     if response.status_code == 200:
         try:
@@ -512,7 +529,7 @@ async def get_news(topic, max=10):
     else:
         topic = topic.replace(" ", "+")
         url = "https://news.google.com/rss/search?q=%s" % topic
-    log(f"Fetching news for {topic} from {url}")
+    debug(f"Fetching news for {topic} from {url}")
     async with aiohttp.ClientSession() as session:
         response, links = await get_top_articles(url, max)
         return response, links
@@ -543,7 +560,7 @@ async def extract_text_from_url(url):
                         return "Unsupported content type"
                 else:
                     m = f"Failed to fetch the webpage. Status code: {response.status}"
-                    log(m)
+                    debug(m)
                     return m
     except Exception as erro:
         log(f"An error occurred: {str(erro)}")
@@ -663,7 +680,7 @@ async def update_prompts(data: dict):
         return ({"Result": "Prompts are read-only"})
     oldbaseprompt = prompts["baseprompt"]
     oldagentname = prompts["agentname"]
-    log(f"Received prompts: {data}")
+    debug(f"Received prompts: {data}")
     # Update prompts
     for key in data:
         prompts[key] = data[key]
@@ -681,7 +698,7 @@ async def update_prompts(data: dict):
     if "LLM_max_tokens" in data:
         MAXTOKENS = int(data["LLM_max_tokens"])
     # Notify all clients of update
-    log("Base prompt updated - notifying users")
+    debug("Base prompt updated - notifying users")
     await sio.emit('update', {'update': '[Prompts Updated - Refresh to reload]', 'voice': 'user'})
     return ({"Result": "Prompts updated"})
 
@@ -696,7 +713,7 @@ async def reset_prompts_route():
 @app.get('/version')
 async def show_version_api():
     global VERSION, DEBUG
-    log(f"Version requested - DEBUG={DEBUG}")
+    debug(f"Version requested - DEBUG={DEBUG}")
     if DEBUG:
         return {'version': "%s DEBUG MODE" % VERSION}
     return {'version': VERSION, 'model': mymodel}
@@ -707,11 +724,11 @@ async def alert(data: dict):
     # Send an alert to all clients
     # Make sure TOKEN is set and matches
     if "token" in data and "message" in data and data["token"] == TOKEN:
-        log(f"Received alert: {data}")
+        debug(f"Received alert: {data}")
         await sio.emit('update', {'update': data["message"], 'voice': 'user'})
         return ({'status': 'Alert sent'})
     else:
-        log(f"Invalid token or missing message: {data}")
+        log(f"Alert: Invalid token or missing message: {data}")
         return ({'status': 'Invalid Token or missing message'})
 
 # Upload a file
@@ -721,13 +738,30 @@ async def upload_file(file: UploadFile = File(...), session_id: str = Form(...))
     file_name = file.filename
     session_id = session_id.strip()
     content = await file.read()  # Read file content
-    image_data = base64.b64encode(content).decode('utf-8') # Convert to base64
+    # Open the image, checking for HEIC format
+    try:
+        image = Image.open(io.BytesIO(content))
+    except Exception as e:
+        await sio.emit('update', {'update': f"Image error: {str(e)}", 'voice': 'user'}, room=session_id)
+        return {"error": f"Unable to open image: {str(e)}"}
+    # Resize image if height or width is greater than 1024
+    if image.height > 1024 or image.width > 1024:
+        image.thumbnail((1024, 1024))
+    # Convert image to RGB if it has an alpha channel
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+    # Save image to memory as JPEG
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='JPEG')
+    content = img_byte_arr.getvalue()
+    # Convert image to base64
+    image_data = base64.b64encode(content).decode('utf-8')
     # Validate session
     if session_id not in client:
         log(f"Invalid session {session_id}")
         return {"result": "Bad Session ID", "filename": file.filename, "size": len(content)}
     # TODO: Verify that this is a valid image
-    log(f"Received image upload from {session_id} - {file_name} [{len(image_data)} bytes]")
+    debug(f"Received image upload from {session_id} - {file_name} [{len(image_data)} bytes]")
     # Add to client session
     if client[session_id]["image_data"]:
         await sio.emit('update', {'update': 'Replacing previous image', 'voice': 'user'}, room=session_id)
@@ -753,7 +787,7 @@ app.mount("/", socket_app)  # Here we mount socket app to main fastapi app
 # Client connected - start thread to send updates
 @sio.on('connect')
 async def handle_connect(session_id, env):
-    log(f"Client connected: {session_id}")
+    debug(f"Client connected: {session_id}")
 
     # Convert each character to its hex representation
     def string_to_hex(input_string):
@@ -763,11 +797,11 @@ async def handle_connect(session_id, env):
     # Continuous thread to send updates to connected clients
     async def send_update(session_id):
         global client
-        log(f"Starting send_update thread for {session_id}")
+        debug(f"Starting send_update thread for {session_id}")
 
         # Verify session is valid
         if session_id not in client:
-            log(f"Invalid session {session_id}")
+            debug(f"Invalid session {session_id}")
             return
         try:
             while not client[session_id]["stop_thread_flag"]:
@@ -821,17 +855,17 @@ async def handle_connect(session_id, env):
                     if DEBUG:
                         print(f"AI: {completion_text}")
         except KeyError:
-            log(f"Thread ended: {session_id}")
+            debug(f"Thread ended: {session_id}")
         except Exception as erro:
             log(f"Thread error: {erro}")
 
     if session_id in client:
         # Client reconnected - restart thread
         #client[session_id]["thread"].join()
-        log(f"Client reconnected: {session_id}")
+        debug(f"Client reconnected: {session_id}")
     else:
         # New client connected
-        log(f"Client connected: {session_id}")
+        debug(f"Client connected: {session_id}")
         # Limit number of clients
         if len(client) > MAXCLIENTS:
             log(f"Too many clients connected: {len(client)}")
@@ -858,7 +892,7 @@ async def handle_connect(session_id, env):
 # Client disconnected
 @sio.on('disconnect')
 async def handle_disconnect(session_id):
-    log(f"Client disconnected: {session_id}")
+    debug(f"Client disconnected: {session_id}")
     # Remove client
     if session_id in client:
         # shutdown thread
@@ -870,8 +904,8 @@ async def handle_disconnect(session_id):
 async def handle_message(session_id, data):
     global client
     # Handle incoming user prompts and store them
-    log(f'Received message from {session_id}')
-    log(f"Received Data: {data}")
+    debug(f'Received message from {session_id}')
+    debug(f"Received Data: {data}")
     if session_id not in client:
         log(f"Invalid session {session_id}")
         await handle_invalid_session(session_id)
@@ -897,7 +931,7 @@ async def handle_image_upload(session_id, data):
     await sio.emit('update', {'update': 'Image uploaded', 'voice': 'user'}, room=session_id)
     file_name = data['fileName']
     image_data = data['data'].split(",")[1]  # Extract base64 part of the image
-    log(f"Received image upload from {session_id} - {file_name} [{len(image_data)} bytes]")
+    debug(f"Received image upload from {session_id} - {file_name} [{len(image_data)} bytes]")
     # Verify that this is a valid image
     if not image_data.startswith("iVBORw0KGgoAAAANSUhE"):
         log(f"Invalid image data: {image_data[:20]}")
@@ -916,7 +950,7 @@ async def handle_request_conversation(session_id):
     global client
     # Send conversation context to client
     if session_id in client:
-        log(f"Sending full conversation context to {session_id}")
+        debug(f"Sending full conversation context to {session_id}")
         await sio.emit('update', {'update': client[session_id]["context"], 'voice': 'conversation'},room=session_id)
     else:
         log(f"Invalid session {session_id}")
@@ -931,7 +965,7 @@ async def handle_url_prompt(session_id, p):
     client[session_id]["remember"] = True
     website_text = await extract_text_from_url(url)
     if website_text:
-        log(f"* Reading {len(website_text)} bytes {url}")
+        debug(f"* Reading {len(website_text)} bytes {url}")
         await sio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'}, room=session_id)
         url_encoded = requests.utils.quote(url)
         client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
@@ -982,11 +1016,11 @@ async def show_sessions(session_id):
     client[session_id]["prompt"] = ''
 
 async def fetch_news(session_id, p):
-    log("News requested")
+    debug("News requested")
     topic = p[5:].strip() or "none"
     await sio.emit('update', {'update': '%s [Fetching News]' % p, 'voice': 'user'}, room=session_id)
     context_str, links = await get_news(topic, 25)
-    log(f"News Raw Context = {context_str}")
+    debug(f"News Raw Context = {context_str}")
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
     client[session_id]["links"] = links
@@ -1052,7 +1086,7 @@ async def handle_rag_command(session_id, p):
         await sio.emit('update', {'update': mes, 'voice': 'user'}, room=session_id)
     else:
         if WEAVIATE_HOST:
-            log(f"Pulling {number} entries from {library} with prompt {prompt}")
+            debug(f"Pulling {number} entries from {library} with prompt {prompt}")
             if not ONESHOT:
                 await sio.emit('update', {'update': '%s [RAG Command Running...]' % p, 'voice': 'user'}, room=session_id)
             results, references = query_index(prompt, library, number)
@@ -1061,7 +1095,7 @@ async def handle_rag_command(session_id, p):
                 client[session_id]["visible"] = False
                 client[session_id]["remember"] = True
                 context_str = results
-                log(f" = {references}")
+                debug(f" = {references}")
                 client[session_id]["references"] = references
                 client[session_id]["prompt"] = expand_prompt(prompts["rag"], {"context_str": context_str, "prompt": prompt})
             else:
@@ -1070,7 +1104,7 @@ async def handle_rag_command(session_id, p):
             await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'}, room=session_id)
 
 async def handle_weather_command(session_id, p):
-    log("Weather prompt")
+    debug("Weather prompt")
     await sio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'}, room=session_id)
     location = await ask_llm(expand_prompt(prompts["location"], {"prompt": p}))
     location = ''.join(e for e in location if e.isalnum() or e.isspace())
@@ -1083,20 +1117,20 @@ async def handle_weather_command(session_id, p):
     client[session_id]["prompt"] = expand_prompt(prompts["weather"], {"prompt": p, "context_str": context_str, "location": location})
 
 async def handle_stock_command(session_id, p):
-    log("Stock prompt")
+    debug("Stock prompt")
     prompt = p[6:].strip()
     if not prompt:
         await sio.emit('update', {'update': '[Usage: /stock {company}] - Fetch stock price for company.', 'voice': 'user'}, room=session_id)
         return
     await sio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'}, room=session_id)
-    log(f"Stock Prompt: {prompt}")
+    debug(f"Stock Prompt: {prompt}")
     company = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
     company = ''.join(e for e in company if e.isalnum() or e.isspace())
     if "none" in company.lower():
         context_str = "Unable to fetch stock price - Unknown company specified."
     else:
         context_str = await get_stock(company)
-    log(f"Company = {company} - Context = {context_str}")
+    debug(f"Company = {company} - Context = {context_str}")
     await sio.emit('update', {'update': context_str, 'voice': 'ai'}, room=session_id)
     client[session_id]["context"].append({"role": "user", "content" : "What is the stock price for %s?" % company})
     client[session_id]["context"].append({"role": "assistant", "content" : context_str})

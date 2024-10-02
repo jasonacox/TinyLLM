@@ -33,6 +33,7 @@ RUN pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests
 RUN pip install weaviate-client pdfreader pypandoc
 RUN pip install pandas openpyxl
 RUN pip install python-multipart
+RUN pip install pillow-heif
 
 # Copy local files into container
 COPY server.py /app/server.py
