@@ -27,6 +27,7 @@ RUN pip install weaviate-client pdfreader pypandoc
 RUN pip install python-multipart
 RUN pip install pandas openpyxl
 RUN pip install python-socketio
+RUN pip install passlib bcrypt
 
 # Copy local files into container
 COPY docman.py /app/docman.py

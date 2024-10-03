@@ -53,7 +53,7 @@ import weaviate.classes as wvc
 import weaviate
 from weaviate.exceptions import WeaviateConnectionError
 from weaviate.classes.query import Filter
-from weaviate.classes.init import Auth
+from weaviate.auth import AuthApiKey
 import requests
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
@@ -159,7 +159,7 @@ class Documents:
     """
 
     def __init__(self, host="localhost", grpc_host=None, port=8080, grpc_port=50051, retry=3, filepath="/tmp", 
-                 cache_expire=60, auth_key=None):
+                 cache_expire=60, auth_key=None, secure=False):
         """
         Initialize the Document class
         """
@@ -174,6 +174,7 @@ class Documents:
         self.cache = {}                         # Cache of documents
         self.cache_expire = cache_expire        # Cache expiration time
         self.auth_key = auth_key                # Weaviate API key
+        self.secure = secure                    # Weaviate secure connection
         if not grpc_host:
             self.grpc_host = host
         # Verify file path
@@ -187,16 +188,23 @@ class Documents:
         x = self.retry
         # Connect to Weaviate
         while x:
+            weaviate_optional = {}
+            if self.auth_key:
+                weaviate_optional = {
+                    'auth_credentials': AuthApiKey(self.auth_key)
+                }
             try:
                 self.client = weaviate.connect_to_custom(
                     http_host=self.host,
                     http_port=self.port,
-                    http_secure=False,
+                    http_secure=self.secure,
                     grpc_host=self.grpc_host,
                     grpc_port=self.grpc_port,
-                    grpc_secure=False,
-                    auth_credentials=(Auth.api_key(self.auth_key) if self.auth_key else None),  # API key for authentication
-                    additional_config=weaviate.config.AdditionalConfig(timeout=(15, 115))
+                    grpc_secure=self.secure,
+                    additional_config=weaviate.config.AdditionalConfig(
+                        timeout=(15, 115)
+                    ),
+                    **weaviate_optional
                 )
                 log(f"Connected to Weaviate at {self.host}")
                 return True

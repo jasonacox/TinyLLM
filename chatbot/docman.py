@@ -19,6 +19,7 @@ Setup:
 - pip install fastapi uvicorn jinja2 bs4 pypdf requests lxml aiohttp
 - pip install weaviate-client pdfreader pypandoc
 - pip install python-multipart openpyxl
+- pip install passlib bcrypt
 
 Run:
 - uvicorn docman:app --reload 
@@ -44,10 +45,13 @@ import requests
 import socketio
 import uvicorn
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import FileResponse
+from passlib.context import CryptContext
+import secrets
 from contextlib import asynccontextmanager
 from pypdf import PdfReader
 
@@ -79,18 +83,17 @@ WEAVIATE_GRPC_HOST = os.getenv('WEAVIATE_GRPC_HOST', WEAVIATE_HOST)
 WEAVIATE_PORT = os.getenv('WEAVIATE_PORT', '8080')
 WEAVIATE_GRPC_PORT = os.getenv('WEAVIATE_GRPC_PORT', '50051')
 WEAVIATE_AUTH_KEY = os.getenv('WEAVIATE_AUTH_KEY', None)
+WEAVIATE_TLS_ENABLE = os.getenv('WEAVIATE_TLS_ENABLE', "false").lower() == "true"
 COLLECTIONS = os.getenv('COLLECTIONS', None)
 PORT = int(os.getenv('PORT', "5001"))
 COLLECTIONS_ADMIN = os.environ.get("COLLECTIONS_ADMIN", "true").lower() == "true"
-MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000)) 
-
-# Set up pandocs - Needed to convert documents to text
-#from pypandoc.pandoc_download import download_pandoc
-#download_pandoc()
+MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))
+USERNAME = os.environ.get("USERNAME", None) # Set to enable HTTP Basic Auth
+PASSWORD = os.environ.get("PASSWORD", "nJjdh83")
 
 # Create a new instance of the Documents class to manage the database
 documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT, 
-                      grpc_port=WEAVIATE_GRPC_PORT, auth_key=WEAVIATE_AUTH_KEY)
+                      grpc_port=WEAVIATE_GRPC_PORT, auth_key=WEAVIATE_AUTH_KEY, secure=WEAVIATE_TLS_ENABLE)
 try:
     if not documents.connect():
         print("Failed to connect to the vector database")
@@ -116,6 +119,45 @@ async def lifespan(app: FastAPI):
     documents.close()
 
 app.router.lifespan_context = lifespan
+
+# Password hashing setup using Passlib
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# HTTP Basic authentication scheme
+security = HTTPBasic()
+
+# Helper functions to verify passwords and find users
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_user(username: str):
+    if username == USERNAME:
+        return {"username": USERNAME, 
+                "hashed_password": pwd_context.hash(PASSWORD),}
+    return None
+
+# Authenticate a user using HTTP Basic credentials
+def authenticate_user(username: str, password: str):
+    user = get_user(username)
+    if not user or not verify_password(password, user["hashed_password"]):
+        return False
+    return user
+
+# Dependency to check credentials
+def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+    correct_username = False
+    correct_password = False
+    user = authenticate_user(credentials.username, credentials.password)
+    if user:
+        correct_username = secrets.compare_digest(credentials.username, user["username"])
+        correct_password = verify_password(credentials.password, user["hashed_password"])
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return user
 
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -177,8 +219,10 @@ templates = Jinja2Templates(directory="docman")
 
 # Display the main chatbot page
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     # Check to see if the collection cookie is set
+    if user:
+        log(f"User {user['username']} logged in")
     collection = request.cookies.get('collection')
     collection = validate_collection(collection)
     return templates.TemplateResponse(request, "index.html",
@@ -187,7 +231,7 @@ async def index(request: Request):
                                        "version": VERSION})
 
 @app.post("/upload")
-async def upload_file(request: Request):
+async def upload_file(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     # Set defaults
     filename = ""
     tmp_filename = ""
@@ -226,7 +270,7 @@ async def upload_file(request: Request):
                                                      "version": VERSION})
 
 @app.post("/embed")
-async def embed_file(request: Request):
+async def embed_file(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     # Get the form data
     form = await request.form()
     filename = form['filename']
@@ -250,7 +294,7 @@ async def embed_file(request: Request):
     return templates.TemplateResponse(request, "redirect.html")
 
 @app.get("/view", response_class=HTMLResponse)
-async def view_file(request: Request):
+async def view_file(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     filename = request.query_params.get('filename')
     collection = request.cookies.get('collection')
     collection = validate_collection(collection)
@@ -261,7 +305,7 @@ async def view_file(request: Request):
                                                     "version": VERSION})
 
 @app.get("/view_chunk", response_class=HTMLResponse)
-async def view_chunk(request: Request):
+async def view_chunk(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     zuuid = request.query_params.get('uuid')
     collection = request.cookies.get('collection')
     collection = validate_collection(collection)
@@ -294,14 +338,14 @@ async def view_chunk(request: Request):
 #
 
 @app.get("/get_uploaded_files", response_class=HTMLResponse)
-async def get_uploaded_files(request: Request):
+async def get_uploaded_files(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     collection = request.cookies.get('collection')
     collection = validate_collection(collection)
     file_entries = collection_files(collection)
     return json.dumps(file_entries)
 
 @app.post("/select_collection")
-async def select_collection(request: Request):
+async def select_collection(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     form = await request.form()
     collection = form['collection']
     response = templates.TemplateResponse(request, "index.html", {"request": request})
@@ -309,13 +353,13 @@ async def select_collection(request: Request):
     return response
 
 @app.get("/get_collections", response_class=HTMLResponse)
-async def get_collections(request: Request):
+async def get_collections(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     collections = documents.all_collections()
     # Return the list of collections in alphabetical order
     return json.dumps(sorted(collections))
 
 @app.post("/new_collection")
-async def new_collection(request: Request):
+async def new_collection(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     form = await request.form()
     collection = form['collection']
     # Verify user has access to create a collection
@@ -332,7 +376,7 @@ async def new_collection(request: Request):
     return r
 
 @app.post("/delete_collection")
-async def delete_collection(request: Request):
+async def delete_collection(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     form = await request.form()
     collection = form['collection']
     # Verify user has access to delete a collection
@@ -349,7 +393,7 @@ async def delete_collection(request: Request):
     return r
 
 @app.post("/delete")
-async def delete_file(request: Request):
+async def delete_file(request: Request, user: dict = Depends(get_current_user if USERNAME else lambda: {"username": "nobody"})):
     form = await request.form()
     filename = form['filename']
     collection = request.cookies.get('collection')
