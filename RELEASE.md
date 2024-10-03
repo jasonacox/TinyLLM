@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.9 - DocMan Auth
+
+* DocMan - Add basic authentication and secure connection options to Weaviate.
+
 ## 0.15.8 - Enhance Image Processing
 
 * Chatbot - Add support for HEIC file type and resize all images to max dimensions of 1024. Handle image pasting into input field. Remove previous images from context thread.
