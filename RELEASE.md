@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.10 - Bug Fix
+
+* Chatbot - Fix error handling bug used to auto-detect max content length of LLM.
+
 ## 0.15.9 - DocMan Auth
 
 * DocMan - Add basic authentication and secure connection options to Weaviate.

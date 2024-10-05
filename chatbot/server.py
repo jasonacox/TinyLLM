@@ -220,7 +220,7 @@ def test_model():
             extra_body=EXTRA_BODY,
         )
         return True
-    except Exception as err0:
+    except Exception as erro:
         log("OpenAI API Error: %s" % erro)
         log(f"Unable to connect to OpenAI API at {api_base} using model {mymodel}.")
         if "maximum context length" in str(erro):
