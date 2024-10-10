@@ -176,3 +176,15 @@ chatbot/tlocal
 chatbot/tt
 lab/t
 chatbot/uploads/?*.*
+rag/weaviate/docker-compose.yml
+rag/weaviate/docker-compose.yml
+*.yml
+chatbot/weaviate_data/classifications.db
+chatbot/weaviate_data/migration1.19.filter2search.skip.flag
+chatbot/weaviate_data/migration1.19.filter2search.state
+chatbot/weaviate_data/migration1.22.fs.hierarchy
+chatbot/weaviate_data/modules.db
+chatbot/weaviate_data/schema.db
+chatbot/weaviate_data/tx.db
+rag/weaviate/docker-compose.yml
+.vscode/launch.json

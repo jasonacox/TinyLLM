@@ -48,7 +48,7 @@ import os
 import io
 import logging
 import time
-
+import json
 import weaviate.classes as wvc
 import weaviate
 from weaviate.exceptions import WeaviateConnectionError
@@ -59,6 +59,14 @@ from pypdf import PdfReader
 from bs4 import BeautifulSoup
 import pypandoc
 import pandas as pd
+import transformers
+from transformers import (
+        AutoModelForSequenceClassification,
+        TextClassificationPipeline,DistilBertTokenizer
+        )
+from langchain_text_splitters import *
+import torch
+import pysbd
 
 # optional - download pandoc
 #from pypandoc.pandoc_download import download_pandoc
@@ -73,7 +81,7 @@ def log(msg):
     print(msg)
 
 # Defaults
-MAX_CHUNK_SIZE=256*4
+
 
 # Data Schema
 schema_properties=[
@@ -145,6 +153,32 @@ schema_properties=[
     },
 ]
 
+MAX_CHUNK_SIZE=256*4
+
+model_name = "BlueOrangeDigital/distilbert-cross-segment-document-chunking"
+tokenizer = DistilBertTokenizer.from_pretrained(model_name)
+
+model_name = "BlueOrangeDigital/distilbert-cross-segment-document-chunking"
+
+id2label = {0: "SAME", 1: "DIFFERENT"}
+label2id = {"SAME": 0, "DIFFERENT": 1}
+
+model = AutoModelForSequenceClassification.from_pretrained(
+model_name,
+num_labels=2,
+id2label=id2label,
+label2id=label2id
+)
+
+
+pipe = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+
+
+c_splitter = CharacterTextSplitter(chunk_size=450, chunk_overlap=0, separator=" ")
+r_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=450, chunk_overlap=0, separators=["\n\n", "\n", " ", ""]
+)
+
 # Document class
 class Documents:
     """
@@ -158,28 +192,23 @@ class Documents:
         client: Weaviate client object
     """
 
-    def __init__(self, host="localhost", grpc_host=None, port=8080, grpc_port=50051, retry=3, filepath="/tmp", 
-                 cache_expire=60, auth_key=None, secure=False):
+    def __init__(self,filepath="/tmp",device='mps'):
         """
         Initialize the Document class
         """
         # Weaviate client object
-        self.host = host                        # Weaviate host IP address
-        self.grpc_host = grpc_host              # Weaviate gRPC host IP address
+    
         self.filepath = filepath                # File path for temporary document storage
-        self.port = port                        # Weaviate port
-        self.grpc_port = grpc_port              # Weaviate gRPC port
-        self.client = None                      # Weaviate client object
-        self.retry = retry                      # Number of times to retry connection
-        self.cache = {}                         # Cache of documents
-        self.cache_expire = cache_expire        # Cache expiration time
-        self.auth_key = auth_key                # Weaviate API key
-        self.secure = secure                    # Weaviate secure connection
-        if not grpc_host:
-            self.grpc_host = host
+        
         # Verify file path
         if not os.path.exists(filepath):
             os.makedirs(filepath)
+
+        pipe.model.to(device) 
+
+        
+
+        
 
     def connect(self):
         """
@@ -610,7 +639,7 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
-    def add_document(self, collection, title, doc_type, filename, chunk=None, content=None, chunk_size=MAX_CHUNK_SIZE):
+    def add_document(self, chunking_type, collection, title, doc_type, filename, chunk=None, content=None, chunk_size=MAX_CHUNK_SIZE):
         """
         Add a document into weaviate
 
@@ -623,64 +652,16 @@ class Documents:
             content: Document content - Full text of the document
         """
         log(f"Adding document: {filename} - {title} - {doc_type} - {chunk} - {content} - {chunk_size}")
-        log(f"Collection: {collection} - Doc size: {len(content)}")
-        r = None
-        dd = []
-        if not chunk and not content:
-            raise ValueError('Missing document content')
-        if not content:
-            content = chunk
-        if not (title and doc_type and filename and content):
-            raise ValueError('Missing document properties')
-        if not chunk and chunk_size > 0:
-            # Auto break up content into chunks
+    
+        if chunking_type=="recursive":
+            chunks = break_up_content_recursive(content, chunk_size)
+        elif chunking_type=="fine_tuned_slm":
+            chunks = break_up_content_fine_tuned_slm(content, chunk_size)
+        elif chunking_type=="original":
             chunks = break_up_content(content, chunk_size)
-            ci = 0
-            total_chunks = len(chunks)
-            for chunk in chunks:
-                ci = ci + 1
-                log(f"Creating chunk {ci} of {total_chunks}")
-                if total_chunks > 1:
-                    suffix = f" - Section {ci} of {total_chunks}"
-                else:
-                    suffix = ""
-                dd.append({
-                    "title": title + suffix,
-                    "chunk": chunk,
-                    "doc_type": doc_type,
-                    "file": filename,
-                    "content": content,
-                    "creation_time": time.time()
-                })
-        else :
-            dd.append({
-                "title": title,
-                "chunk": chunk,
-                "doc_type": doc_type,
-                "file": filename,
-                "content": content,
-                "creation_time": time.time()
-            })
-        x = self.retry
-        if not self.client:
-            self.connect()
-        while x:
-            try:
-                c = self.client.collections.get(collection)
-                # Do batches of 10 of dd at a time
-                for i in range(0, len(dd), 10):
-                    log(f"Embedding document batch: {i} to {i+10}")
-                    r = c.data.insert_many(dd[i:i+10])
-                log(f"Document added: {filename}")
-                break
-            except WeaviateConnectionError as er:
-                log(f"Connection error (retry {x}): {str(er)}")
-                self.connect()
-                x -= 1
-                time.sleep(1)
-        if not x:
-            raise WeaviateConnectionError("Unable to connect to Weaviate")
-        return r
+
+        return chunks
+       
 
     def update_document(self, collection, uuid, title, doc_type, filename, chunk=None, content=None):
         """
@@ -706,7 +687,7 @@ class Documents:
             raise WeaviateConnectionError("Unable to connect to Weaviate")
         return r
 
-    def add_file(self, collection, title, filename, tmp_file=None, chunk_size=None):
+    def add_file(self, chunking_type, collection, title, filename, tmp_file=None, chunk_size=None):
         """
         Detect and convert document into weaviate
         """
@@ -718,10 +699,10 @@ class Documents:
             # Detect what type of file (case insensitive)
             if filename.lower().endswith('.pdf'):
                 # PDF document
-                return self.add_pdf(collection, title, filename, tmp_file, chunk_size)
+                return self.add_pdf(chunking_type, collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.docx'):
                 # DOCX document
-                return self.add_docx(collection, title, filename, tmp_file, chunk_size)
+                return self.add_docx(chunking_type,collection, title, filename, tmp_file, chunk_size)
             elif filename.lower().endswith('.txt'):
                 # TXT document
                 return self.add_txt(collection, title, filename, tmp_file, chunk_size)
@@ -755,7 +736,7 @@ class Documents:
             return True
         return False
 
-    def add_pdf(self, collection, title, filename, tmp_file, chunk_size=None):
+    def add_pdf(self,chunking_type, collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a PDF document from a local file
         """
@@ -768,17 +749,17 @@ class Documents:
         for page in reader.pages:
             pdf2text = page.extract_text() + "\n"
             section = title + " - Page " + str(page.page_number+1)
-            r = self.add_document(collection, section, "PDF", filename, content=pdf2text, chunk_size=chunk_size)
+            r = self.add_document(chunking_type,collection, section, "PDF", filename, content=pdf2text, chunk_size=chunk_size)
         return r
 
-    def add_docx(self, collection, title, filename, tmp_file, chunk_size=None):
+    def add_docx(self, chunking_type,collection, title, filename, tmp_file, chunk_size=None):
         """
         Add a DOCX document
         """
         # Convert DOCX file to text document
         docx2text = pypandoc.convert_file(tmp_file, 'plain', format='docx')
         # TODO: Break into pages
-        r = self.add_document(collection, title, "DOCX", filename, content=docx2text, chunk_size=chunk_size)
+        r = self.add_document(chunking_type,collection, title, "DOCX", filename, content=docx2text, chunk_size=chunk_size)
         return r
 
     def add_txt(self, collection, title, filename, tmp_file, chunk_size=None):
@@ -868,6 +849,67 @@ def break_up_content(text, max_size):
             current_chunk = current_chunk + line + "\n"
         result.append(current_chunk)
         return result
+    return [text]
+
+def right_truncate_sentence(sentence, tokenizer, max_len):
+   tokenized = tokenizer.encode(sentence)[1:-1]
+   if len(tokenized) > max_len:
+       print("cut")
+   return tokenizer.decode(tokenized[:max_len])
+
+
+def left_truncate_sentence(sentence, tokenizer, max_len):
+   tokenized = tokenizer.encode(sentence)[1:-1]
+   if len(tokenized) > max_len:
+       print("cut")
+   return tokenizer.decode(tokenized[-max_len:])
+
+def bucket_pair(left_sentence, right_sentence, tokenizer, max_len):
+   return left_truncate_sentence(left_sentence, tokenizer, max_len) + " [SEP] " + \
+       right_truncate_sentence(right_sentence, tokenizer, max_len)
+
+def break_up_content_fine_tuned_slm(text, max_size):
+    """Break up text into chunks of max_size."""
+    if len(text) > max_size:
+    
+        seg = pysbd.Segmenter(language="en", clean=False)
+        ordered_sentences=seg.segment(text)
+       
+
+        MAX_LEN = 255
+        pairs = [
+        bucket_pair(ordered_sentences[i], ordered_sentences[i+1], tokenizer, MAX_LEN)
+        for i in range(0, len(ordered_sentences) - 1)
+        ]
+        predictions = pipe(pairs)
+        n = len(ordered_sentences)
+
+        chunks_breaks = [
+        i+1
+        for i, pred in enumerate(predictions)
+        if pred["label"] != "SAME" and pred["score"]>0.8
+        ]
+
+    
+        chunks = [
+            "\n".join(ordered_sentences[i:j+1])
+            for i, j in zip([0] + chunks_breaks[:-1], chunks_breaks)
+        ]
+        print(f"Document split into {len(chunks)} chunks.")
+    
+
+        return chunks
+    return [text]
+
+def break_up_content_recursive(text, max_size):
+    """Break up text into chunks of max_size."""
+    if len(text) > max_size:
+      
+        chunks2 = r_splitter.split_text(text)
+        print("Chunks: ", chunks2)
+        print("Length of chunks: ", len(chunks2))
+        return chunks2
+
     return [text]
 
 def extract_from_url(url, title):

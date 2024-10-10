@@ -34,6 +34,11 @@ RUN pip install weaviate-client pdfreader pypandoc
 RUN pip install pandas openpyxl
 RUN pip install python-multipart
 RUN pip install pillow-heif
+RUN pip install llmsherpa
+RUN pip install --upgrade transformers
+RUN pip install pysbd
+RUN pip install torch
+RUN pip install langchain_text_splitters
 
 # Copy local files into container
 COPY server.py /app/server.py
