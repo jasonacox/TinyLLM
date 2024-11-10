@@ -655,8 +655,12 @@
             if (data.voice === "user") {
                 // Encode html tags and newlines
                 data.update = data.update.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/[\n\r]/g, "<br>");
-                // Preserve spaces at the beginning of the line
-                data.update = data.update.replace(/ /g, "&nbsp;");
+                // Escape the ` character
+                data.update = data.update.replace(/`/g, "&grave;");
+                // Convert tabs to 4 spaces, convert all two or more spaces to &nbsp;
+                data.update = data.update.replace(/\t/g, "&nbsp;&nbsp;&nbsp;&nbsp;").replace(/ /g, "&nbsp;");
+                // Convert any single &nbsp; sounded by characters on either side into a regular space ( )
+                data.update = data.update.replace(/&nbsp;([^&])/g, " $1").replace(/([^&])&nbsp;/g, "$1 ");
                 updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
             }
 
