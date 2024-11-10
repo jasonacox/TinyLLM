@@ -284,7 +284,9 @@ def get_news(topic, max=10):
             break
     return articles
 
-def fetch_news(topic):
+def fetch_news(topic, retries=3):
+    if retries == 0:
+        return "Unable to fetch news", "Unable to fetch news"
     log("Get News")
     context_str = get_news(topic, 25)
     log(f"News Raw Context = {context_str}")
@@ -293,17 +295,19 @@ def fetch_news(topic):
     # Replace IDs in answer with URLs
     result = ""
     text_only = ""
+    all_lines = []
     for line in answer.split("\n"):
         if "ID:" in line:
             elements = line.split("ID: ")
             title = elements[0].strip()
+            all_lines.append(title)
             text_only += title + "\n"
             if len(elements) > 1:
                 uuid = elements[1].strip()
                 # Ensure we have a valid UUId that is a integer
                 if not uuid.isdigit():
                     result += line
-                    continue    
+                    continue
                 url = news_cache.get(int(uuid))
                 result += f"{title} <a href=\"{url}\">[Link]</a>"
             else:
@@ -311,6 +315,12 @@ def fetch_news(topic):
         else:
             result += line
         result += "\n"
+    # Query the LLM to see if all_lines are duplicated
+    prompt = expand_prompt(prompts["rag"], {"context_str": "\n".join(all_lines), "prompt": "Are these news items all about the same thing?"})
+    answer = ask(prompt)
+    if "yes" in answer.lower():
+        log("News items are all about the same thing")
+        return fetch_news(topic, retries-1)
     return result, text_only
 
 def handle_weather_command(p):
