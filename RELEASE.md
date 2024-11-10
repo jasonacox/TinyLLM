@@ -2,7 +2,8 @@
 
 ## 0.15.10 - Bug Fix
 
-* Chatbot - Fix error handling bug used to auto-detect max content length of LLM.
+* Chatbot - Fix error handling bug used to auto-detect max content length of LLM. Updated user input UI rendering to better handle indention.
+* News Bot Script - Added logic to verify news summary from LLM to help prevent hallucinations.
 
 ## 0.15.9 - DocMan Auth
 
