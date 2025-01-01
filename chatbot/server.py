@@ -42,7 +42,11 @@ Environmental variables:
     * RAG_ONLY - Set to True to enable RAG only mode
     * TOKEN - TinyLLM token for admin functions
     * PROMPT_FILE - File to store system prompts
-
+    * PROMPT_RO - Set to True to enable read-only prompts
+    * EXTRA_BODY - Extra body parameters for OpenAI API
+    * TOXIC_THRESHOLD - Toxicity threshold for responses 0-1 or 99 disable
+    * THINKING - Set to True to enable thinking mode by default
+    
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
     * pip install llama-cpp-python[server]
@@ -112,10 +116,10 @@ def debug(text):
     logger.debug(text)
 
 # Configuration Settings
-api_key = os.environ.get("OPENAI_API_KEY", "open_api_key")                  # Required, use bogus string for Llama.cpp
-api_base = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Required, use https://api.openai.com for OpenAI
-agentname = os.environ.get("AGENT_NAME", "")                                # Set the name of your bot
-mymodel = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
+API_KEY = os.environ.get("OPENAI_API_KEY", "open_api_key")                  # Required, use bogus string for Llama.cpp
+API_BASE = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Required, use https://api.openai.com for OpenAI
+AGENTNAME = os.environ.get("AGENT_NAME", "")                                # Set the name of your bot
+MYMODEL = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
 MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Maximum number of concurrent clients
 MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
@@ -129,6 +133,7 @@ ONESHOT = os.environ.get("ONESHOT", "false").lower() == "true"              # Se
 RAG_ONLY = os.environ.get("RAG_ONLY", "false").lower() == "true"            # Set to True to enable RAG only mode
 EXTRA_BODY = os.environ.get("EXTRA_BODY", None)                             # Extra body parameters for OpenAI API
 TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # Toxicity threshold for responses 0-1 or 99 disable
+THINKING = os.environ.get("THINKING", "false").lower() == "true"            # Set to True to enable thinking mode by default
 
 # Convert EXTRA_BODY to dictionary if it is proper JSON
 if EXTRA_BODY:
@@ -138,7 +143,7 @@ if EXTRA_BODY:
         log("EXTRA_BODY is not valid JSON")
         EXTRA_BODY = {}
 else:
-    if api_base.startswith("https://api.openai.com"):
+    if API_BASE.startswith("https://api.openai.com"):
         EXTRA_BODY = {}
     else:
         # Extra stop tokens are needed for some non-OpenAI LLMs
@@ -155,6 +160,20 @@ RESULTS = int(os.environ.get("RESULTS", 1))                                 # Nu
 ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha_key")                        # Optional - Alpha Vantage API Key
 UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/tmp")                     # Folder to store uploaded documents
 
+# Debug Mode
+if DEBUG:
+    logger.setLevel(logging.DEBUG)
+    log("Debug mode enabled.")
+    # Display all default settings
+    debug("Configuration Settings:")
+    vars = globals()
+    for n in list(vars):
+        if n.isupper(): 
+            if vars[n] and n in ["API_KEY", "TOKEN", "WEAVIATE_AUTH_KEY", "ALPHA_KEY"]:
+                debug(f"   {n}: {'*' * len(vars[n])}")
+            else:
+                debug(f"   {n}: {vars[n]}")
+
 # Document Management Settings
 rag_documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT,
                           grpc_port=WEAVIATE_GRPC_PORT, retry=3, filepath=UPLOAD_FOLDER, 
@@ -164,7 +183,7 @@ rag_documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port
 default_prompts = {}
 default_prompts["greeting"] = "Hi"
 default_prompts["agentname"] = "Jarvis"
-default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assistant. The current date is {date} and time is {time}. You should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions. Don't mention any of the above unless asked and keep your greetings brief."
+default_prompts["baseprompt"] = "You are {AGENTNAME}, a highly intelligent assistant. The current date is {date} and time is {time}. You should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions. Don't mention any of the above unless asked and keep your greetings brief."
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
 default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important. Always include the news organization and ID. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - LnkID:[ID]\nHere are some examples, but do not use them: \n1. The World is Round - Science - LnkID:91\n2. The Election is over and Children have won - US News - LnkID:22\n3. Storms Hit the Southern Coast - ABC - LnkID:55\nContext: {context_str}\nTop 10 Headlines with Source and LnkID:"
@@ -176,6 +195,27 @@ default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEG
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
 default_prompts["toxic_filter"] = "You are a highly intelligent assistant. Review the following text and filter out any toxic or inappropriate content. Please respond with a toxicity rating. Use a scale of 0 to 1, where 0 is not toxic and 1 is highly toxic. [BEGIN] {prompt} [END]"
+default_prompts["chain_of_thought_check"] = "Consider this: {prompt}\n Is this small talk, appreciation or greeting, yes or no?"
+default_prompts["chain_of_thought"] = """Begin by enclosing all thoughts within <thinking> tags, exploring multiple angles and approaches. 
+    Break down the solution into clear steps within <step> tags. 
+    Start with a 20-step budget, requesting more for complex problems if needed. 
+    Use <count> tags after each step to show the remaining budget. Stop when reaching 0. 
+    Continuously adjust your reasoning based on intermediate results and reflections, adapting your strategy as you progress. 
+    Regularly evaluate progress using <reflection> tags. 
+    Be critical and honest about your reasoning process. 
+    Assign a quality score between 0.0 and 1.0 using <reward> tags after each reflection. 
+    Use this to guide your approach: 
+    0.8+: Continue current approach 
+    0.5-0.7: Consider minor adjustments 
+    Below 0.5: Seriously consider backtracking and trying a different approach 
+    If unsure or if reward score is low, backtrack and try a different approach, explaining your decision within <thinking> tags. 
+    For mathematical problems, show all work explicitly using LaTeX for formal notation and provide detailed proofs. 
+    Explore multiple solutions individually if possible, comparing approaches in reflections. 
+    Use thoughts as a scratchpad, writing out all calculations and reasoning explicitly. 
+    Synthesize the final answer within <answer> tags, providing a clear, concise summary. 
+    Don't over analyze simple questions. Answer the following in an accurate way that a young student can understand: 
+    {prompt}"""
+default_prompts["chain_of_thought_summary"] = "Examine the following context and extract the best concluding answer. Do no provide any commentary or analysis.\n Context: {context_str}\nAnswer:"
 
 # Log ONE_SHOT mode
 if ONESHOT:
@@ -183,12 +223,12 @@ if ONESHOT:
 
 # Test OpenAI API
 def test_model():
-    global api_key, api_base, mymodel, MAXTOKENS
+    global API_KEY, API_BASE, MYMODEL, MAXTOKENS
     log("Testing OpenAI API...")
     try:
         log(f"Using openai library version {openai.__version__}")
-        log(f"Connecting to OpenAI API at {api_base} using model {mymodel}")
-        llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+        log(f"Connecting to OpenAI API at {API_BASE} using model {MYMODEL}")
+        llm = openai.OpenAI(api_key=API_KEY, base_url=API_BASE)
         # Get models
         try:
             models = llm.models.list()
@@ -196,23 +236,23 @@ def test_model():
                 log("LLM: No models available - proceeding.")
         except Exception as erro:
             log(f"LLM: Unable to get models, using default: {str(erro)}")
-            models = mymodel
+            models = MYMODEL
         else:
             # build list of models
             model_list = [model.id for model in models.data]
             log(f"LLM: Models available: {model_list}")
-            if not mymodel in model_list:
-                log(f"LLM: Model {mymodel} not found in models list.")
+            if not MYMODEL in model_list:
+                log(f"LLM: Model {MYMODEL} not found in models list.")
                 if len(model_list) == 1:
                     log("LLM: Switching to default model")
-                    mymodel = model_list[0]
+                    MYMODEL = model_list[0]
                 else:
-                    log(f"LLM: Unable to find requested model {mymodel} in models list.")
-                    raise Exception(f"Model {mymodel} not found")
+                    log(f"LLM: Unable to find requested model {MYMODEL} in models list.")
+                    raise Exception(f"Model {MYMODEL} not found")
         # Test LLM
-        log(f"LLM: Using and testing model {mymodel}")
+        log(f"LLM: Using and testing model {MYMODEL}")
         llm.chat.completions.create(
-            model=mymodel,
+            model=MYMODEL,
             max_tokens=MAXTOKENS,
             stream=False,
             temperature=TEMPERATURE,
@@ -222,7 +262,7 @@ def test_model():
         return True
     except Exception as erro:
         log("OpenAI API Error: %s" % erro)
-        log(f"Unable to connect to OpenAI API at {api_base} using model {mymodel}.")
+        log(f"Unable to connect to OpenAI API at {API_BASE} using model {MYMODEL}.")
         if "maximum context length" in str(erro):
             if MAXTOKENS > 1024:
                 MAXTOKENS = int(MAXTOKENS / 2)
@@ -289,6 +329,7 @@ stats = {
     "errors": 0,
     "ask": 0,
     "ask_llm": 0,
+    "ask_context": 0,
 }
 
 #
@@ -356,12 +397,12 @@ log(f"Loaded {len(prompts)} prompts.")
 
 # Function to return base conversation prompt
 def base_prompt(content=None):
-    global baseprompt, agentname, USE_SYSTEM, prompts
-    if agentname == "":
-        agentname = prompts["agentname"]
+    global baseprompt, AGENTNAME, USE_SYSTEM, prompts
+    if AGENTNAME == "":
+        AGENTNAME = prompts["agentname"]
     current_date = datetime.datetime.now()
     formatted_date = current_date.strftime("%B %-d, %Y")
-    values = {"agentname": agentname, "date": formatted_date}
+    values = {"agentname": AGENTNAME, "date": formatted_date}
     baseprompt = expand_prompt(prompts["baseprompt"], values)
     if not content:
         content = baseprompt
@@ -400,10 +441,10 @@ async def ask(prompt, sid=None):
                 client[sid]["context"].append(message)
             else:
                 client[sid]["context"].append({"role": "user", "content": prompt})
-            debug(f"messages = {client[sid]['context']} - model = {mymodel}")
-            llm = openai.OpenAI(api_key=api_key, base_url=api_base)
+            debug(f"messages = {client[sid]['context']} - model = {MYMODEL}")
+            llm = openai.OpenAI(api_key=API_KEY, base_url=API_BASE)
             response = llm.chat.completions.create(
-                model=mymodel,
+                model=MYMODEL,
                 max_tokens=MAXTOKENS,
                 stream=True, # Send response chunks as LLM computes next tokens
                 temperature=TEMPERATURE,
@@ -417,7 +458,7 @@ async def ask(prompt, sid=None):
                 await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'},room=sid)
                 log("Model does not exist - retrying")
                 test_model()
-                await sio.emit('update', {'update': mymodel, 'voice': 'model'})
+                await sio.emit('update', {'update': MYMODEL, 'voice': 'model'})
             elif "maximum context length" in str(erro):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
@@ -451,9 +492,9 @@ async def ask_llm(query, format=""):
     content = base_prompt(expand_prompt(prompts["clarify"], {"format": format})) + [{"role": "user",
                 "content": query}]
     debug(f"ask_llm: {content}")
-    llm = openai.AsyncOpenAI(api_key=api_key, base_url=api_base)
+    llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
     response = await llm.chat.completions.create(
-        model=mymodel,
+        model=MYMODEL,
         max_tokens=MAXTOKENS,
         stream=False,
         temperature=TEMPERATURE,
@@ -461,6 +502,23 @@ async def ask_llm(query, format=""):
         extra_body=EXTRA_BODY,
     )
     debug(f"ask_llm -> {response.choices[0].message.content.strip()}")
+    return response.choices[0].message.content.strip()
+
+async def ask_context(messages):
+    # Ask LLM a simple question
+    global stats
+    stats["ask_context"] += 1
+    debug(f"ask_context: {messages}")
+    llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
+    response = await llm.chat.completions.create(
+        model=MYMODEL,
+        max_tokens=MAXTOKENS,
+        stream=False,
+        temperature=TEMPERATURE,
+        messages=messages,
+        extra_body=EXTRA_BODY,
+    )
+    debug(f"ask_context -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
 # Function - Get weather for location
@@ -621,10 +679,10 @@ async def home(format: str = None):
         "Errors": stats["errors"],
         "User Queries": stats["ask"],
         "LLM Queries": stats["ask_llm"],
-        "OpenAI API Key (OPENAI_API_KEY)": "************" if api_key != "" else "Not Set",
-        "OpenAI API URL (OPENAI_API_URL)": api_base,
-        "Agent Name (AGENT_NAME)": agentname,
-        "LLM Model (LLM_MODEL)": mymodel,
+        "OpenAI API Key (OPENAI_API_KEY)": "************" if API_KEY != "" else "Not Set",
+        "OpenAI API URL (OPENAI_API_URL)": API_BASE,
+        "Agent Name (AGENT_NAME)": AGENTNAME,
+        "LLM Model (LLM_MODEL)": MYMODEL,
         "Debug Mode (DEBUG)": DEBUG,
         "Current Clients (MAXCLIENTS)": f"{len(client)} of {MAXCLIENTS}",
         "LLM Max tokens Limit (MAXTOKENS)": MAXTOKENS,
@@ -677,7 +735,7 @@ async def get_prompts():
 # POST requests to update prompts
 @app.post('/saveprompts')
 async def update_prompts(data: dict):
-    global prompts, baseprompt, sio, TEMPERATURE, MAXTOKENS, agentname
+    global prompts, baseprompt, sio, TEMPERATURE, MAXTOKENS, AGENTNAME
     if PROMPT_RO:
         return ({"Result": "Prompts are read-only"})
     oldbaseprompt = prompts["baseprompt"]
@@ -689,10 +747,10 @@ async def update_prompts(data: dict):
     save_prompts()
     if oldbaseprompt != prompts["baseprompt"] or oldagentname != prompts["agentname"]:
         # Update baseprompt
-        agentname = prompts["agentname"]
+        AGENTNAME = prompts["agentname"]
         current_date = datetime.datetime.now()
         formatted_date = current_date.strftime("%B %-d, %Y")
-        values = {"agentname": agentname, "date": formatted_date}
+        values = {"agentname": AGENTNAME, "date": formatted_date}
         baseprompt = expand_prompt(prompts["baseprompt"], values)
     # Update TEMPERATURE and MAXTOKENS
     if "LLM_temperature" in data:
@@ -718,7 +776,7 @@ async def show_version_api():
     debug(f"Version requested - DEBUG={DEBUG}")
     if DEBUG:
         return {'version': "%s DEBUG MODE" % VERSION}
-    return {'version': VERSION, 'model': mymodel}
+    return {'version': VERSION, 'model': MYMODEL}
 
 # Send an alert to all clients
 @app.post('/alert')
@@ -807,6 +865,27 @@ async def handle_connect(session_id, env):
                 if client[session_id]["prompt"] == "":
                     await sio.sleep(0.1)
                 else:
+                    if client[session_id]["cot"]:
+                        # Remember original prompt
+                        client[session_id]["cot_prompt"] = client[session_id]["prompt"]
+                        # Check to see if the prompt needs COT processing
+                        cot_check = expand_prompt(prompts["chain_of_thought_check"], {"prompt": client[session_id]["prompt"]})
+                        debug("Running CoT check")
+                        # Ask LLM for answers
+                        response = await ask_llm(cot_check)
+                        if "no" in response.lower():
+                            debug("Running deep thinking CoT to answer")
+                            # Build prompt for Chain of Thought and create copy of context
+                            cot_prompt = expand_prompt(prompts["chain_of_thought"], {"prompt": client[session_id]["prompt"]})
+                            temp_context = client[session_id]["context"].copy()
+                            temp_context.append({"role": "user", "content": cot_prompt})
+                            # Send thinking status to client and ask LLM for answer
+                            await sio.emit('update', {'update': 'Thinking... ', 'voice': 'ai'},room=session_id)
+                            answer = await ask_context(temp_context)
+                            await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
+                            # Load request for CoT conclusion into conversational thread
+                            cot_prompt = expand_prompt(prompts["chain_of_thought_summary"], {"context_str": answer})
+                            client[session_id]["prompt"] = cot_prompt
                     try:
                         # Ask LLM for answers
                         response= await ask(client[session_id]["prompt"],session_id)
@@ -829,7 +908,7 @@ async def handle_connect(session_id, env):
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
                         # Update footer with stats
                         await sio.emit('update', {'update': 
-                                                  f"TinyLLM Chatbot {VERSION} - {mymodel} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
+                                                  f"TinyLLM Chatbot {VERSION} - {MYMODEL} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
                                                   'voice': 'footer'},room=session_id)
                         # Check for link injection
                         if client[session_id]["links"]:
@@ -840,7 +919,11 @@ async def handle_connect(session_id, env):
                             await sio.emit('update', {'update': client[session_id]["references"], 'voice': 'ref'},room=session_id)
                             client[session_id]["references"] = ""
                         if not ONESHOT:
-                            # remember context
+                            # If COT mode replace CoT context in conversation thread with user prompt
+                            if client[session_id]["cot"]:
+                                client[session_id]["context"].pop()
+                                client[session_id]["context"].append({"role": "user", "content": client[session_id]["cot_prompt"]} )
+                            # Remember answer
                             client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
                     except Exception as erro:
                         # Unable to process prompt, give error
@@ -882,6 +965,7 @@ async def handle_connect(session_id, env):
         client[session_id]["links"] = {}
         client[session_id]["toxicity"] = 0.0
         client[session_id]["rag_only"] = False
+        client[session_id]["cot"] = THINKING
         client[session_id]["library"] = WEAVIATE_LIBRARY
         client[session_id]["results"] = RESULTS
         client[session_id]["image_data"] = ""
@@ -975,7 +1059,7 @@ async def handle_url_prompt(session_id, p):
 async def handle_command(session_id, p):
     command = p[1:].split(" ")[0].lower()
     if command == "":
-        await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock /think]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
     elif command == "reset":
         await reset_context(session_id)
@@ -991,6 +1075,8 @@ async def handle_command(session_id, p):
         await handle_weather_command(session_id, p)
     elif command == "stock":
         await handle_stock_command(session_id, p)
+    elif command == "think":
+        await handle_think_command(session_id, p)
     else:
         await sio.emit('update', {'update': '[Invalid command]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
@@ -1102,6 +1188,27 @@ async def handle_rag_command(session_id, p):
         else:
             await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'}, room=session_id)
 
+
+async def handle_think_command(session_id, p):
+    """
+    Options:
+    /think on
+    /think off
+    """
+    think = p[6:].strip()
+    parts = think.split()
+    if parts and parts[0] == "on":
+        client[session_id]["cot"] = True
+        await sio.emit('update', {'update': '[Chain of Thought Mode On]', 'voice': 'user'}, room=session_id)
+        return
+    elif parts and parts[0] == "off":
+        # Turn off RAG mode
+        client[session_id]["cot"] = False
+        await sio.emit('update', {'update': '[Chain of Thought Mode Off]', 'voice': 'user'}, room=session_id)
+        return
+    else:
+        await sio.emit('update', {'update': '[Chain of Thought Commands: /think {on|off}]', 'voice': 'user'}, room=session_id)
+
 async def handle_weather_command(session_id, p):
     debug("Weather prompt")
     await sio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'}, room=session_id)
@@ -1165,7 +1272,7 @@ async def handle_normal_prompt(session_id, p):
             client[session_id]["toxicity"] = 0.0
             log(f"Toxic Prompt Detected [{toxicity}] - {p}")
             return
-    # Prompt is safe
+    # Process the prompt
     client[session_id]["prompt"] = p
 
 #

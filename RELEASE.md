@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.11 - Chain of Thought
+
+* Chatbot - Add Chain of Thought (CoT) thinking option using the `/think on` or `/think off` toggles to the UI. When activated, queries will be passed through an out-of-band CoT loop to allow the LLM to thoughtfully explore answer and then provide a conclusion summary to the user. Set environmental variable "THINKING" to "true" to default all conversations to CoT mode.
+
 ## 0.15.10 - Bug Fix
 
 * Chatbot - Fix error handling bug used to auto-detect max content length of LLM. Updated user input UI rendering to better handle indention.

@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
 # Version
-VERSION = "v0.0.1"
+VERSION = "v0.0.2"
 DEBUG = False
 
 def log(text):
@@ -426,6 +426,10 @@ if __name__ == "__main__":
     buffer("")
 
     buffer("\n---")
+
+    # Print version of news
+    buffer(f"Newsbot: {VERSION} - {current_date.strftime('%B %-d, %Y')}")
+    buffer("\n")
 
     # Output
     if EMAIL_FORMAT:
