@@ -195,28 +195,37 @@ default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEG
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
 default_prompts["toxic_filter"] = "You are a highly intelligent assistant. Review the following text and filter out any toxic or inappropriate content. Please respond with a toxicity rating. Use a scale of 0 to 1, where 0 is not toxic and 1 is highly toxic. [BEGIN] {prompt} [END]"
-default_prompts["chain_of_thought_check"] = "Consider this: {prompt}\n Is this small talk, appreciation or greeting, yes or no?"
-default_prompts["chain_of_thought"] = """Begin by enclosing all thoughts within <thinking> tags, exploring multiple angles and approaches. 
-    Break down the solution into clear steps within <step> tags. 
-    Start with a 20-step budget, requesting more for complex problems if needed. 
-    Use <count> tags after each step to show the remaining budget. Stop when reaching 0. 
+default_prompts["chain_of_thought_check"] = """You are a language expert. 
+    Consider this prompt:
+    <prompt>{prompt}</prompt>
+    Categorize the request using one of these:
+    a) A request for information
+    b) A request for code
+    c) A greeting or word of appreciation
+    d) Something else
+    Answer with a, b, c or d only:
+    """
+default_prompts["chain_of_thought"] = """First, outline how you will approach answering the problem.
+    Break down the solution into clear steps.
     Continuously adjust your reasoning based on intermediate results and reflections, adapting your strategy as you progress. 
-    Regularly evaluate progress using <reflection> tags. 
-    Be critical and honest about your reasoning process. 
-    Assign a quality score between 0.0 and 1.0 using <reward> tags after each reflection. 
-    Use this to guide your approach: 
-    0.8+: Continue current approach 
-    0.5-0.7: Consider minor adjustments 
-    Below 0.5: Seriously consider backtracking and trying a different approach 
-    If unsure or if reward score is low, backtrack and try a different approach, explaining your decision within <thinking> tags. 
-    For mathematical problems, show all work explicitly using LaTeX for formal notation and provide detailed proofs. 
-    Explore multiple solutions individually if possible, comparing approaches in reflections. 
+    Regularly evaluate progress. 
+    Be critical and honest about your reasoning process.
     Use thoughts as a scratchpad, writing out all calculations and reasoning explicitly. 
-    Synthesize the final answer within <answer> tags, providing a clear, concise summary. 
-    Don't over analyze simple questions. Answer the following in an accurate way that a young student can understand: 
+    Synthesize the final answer within <answer> tags, providing a clear informed and detailed conclusion.
+    Include relevant scientific and factual details to support your answer.
+    If providing an equation, make sure you define the variables and units.
+    Don't over analyze simple questions.
+    If asked to produce code, include the code block in the answer. 
+    Answer the following in an accurate way that a young student would understand: 
     {prompt}"""
-default_prompts["chain_of_thought_summary"] = "Examine the following context and extract the best concluding answer. Do no provide any commentary or analysis.\n Context: {context_str}\nAnswer:"
+default_prompts["chain_of_thought_summary"] = """Examine the following context:\n{context_str}
 
+Provide the best conclusion based on the context.
+    Do not provide an analysis of the context. Do not include <answer> tags.
+    Include relevant scientific and factual details to support the answer.
+    If there is an equation, make sure you define the variables and units. Do not include an equation section if not needed.
+    If source code provided, include the code block and describe what it does. Do not include a code section otherwise.
+    """
 # Log ONE_SHOT mode
 if ONESHOT:
     log("ONESHOT mode enabled.")
@@ -873,7 +882,7 @@ async def handle_connect(session_id, env):
                         debug("Running CoT check")
                         # Ask LLM for answers
                         response = await ask_llm(cot_check)
-                        if "no" in response.lower():
+                        if "a" in response.lower() or "d" in response.lower() or client[session_id]["cot_always"]:
                             debug("Running deep thinking CoT to answer")
                             # Build prompt for Chain of Thought and create copy of context
                             cot_prompt = expand_prompt(prompts["chain_of_thought"], {"prompt": client[session_id]["prompt"]})
@@ -966,6 +975,7 @@ async def handle_connect(session_id, env):
         client[session_id]["toxicity"] = 0.0
         client[session_id]["rag_only"] = False
         client[session_id]["cot"] = THINKING
+        client[session_id]["cot_always"] = False
         client[session_id]["library"] = WEAVIATE_LIBRARY
         client[session_id]["results"] = RESULTS
         client[session_id]["image_data"] = ""
@@ -1194,20 +1204,28 @@ async def handle_think_command(session_id, p):
     Options:
     /think on
     /think off
+    /think always
     """
     think = p[6:].strip()
     parts = think.split()
     if parts and parts[0] == "on":
         client[session_id]["cot"] = True
+        client[session_id]["cot_always"] = False
         await sio.emit('update', {'update': '[Chain of Thought Mode On]', 'voice': 'user'}, room=session_id)
         return
     elif parts and parts[0] == "off":
-        # Turn off RAG mode
         client[session_id]["cot"] = False
         await sio.emit('update', {'update': '[Chain of Thought Mode Off]', 'voice': 'user'}, room=session_id)
         return
+    elif parts and parts[0] == "always":
+        client[session_id]["cot"] = True
+        client[session_id]["cot_always"] = True
+        await sio.emit('update', {'update': '[Chain of Thought Mode Always On]', 'voice': 'user'}, room=session_id)
+        return
     else:
-        await sio.emit('update', {'update': '[Chain of Thought Commands: /think {on|off}]', 'voice': 'user'}, room=session_id)
+        state = "ON" if client[session_id]["cot"] else "OFF"
+        state = "ALWAYS" if client[session_id]["cot_always"] else state
+        await sio.emit('update', {'update': f'[Chain of Thought is {state} - Commands: /think {{on|off|always}} ]', 'voice': 'user'}, room=session_id)
 
 async def handle_weather_command(session_id, p):
     debug("Weather prompt")

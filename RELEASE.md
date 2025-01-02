@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.12 - Update CoT
+
+* Chatbot - Update Chain of Thought (CoT) to check request before routing all prompts through the CoT process. Using `/think always` will force CoT for all requests. Additionally, CoT prompts updated for better responses.
+
 ## 0.15.11 - Chain of Thought
 
 * Chatbot - Add Chain of Thought (CoT) thinking option using the `/think on` or `/think off` toggles to the UI. When activated, queries will be passed through an out-of-band CoT loop to allow the LLM to thoughtfully explore answer and then provide a conclusion summary to the user. Set environmental variable "THINKING" to "true" to default all conversations to CoT mode.
