@@ -225,6 +225,7 @@ Provide the best conclusion based on the context.
     Include relevant scientific and factual details to support the answer.
     If there is an equation, make sure you define the variables and units. Do not include an equation section if not needed.
     If source code provided, include the code block and describe what it does. Do not include a code section otherwise.
+    Make sure the answer addresses the original prompt: {prompt}
     """
 # Log ONE_SHOT mode
 if ONESHOT:
@@ -893,7 +894,8 @@ async def handle_connect(session_id, env):
                             answer = await ask_context(temp_context)
                             await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
                             # Load request for CoT conclusion into conversational thread
-                            cot_prompt = expand_prompt(prompts["chain_of_thought_summary"], {"context_str": answer})
+                            cot_prompt = expand_prompt(prompts["chain_of_thought_summary"], {"context_str": answer,
+                                                                                             "prompt": client[session_id]["cot_prompt"]})
                             client[session_id]["prompt"] = cot_prompt
                     try:
                         # Ask LLM for answers
