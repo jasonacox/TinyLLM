@@ -902,13 +902,14 @@ async def handle_connect(session_id, env):
                                 # Send thinking status to client and ask LLM for answer
                                 await sio.emit('update', {'update': 'Thinking... ', 'voice': 'ai'},room=session_id)
                                 answer = await ask_context(temp_context)
+                                await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
                                 # Load request for CoT conclusion into conversational thread
                                 cot_prompt = expand_prompt(prompts["chain_of_thought_summary"], {"context_str": answer,
                                                                                                 "prompt": client[session_id]["cot_prompt"]})
                                 client[session_id]["prompt"] = cot_prompt
                         except Exception as erro:
                             log(f"CoT error - continuing with original prompt: {erro}")
-                        await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
+                            await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
                     else:
                         client_cot = False
                     try:
