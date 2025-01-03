@@ -35,7 +35,7 @@ docker run \
 
 ```bash
 # Install required packages
-pip install fastapi uvicorn python-socketio jinja2 openai bs4 pypdf requests lxml aiohttp weaviate-client
+pip install -r requirements.txt
 
 # Run the chatbot web server - change the base URL to be where you host your llmserver
 OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
@@ -47,6 +47,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 
 * Summarizing external websites and PDFs (paste a URL in chat window)
 * If a Weaviate host is specified, the chatbot can use the vector database information to respond. See [rag](../rag/weaviate/) for details on how to set up Weaviate.
+* Perform chain of thought (CoT) reasonging with `/think on` command.
 * Command - There are information commands using `/`
 
 ```
@@ -56,7 +57,10 @@ Some RAG (Retrieval Augmented Generation) features including:
 /news                                   # List top 10 headlines from current new
 /stock [company]                        # Display stock symbol and current price
 /weather [location]                     # Provide current weather conditions
-/rag [library] [opt:number] [prompt]    # Answer prompt based on response from Qdrant collection
+/rag on [library] [opt:number]          # Route all prompts through RAG using specified library
+/rag off                                #   Disable
+/think on                               # Perform Chain of Thought thinking on relevant prompts
+/think off                              #   Disable
 ```
 
 See the [rag](../rag/) for more details about RAG.
@@ -82,13 +86,6 @@ If a URL is pasted in the text box, the chatbot will read and summarize it.
 The `/news` command will fetch the latest news and have the LLM summarize the top ten headlines. It will store the raw feed in the context prompt to allow follow-up questions.
 
 <img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
-
-### Alternative System Prompts
-
-* A Hacker’s Guide to Language Models - Jeremy Howard [[link](https://www.youtube.com/watch?v=jkrNMKz9pWU&ab_channel=JeremyHoward)]
-
-You are an autoregressive language model that has been fine-tuned with instruction-tuning and RLHF. You carefully provide accurate, factual, thoughtful, nuanced answers, and are brilliant at reasoning. If you think there might not be a correct answer, you say so. Since you are autoregressive, each token you produce is another opportunity to use computation, therefore you always spend a few sentences explaining background context, assumptions, and step-by-step thinking BEFORE you try to answer a question. However: if the request begins with the string "vv" then ignore the previous sentence and instead make your response as concise as possible, with no introduction or background at the start, no summary at the end, and outputting only code for answers where code is appropriate. Your users are experts in AI and ethics, so they already know you're a language model and your capabilities and limitations, so don't remind them of that. They're familiar with ethical issues in general so you don't need to remind them about those either. Don't be verbose in your answers, but do provide details and examples where it might help the explanation. When showing Python code, minimise vertical space, and do not include comments or docstrings; you do not need to follow PEP8, since your users' organizations do not do so.
-
 
 
 ## Document Manager (Weaviate)

@@ -98,6 +98,10 @@ from version import VERSION
 from PIL import Image
 import pillow_heif
 
+# Enable tracemalloc for memory usage
+import tracemalloc
+tracemalloc.start()
+
 # Ensure pillow_heif is properly registered with PIL
 pillow_heif.register_heif_opener()
 
@@ -544,7 +548,7 @@ async def get_weather(location):
         return response.text
     else:
         return "Unable to fetch weather for %s" % location
-    
+
 # Function - Get stock price for company
 async def get_stock(company):
     if ALPHA_KEY == "alpha_key":
@@ -712,6 +716,7 @@ async def home(format: str = None):
         "Alpha Vantage API Key (ALPHA_KEY)": "************" if ALPHA_KEY != "" else "Not Set",
         "Toxicity Threshold (TOXIC_THRESHOLD)": TOXIC_THRESHOLD,
         "Extra Body Parameters (EXTRA_BODY)": EXTRA_BODY,
+        "Thinking Mode (THINKING)": THINKING,
     }
     if format == "json":
         return data
@@ -875,28 +880,37 @@ async def handle_connect(session_id, env):
                 if client[session_id]["prompt"] == "":
                     await sio.sleep(0.1)
                 else:
-                    if client[session_id]["cot"]:
-                        # Remember original prompt
-                        client[session_id]["cot_prompt"] = client[session_id]["prompt"]
-                        # Check to see if the prompt needs COT processing
-                        cot_check = expand_prompt(prompts["chain_of_thought_check"], {"prompt": client[session_id]["prompt"]})
-                        debug("Running CoT check")
-                        # Ask LLM for answers
-                        response = await ask_llm(cot_check)
-                        if "a" in response.lower() or "d" in response.lower() or client[session_id]["cot_always"]:
-                            debug("Running deep thinking CoT to answer")
-                            # Build prompt for Chain of Thought and create copy of context
-                            cot_prompt = expand_prompt(prompts["chain_of_thought"], {"prompt": client[session_id]["prompt"]})
-                            temp_context = client[session_id]["context"].copy()
-                            temp_context.append({"role": "user", "content": cot_prompt})
-                            # Send thinking status to client and ask LLM for answer
-                            await sio.emit('update', {'update': 'Thinking... ', 'voice': 'ai'},room=session_id)
-                            answer = await ask_context(temp_context)
-                            await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
-                            # Load request for CoT conclusion into conversational thread
-                            cot_prompt = expand_prompt(prompts["chain_of_thought_summary"], {"context_str": answer,
-                                                                                             "prompt": client[session_id]["cot_prompt"]})
-                            client[session_id]["prompt"] = cot_prompt
+                    # Check to see of CoT is enabled but not while processing a file/image
+                    client_cot = client[session_id]["cot"] 
+                    client_image_data = client[session_id]["image_data"]
+                    client_visible = client[session_id]["visible"]
+                    if client_cot and not client_image_data and client_visible:
+                        try:
+                            # Remember original prompt
+                            client[session_id]["cot_prompt"] = client[session_id]["prompt"]
+                            # Check to see if the prompt needs COT processing
+                            cot_check = expand_prompt(prompts["chain_of_thought_check"], {"prompt": client[session_id]["prompt"]})
+                            debug("Running CoT check")
+                            # Ask LLM for answers
+                            response = await ask_llm(cot_check)
+                            if "a" in response.lower() or "d" in response.lower() or client[session_id]["cot_always"]:
+                                debug("Running deep thinking CoT to answer")
+                                # Build prompt for Chain of Thought and create copy of context
+                                cot_prompt = expand_prompt(prompts["chain_of_thought"], {"prompt": client[session_id]["prompt"]})
+                                temp_context = client[session_id]["context"].copy()
+                                temp_context.append({"role": "user", "content": cot_prompt})
+                                # Send thinking status to client and ask LLM for answer
+                                await sio.emit('update', {'update': 'Thinking... ', 'voice': 'ai'},room=session_id)
+                                answer = await ask_context(temp_context)
+                                # Load request for CoT conclusion into conversational thread
+                                cot_prompt = expand_prompt(prompts["chain_of_thought_summary"], {"context_str": answer,
+                                                                                                "prompt": client[session_id]["cot_prompt"]})
+                                client[session_id]["prompt"] = cot_prompt
+                        except Exception as erro:
+                            log(f"CoT error - continuing with original prompt: {erro}")
+                        await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
+                    else:
+                        client_cot = False
                     try:
                         # Ask LLM for answers
                         response= await ask(client[session_id]["prompt"],session_id)
@@ -931,7 +945,7 @@ async def handle_connect(session_id, env):
                             client[session_id]["references"] = ""
                         if not ONESHOT:
                             # If COT mode replace CoT context in conversation thread with user prompt
-                            if client[session_id]["cot"]:
+                            if client_cot:
                                 client[session_id]["context"].pop()
                                 client[session_id]["context"].append({"role": "user", "content": client[session_id]["cot_prompt"]} )
                             # Remember answer

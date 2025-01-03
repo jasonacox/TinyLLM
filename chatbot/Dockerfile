@@ -9,21 +9,21 @@
 FROM python:3.10-slim
 
 # Setting build related env vars
-ENV PORT 5000
-ENV OPENAI_API_KEY "DEFAULT_API_KEY"
-ENV OPENAI_API_BASE "http://localhost:8000/v1"
-ENV AGENT_NAME "Jarvis"
-ENV MY_MODEL "models/7B/gguf-model.bin"
-ENV DEBUG "false"
-ENV WEAVIATE_HOST "localhsot"
-ENV WEAVIATE_PORT "8080"
-ENV WEAVIATE_GRPC_HOST "localhost"
-ENV WEAVIATE_GRPC_PORT "50051"
-ENV WEAVIATE_LIBRARY "tinyllm"
-ENV RESULTS 1
-ENV ONESHOT "false"
-ENV RAG_ONLY "false"
-ENV USE_SYSTEM "false"
+ENV PORT=5000
+ENV OPENAI_API_KEY="DEFAULT_API_KEY"
+ENV OPENAI_API_BASE="http://localhost:8000/v1"
+ENV AGENT_NAME="Jarvis"
+ENV MY_MODEL="models/7B/gguf-model.bin"
+ENV DEBUG="false"
+ENV WEAVIATE_HOST="localhsot"
+ENV WEAVIATE_PORT="8080"
+ENV WEAVIATE_GRPC_HOST="localhost"
+ENV WEAVIATE_GRPC_PORT="50051"
+ENV WEAVIATE_LIBRARY="tinyllm"
+ENV RESULTS=1
+ENV ONESHOT="false"
+ENV RAG_ONLY="false"
+ENV USE_SYSTEM="false"
 
 # Set the working directory
 WORKDIR /app
