@@ -273,6 +273,9 @@ def test_model():
             messages=[{"role": "user", "content": "Hello"}],
             extra_body=EXTRA_BODY,
         )
+        log("OpenAI API connection successful.")
+        # Close the openai client
+        llm.close()
         return True
     except Exception as erro:
         log("OpenAI API Error: %s" % erro)
@@ -345,6 +348,7 @@ stats = {
     "ask_llm": 0,
     "ask_context": 0,
 }
+llm_stream = None
 
 #
 # Configure FastAPI App and SocketIO
@@ -425,9 +429,9 @@ def base_prompt(content=None):
     else:
         return [{"role": "user", "content": content}, {"role": "assistant", "content": "Okay, let's get started."}]
 
-# Function - Send user prompt to LLM for response
+# Function - Send user prompt to LLM for streaming response
 async def ask(prompt, sid=None):
-    global client, stats
+    global client, stats, llm_stream
     stats["ask"] += 1
     response = False
     debug(f"Context size = {len(client[sid]['context'])}")
@@ -455,9 +459,10 @@ async def ask(prompt, sid=None):
                 client[sid]["context"].append(message)
             else:
                 client[sid]["context"].append({"role": "user", "content": prompt})
-            debug(f"messages = {client[sid]['context']} - model = {MYMODEL}")
-            llm = openai.OpenAI(api_key=API_KEY, base_url=API_BASE)
-            response = llm.chat.completions.create(
+            debug(f"context -> LLM [{sid}] = {client[sid]['context']} - model = {MYMODEL}")
+            if not llm_stream:
+                llm_stream = openai.OpenAI(api_key=API_KEY, base_url=API_BASE)
+            response = llm_stream.chat.completions.create(
                 model=MYMODEL,
                 max_tokens=MAXTOKENS,
                 stream=True, # Send response chunks as LLM computes next tokens
@@ -475,17 +480,17 @@ async def ask(prompt, sid=None):
                 await sio.emit('update', {'update': MYMODEL, 'voice': 'model'})
             elif "maximum context length" in str(erro):
                 if len(prompt) > 1000:
-                    # assume we have very large prompt - cut out the middle
+                    # assume we have very large prompt - cut out the middle 
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
-                    debug(f"Reduce prompt size - now ~{len(prompt)/4}")
+                    log(f"Session {sid} - Reduce prompt size - now ~{len(prompt)/4}") # tokens are ~4 bytes
                 elif len(client[sid]["context"]) > 4:
                     # our context has grown too large, truncate the top
                     client[sid]["context"] = client[sid]["context"][:1] + client[sid]["context"][3:]
-                    debug(f"Truncate context: ~{len(client[sid]['context'])/4}")
+                    log(f"Session {sid} - Truncate context: ~{len(client[sid]['context'])/4}")
                 else:
                     # our context has grown too large, reset
                     client[sid]["context"] = base_prompt()   
-                    debug(f"Reset context ~{len(client[sid]['context'])/4}")
+                    log(f"Session {sid} - Reset context ~{len(client[sid]['context'])/4}")
             else:
                 log(f"ERROR: {str(erro)}")
                 stats["errors"] += 1
@@ -515,6 +520,8 @@ async def ask_llm(query, format=""):
         messages=content,
         extra_body=EXTRA_BODY,
     )
+    # close the openai client
+    await llm.close()
     debug(f"ask_llm -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
@@ -532,6 +539,8 @@ async def ask_context(messages):
         messages=messages,
         extra_body=EXTRA_BODY,
     )
+    # close the openai client
+    await llm.close()
     debug(f"ask_context -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
@@ -928,9 +937,6 @@ async def handle_connect(session_id, env):
                                 chunk = event_text
                                 completion_text += chunk
                                 tokens += 1
-                                if DEBUG:
-                                    print(string_to_hex(chunk), end="")
-                                    print(f" = [{chunk}]")
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
                         # Update footer with stats
                         await sio.emit('update', {'update': 
@@ -960,8 +966,7 @@ async def handle_connect(session_id, env):
                     # Signal response is done
                     await sio.emit('update', {'update': '', 'voice': 'done'},room=session_id)
                     client[session_id]["prompt"] = ''
-                    if DEBUG:
-                        print(f"AI: {completion_text}")
+                    debug(f"LLM -> client [{session_id}]: {completion_text}")
         except KeyError:
             debug(f"Thread ended: {session_id}")
         except Exception as erro:
@@ -1014,8 +1019,7 @@ async def handle_disconnect(session_id):
 async def handle_message(session_id, data):
     global client
     # Handle incoming user prompts and store them
-    debug(f'Received message from {session_id}')
-    debug(f"Received Data: {data}")
+    debug(f'Received message from {session_id}: {data}')
     if session_id not in client:
         log(f"Invalid session {session_id}")
         await handle_invalid_session(session_id)
@@ -1150,6 +1154,7 @@ async def handle_rag_command(session_id, p):
     if not WEAVIATE_HOST:
         await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'}, room=session_id)
         return
+    prompt = ""
     rag = p[4:].strip()
     parts = rag.split()
     library = ""
@@ -1214,7 +1219,6 @@ async def handle_rag_command(session_id, p):
                 await sio.emit('update', {'update': '[Unable to access Vector Database for %s]' % library, 'voice': 'user'}, room=session_id)
         else:
             await sio.emit('update', {'update': '[RAG Support Disabled - Check Config]', 'voice': 'user'}, room=session_id)
-
 
 async def handle_think_command(session_id, p):
     """
