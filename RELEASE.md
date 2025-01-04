@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.13 - Resource Fix
+
+* Chatbot - Add LLM connection closures for non-streaming ad-hoc calls (e.g. CoT calls). This has removed the resource warning as identified in Issue https://github.com/jasonacox/TinyLLM/issues/12. Improved debug messages.
+
 ## 0.15.12 - Update CoT
 
 * Chatbot - Update Chain of Thought (CoT) to check request before routing all prompts through the CoT process. Using `/think always` will force CoT for all requests. Additionally, CoT prompts updated for better responses.
