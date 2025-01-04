@@ -480,17 +480,17 @@ async def ask(prompt, sid=None):
                 await sio.emit('update', {'update': MYMODEL, 'voice': 'model'})
             elif "maximum context length" in str(erro):
                 if len(prompt) > 1000:
-                    # assume we have very large prompt - cut out the middle 
+                    # assume we have very large prompt - cut out the middle
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
-                    log(f"Session {sid} - Reduce prompt size - now ~{len(prompt)/4}") # tokens are ~4 bytes
+                    log(f"Session {sid} - Reduce prompt size - Now: ~{len(prompt)/4} tokens") # tokens are ~4 bytes
                 elif len(client[sid]["context"]) > 4:
                     # our context has grown too large, truncate the top
                     client[sid]["context"] = client[sid]["context"][:1] + client[sid]["context"][3:]
-                    log(f"Session {sid} - Truncate context: ~{len(client[sid]['context'])/4}")
+                    log(f"Session {sid} - Truncate context array: Now: {len(client[sid]['context'])} blocks")
                 else:
                     # our context has grown too large, reset
-                    client[sid]["context"] = base_prompt()   
-                    log(f"Session {sid} - Reset context ~{len(client[sid]['context'])/4}")
+                    client[sid]["context"] = base_prompt()
+                    log(f"Session {sid} - Reset context to base prompt - Now: ~{len(client[sid]['context'])/4} tokens")
             else:
                 log(f"ERROR: {str(erro)}")
                 stats["errors"] += 1
