@@ -6,7 +6,7 @@ The TinyLLM Chatbot is a web based python flask app that allows you to chat with
 
 The intent of this project is to build and interact with a locally hosted LLM using consumer grade hardware. With the Chatbot, we explore stitching context through conversational threads, rendering responses via realtime token streaming from LLM, and using external data to provide context for the LLM response (Retrieval Augmented Generation). With the Document Manager, we explore uploading documents to a Vector Database to use in retrieval augmented generation, allowing our Chatbot to produce answers grounded in knowledge that we provide.
 
-Below are steps to get the Chatbot and Document Mangager running.
+Below are steps to get the Chatbot and Document Manager running.
 
 ## Chatbot
 
@@ -47,7 +47,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 
 * Summarizing external websites and PDFs (paste a URL in chat window)
 * If a Weaviate host is specified, the chatbot can use the vector database information to respond. See [rag](../rag/weaviate/) for details on how to set up Weaviate.
-* Perform chain of thought (CoT) reasonging with `/think on` command.
+* Perform chain of thought (CoT) reasoning with `/think on` command (see [reasoning](./reasoning.md) for more details).
 * Command - There are information commands using `/`
 
 ```
