@@ -3,7 +3,7 @@
 ## 0.15.13 - Resource Fix
 
 * Chatbot - Add LLM connection closures for non-streaming ad-hoc calls (e.g. CoT calls). This has removed the resource warning as identified in Issue https://github.com/jasonacox/TinyLLM/issues/12. Improved debug messages.
-* Chatbot Documentation - Updated CoT prompts and added [reasoning.md](/chatbot/reasoning.md) for additional prompt options.
+* Chatbot Documentation - Updated CoT prompts and added [reasoning.md](https://github.com/jasonacox/TinyLLM/blob/main/chatbot/reasoning.md) for additional prompt options.
 
 ## 0.15.12 - Update CoT
 
