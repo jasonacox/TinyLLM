@@ -76,7 +76,7 @@ Each step should include detailed considerations such as analisying questions, s
 {final formatted, precise, and clear solution}
 <|end_of_solution|>
 ”’
-Now, try to solve the following question through the above guidelines:
+Now, considering the above conversation thread, try to solve the following question through the above guidelines:
 {prompt}
 ```
 
