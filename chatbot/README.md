@@ -128,6 +128,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 /rag off                                #   Disable
 /think on                               # Perform Chain of Thought thinking on relevant prompts
 /think off                              #   Disable
+/model [LLM_name]                       # Display or select LLM model to use
 ```
 
 See the [rag](../rag/) for more details about RAG.
