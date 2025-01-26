@@ -235,6 +235,8 @@ Provide the best conclusion based on the context.
 if ONESHOT:
     log("ONESHOT mode enabled.")
 
+# Helper Functions
+
 # Test OpenAI API
 def test_model():
     global API_KEY, API_BASE, MYMODEL, MAXTOKENS
@@ -257,12 +259,8 @@ def test_model():
             log(f"LLM: Models available: {model_list}")
             if not MYMODEL in model_list:
                 log(f"LLM: Model {MYMODEL} not found in models list.")
-                if len(model_list) == 1:
-                    log("LLM: Switching to default model")
-                    MYMODEL = model_list[0]
-                else:
-                    log(f"LLM: Unable to find requested model {MYMODEL} in models list.")
-                    raise Exception(f"Model {MYMODEL} not found")
+                log("LLM: Switching to an available model: %s" % model_list[0])
+                MYMODEL = model_list[0]
         # Test LLM
         log(f"LLM: Using and testing model {MYMODEL}")
         llm.chat.completions.create(
@@ -286,6 +284,19 @@ def test_model():
                 log(f"LLM: Maximum context length exceeded reducing MAXTOKENS to {MAXTOKENS}.")
         return False
 
+# Fetch list of LLM models
+def get_models():
+    global API_KEY, API_BASE
+    try:
+        llm = openai.OpenAI(api_key=API_KEY, base_url=API_BASE)
+        models = llm.models.list()
+        model_list = [model.id for model in models.data]
+        llm.close()
+        return model_list
+    except Exception as erro:
+        log(f"Unable to get models: {str(erro)}")
+        return []
+    
 while True:
     if test_model():
         break
@@ -463,7 +474,7 @@ async def ask(prompt, sid=None):
             if not llm_stream:
                 llm_stream = openai.OpenAI(api_key=API_KEY, base_url=API_BASE)
             response = llm_stream.chat.completions.create(
-                model=MYMODEL,
+                model=client[sid]["model"],
                 max_tokens=MAXTOKENS,
                 stream=True, # Send response chunks as LLM computes next tokens
                 temperature=TEMPERATURE,
@@ -477,7 +488,11 @@ async def ask(prompt, sid=None):
                 await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'},room=sid)
                 log("Model does not exist - retrying")
                 test_model()
-                await sio.emit('update', {'update': MYMODEL, 'voice': 'model'})
+                # set client model to default
+                client[sid]["model"] = MYMODEL
+                # update footer
+                await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {client[sid]['model']} ", 
+                                          'voice': 'footer'},room=sid)
             elif "maximum context length" in str(erro):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
@@ -502,7 +517,7 @@ async def ask(prompt, sid=None):
         client[sid]["context"].append({"role": "user", "content": "Help me remember."})
     return response
 
-async def ask_llm(query, format=""):
+async def ask_llm(query, format="", model=MYMODEL):
     # Ask LLM a question
     global stats
     stats["ask_llm"] += 1
@@ -513,7 +528,7 @@ async def ask_llm(query, format=""):
     debug(f"ask_llm: {content}")
     llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
     response = await llm.chat.completions.create(
-        model=MYMODEL,
+        model=model,
         max_tokens=MAXTOKENS,
         stream=False,
         temperature=TEMPERATURE,
@@ -525,14 +540,14 @@ async def ask_llm(query, format=""):
     debug(f"ask_llm -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
-async def ask_context(messages):
+async def ask_context(messages, model=MYMODEL):
     # Ask LLM a simple question
     global stats
     stats["ask_context"] += 1
     debug(f"ask_context: {messages}")
     llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
     response = await llm.chat.completions.create(
-        model=MYMODEL,
+        model=model,
         max_tokens=MAXTOKENS,
         stream=False,
         temperature=TEMPERATURE,
@@ -559,11 +574,11 @@ async def get_weather(location):
         return "Unable to fetch weather for %s" % location
 
 # Function - Get stock price for company
-async def get_stock(company):
+async def get_stock(company, model=MYMODEL):
     if ALPHA_KEY == "alpha_key":
         return "Unable to fetch stock price for %s - No Alpha Vantage API Key" % company
     # First try to get the ticker symbol
-    symbol = await ask_llm(f"What is the stock symbol for {company}? Respond with symbol.")
+    symbol = await ask_llm(f"What is the stock symbol for {company}? Respond with symbol.", model=model)
     if "none" in symbol.lower():
         return "Unable to fetch stock price for %s - No matching symbol" % company
     # Check to see if response has multiple lines and if so, pick the first one
@@ -816,6 +831,11 @@ async def alert(data: dict):
         log(f"Alert: Invalid token or missing message: {data}")
         return ({'status': 'Invalid Token or missing message'})
 
+# Return list of available models
+@app.get('/models')
+async def list_models():
+    return get_models()
+
 # Upload a file
 @app.post('/upload')
 async def upload_file(file: UploadFile = File(...), session_id: str = Form(...)):
@@ -902,7 +922,7 @@ async def handle_connect(session_id, env):
                             cot_check = expand_prompt(prompts["chain_of_thought_check"], {"prompt": client[session_id]["prompt"]})
                             debug("Running CoT check")
                             # Ask LLM for answers
-                            response = await ask_llm(cot_check)
+                            response = await ask_llm(cot_check, model=client[session_id]["model"])
                             if "a" in response.lower() or "d" in response.lower() or client[session_id]["cot_always"]:
                                 debug("Running deep thinking CoT to answer")
                                 # Build prompt for Chain of Thought and create copy of context
@@ -911,7 +931,7 @@ async def handle_connect(session_id, env):
                                 temp_context.append({"role": "user", "content": cot_prompt})
                                 # Send thinking status to client and ask LLM for answer
                                 await sio.emit('update', {'update': 'Thinking... ', 'voice': 'ai'},room=session_id)
-                                answer = await ask_context(temp_context)
+                                answer = await ask_context(temp_context, model=client[session_id]["model"])
                                 await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
                                 # Load request for CoT conclusion into conversational thread
                                 cot_prompt = expand_prompt(prompts["chain_of_thought_summary"], {"context_str": answer,
@@ -941,7 +961,7 @@ async def handle_connect(session_id, env):
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
                         # Update footer with stats
                         await sio.emit('update', {'update': 
-                                                  f"TinyLLM Chatbot {VERSION} - {MYMODEL} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
+                                                  f"TinyLLM Chatbot {VERSION} - {client[session_id]['model']} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
                                                   'voice': 'footer'},room=session_id)
                         # Check for link injection
                         if client[session_id]["links"]:
@@ -979,7 +999,7 @@ async def handle_connect(session_id, env):
         debug(f"Client reconnected: {session_id}")
     else:
         # New client connected
-        debug(f"Client connected: {session_id}")
+        debug(f"New client connected: {session_id}")
         # Limit number of clients
         if len(client) > MAXCLIENTS:
             log(f"Too many clients connected: {len(client)}")
@@ -1002,6 +1022,7 @@ async def handle_connect(session_id, env):
         client[session_id]["library"] = WEAVIATE_LIBRARY
         client[session_id]["results"] = RESULTS
         client[session_id]["image_data"] = ""
+        client[session_id]["model"] = MYMODEL
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -1014,6 +1035,24 @@ async def handle_disconnect(session_id):
         # shutdown thread
         client[session_id]["stop_thread_flag"] = True
         client.pop(session_id)
+    
+# Change the LLM model
+@sio.on('model')
+async def change_model(session_id, model):
+    global client
+    if session_id in client:
+        # Verify model is valid
+        list_of_models = await get_models()
+        if model not in list_of_models:
+            log(f"Requested invalid model {model}")
+            await sio.emit('update', {'update': f"Model not found: {model}", 'voice': 'user'}, room=session_id)
+            return
+        debug(f"Changing model for {session_id} to {model}")
+        client[session_id]["model"] = model
+    else:
+        log(f"Invalid session {session_id}")
+        await handle_invalid_session(session_id)
+    return {'status': 'Model changed'}
 
 # Client sent a message - handle it
 @sio.on('message')
@@ -1091,7 +1130,7 @@ async def handle_url_prompt(session_id, p):
 async def handle_command(session_id, p):
     command = p[1:].split(" ")[0].lower()
     if command == "":
-        await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock /think]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock /think/ /model]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
     elif command == "reset":
         await reset_context(session_id)
@@ -1109,6 +1148,8 @@ async def handle_command(session_id, p):
         await handle_stock_command(session_id, p)
     elif command == "think":
         await handle_think_command(session_id, p)
+    elif command == "model" or command == "models":
+        await handle_model_command(session_id, p)
     else:
         await sio.emit('update', {'update': '[Invalid command]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
@@ -1249,10 +1290,31 @@ async def handle_think_command(session_id, p):
         state = "ALWAYS" if client[session_id]["cot_always"] else state
         await sio.emit('update', {'update': f'[Chain of Thought is {state} - Commands: /think {{on|off|always}} ]', 'voice': 'user'}, room=session_id)
 
+async def handle_model_command(session_id, p):
+    # List or set LLM Models
+    words = p.split()
+    args = words[1] if len(words) > 1 else ""
+    if not args:
+        model_list = get_models()
+        msg = f'Current LLM Model: {client[session_id]["model"]}\n'
+        msg += f'- Available Models: {", ".join(model_list)}\n'
+        msg += '- Usage: /model {model_name}'
+        await sio.emit('update', {'update': msg, 'voice': 'user'}, room=session_id)
+        return
+    model_list = get_models()
+    if not args in model_list:
+        args = args.lower()
+    if args in model_list:
+        client[session_id]["model"] = args
+        await sio.emit('update', {'update': f'[LLM Model set to {args}]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': f"TinyLLM Chatbot {args} - {client[session_id]['model']}", 'voice': 'footer'}, room=session_id)
+    else:
+        await sio.emit('update', {'update': f'[Model {args} not found]', 'voice': 'user'}, room=session_id)
+
 async def handle_weather_command(session_id, p):
     debug("Weather prompt")
     await sio.emit('update', {'update': '%s [Weather Command Running...]' % p, 'voice': 'user'}, room=session_id)
-    location = await ask_llm(expand_prompt(prompts["location"], {"prompt": p}))
+    location = await ask_llm(expand_prompt(prompts["location"], {"prompt": p}), model=client[session_id]["model"])
     location = ''.join(e for e in location if e.isalnum() or e.isspace())
     if "none" in location.lower():
         context_str = await get_weather("")
@@ -1270,12 +1332,12 @@ async def handle_stock_command(session_id, p):
         return
     await sio.emit('update', {'update': '%s [Fetching Stock Price...]' % p, 'voice': 'user'}, room=session_id)
     debug(f"Stock Prompt: {prompt}")
-    company = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}))
+    company = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt}), model=client[session_id]["model"])
     company = ''.join(e for e in company if e.isalnum() or e.isspace())
     if "none" in company.lower():
         context_str = "Unable to fetch stock price - Unknown company specified."
     else:
-        context_str = await get_stock(company)
+        context_str = await get_stock(company, model=client[session_id]["model"])
     debug(f"Company = {company} - Context = {context_str}")
     await sio.emit('update', {'update': context_str, 'voice': 'ai'}, room=session_id)
     client[session_id]["context"].append({"role": "user", "content" : "What is the stock price for %s?" % company})
@@ -1295,7 +1357,7 @@ async def handle_normal_prompt(session_id, p):
         return
     if TOXIC_THRESHOLD != 99:
         # Test toxicity of prompt
-        toxicity_check = await ask_llm(expand_prompt(prompts["toxic_filter"], {"prompt": p}))
+        toxicity_check = await ask_llm(expand_prompt(prompts["toxic_filter"], {"prompt": p}), model=client[session_id]["model"])
         # extract floating point number from response
         toxicity = re.findall(r"[-+]?\d*\.\d+|\d+", toxicity_check)
         # convert float string to float
