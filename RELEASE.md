@@ -3,7 +3,7 @@
 ## 0.15.14 - Multi-model Support
 
 * Chatbot - Add `/model` command to list available models and dynamically set models during the session. 
-* LiteLLM - Added instructions to use LiteLLM proxy to combine local LLMs, AWS Bedrock and other LLMs.
+* LiteLLM - Added instructions to use LiteLLM proxy to combine local LLMs, AWS Bedrock, OpenAI, and other LLM options.
 
 ## 0.15.13 - Resource Fix
 

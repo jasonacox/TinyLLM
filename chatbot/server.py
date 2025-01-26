@@ -1293,8 +1293,7 @@ async def handle_think_command(session_id, p):
 async def handle_model_command(session_id, p):
     # List or set LLM Models
     words = p.split()
-    args = words[1].lower() if len(words) > 1 else ""
-    
+    args = words[1] if len(words) > 1 else ""
     if not args:
         model_list = get_models()
         msg = f'Current LLM Model: {client[session_id]["model"]}\n'
@@ -1302,8 +1301,9 @@ async def handle_model_command(session_id, p):
         msg += '- Usage: /model {model_name}'
         await sio.emit('update', {'update': msg, 'voice': 'user'}, room=session_id)
         return
-    
     model_list = get_models()
+    if not args in model_list:
+        args = args.lower()
     if args in model_list:
         client[session_id]["model"] = args
         await sio.emit('update', {'update': f'[LLM Model set to {args}]', 'voice': 'user'}, room=session_id)
