@@ -18,7 +18,7 @@ The Chatbot can be launched as a Docker container or via command line.
 # Create placeholder prompts.json
 touch prompts.json
 
-# Run Chatbot via Container - see run.sh for additional settings
+# Run Chatbot - see run.sh for additional settings
 docker run \
     -d \
     -p 5000:5000 \
@@ -31,7 +31,74 @@ docker run \
     jasonacox/chatbot
 ```
 
-### Command Line
+#### LiteLLM Proxy Option
+
+You can optionally set up LiteLLM to proxy multiple LLM backends (e.g. local vLLM, AWS Bedrock, OpenAI, Azure, Anthropic). See [LiteLLM documentation](https://docs.litellm.ai/docs/) for more information.
+
+First, define your LLM connections in the local `config.yaml` file (see [LiteLLM options](https://docs.litellm.ai/docs/providers)). Note, if you are using a cloud provider service like AWS Bedrock or Azure, make sure you set up access first.
+
+```yaml
+model_list:
+
+  - model_name: local-pixtral
+    litellm_params:
+      model: openai/mistralai/Pixtral-12B-2409
+      api_base: http://localhost:8000/v1
+      api_key: myAPIkey
+
+  - model_name: bedrock-titan
+    litellm_params:
+      model: bedrock/amazon.titan-text-premier-v1:0
+      aws_access_key_id: os.environ/CUSTOM_AWS_ACCESS_KEY_ID
+      aws_secret_access_key: os.environ/CUSTOM_AWS_SECRET_ACCESS_KEY
+      aws_region_name: os.environ/CUSTOM_AWS_REGION_NAME
+
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: openai/gpt-3.5-turbo
+      api_key: os.environ/OPENAI_API_KEY
+```
+
+Now,run the LiteLLM container. Edit this script to include your AWS and/or OpenAI keys for the models you want.
+
+```bash
+# Run LiteLLM Proxy - see
+docker run \
+    -d \
+    -v $(pwd)/config.yaml:/app/config.yaml \
+    -e CUSTOM_AWS_ACCESS_KEY_ID=your_AWS_key_here \
+    -e CUSTOM_AWS_SECRET_ACCESS_KEY=your_AWS_secret_here \
+    -e CUSTOM_AWS_REGION_NAME=us-east-1 \
+    -e OPENAI_API_KEY=your_OpenAI_key_option \
+    -p 4000:4000 \
+    --name $CONTAINER \
+    --restart unless-stopped \
+    ghcr.io/berriai/litellm:main-latest \
+    --config /app/config.yaml 
+```
+
+Finally, set up the chatbot to use LiteLLM:
+
+```bash
+# Run Chatbot - see run.sh for additional settings
+docker run \
+    -d \
+    -p 5000:5000 \
+    -e PORT=5000 \
+    -e OPENAI_API_BASE="http://localhost:4000/v1" \
+    -e LLM_MODEL="local-pixtral" \
+    -e TZ="America/Los_Angeles" \
+    -v $PWD/.tinyllm:/app/.tinyllm \
+    --name chatbot \
+    --restart unless-stopped \
+    jasonacox/chatbot
+```
+
+The Chatbot will try to use the specified model (`LLM_MODEL`) but if it is not available, it will select another available model. You can list and change the models inside the chatbot using the `/model` commands.
+
+View the chatbot at http://localhost:5000
+
+#### Command Line Option
 
 ```bash
 # Install required packages

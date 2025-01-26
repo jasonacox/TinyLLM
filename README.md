@@ -208,11 +208,15 @@ Here are some suggested models that work well with vLLM.
 | Mistral v0.2 7B | None | [mistralai/Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2) | 32k | Apache 2 |
 | Mistral v0.1 7B AWQ | AWQ | [TheBloke/Mistral-7B-Instruct-v0.1-AWQ](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-AWQ) | 32k | Apache 2 |
 | Mixtral-8x7B | None | [mistralai/Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 32k | Apache 2 |
+| Pixtral-12B-2409 12B Vision | None | [mistralai/Pixtral-12B-2409](https://huggingface.co/mistralai/Pixtral-12B-2409) | 128k | Apache 2 |
 | Meta Llama-3 8B | None | [meta-llama/Meta-Llama-3-8B-Instruct](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct) | 8k | Meta |
-| Qwen-2 7B | None | [Qwen/Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct) | 130k | Apache 2 |
+| Meta Llama-3.2 11B Vision | FP8 | [neuralmagic/Llama-3.2-11B-Vision-Instruct-FP8-dynamic](https://huggingface.co/neuralmagic/Llama-3.2-11B-Vision-Instruct-FP8-dynamic) | 128k | Meta |
+| Qwen-2.5 7B | None | [Qwen/Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) | 128k | Apache 2 |
 | Yi-1.5 9B | None | [01-ai/Yi-1.5-9B-Chat-16K](https://huggingface.co/01-ai/Yi-1.5-9B-Chat-16K) | 16k | Apache 2 |
 | Phi-3 Small 7B | None | [microsoft/Phi-3-small-8k-instruct](https://huggingface.co/microsoft/Phi-3-small-8k-instruct) | 16k | MIT |
 | Phi-3 Medium 14B | None | [microsoft/Phi-3-medium-4k-instruct](https://huggingface.co/microsoft/Phi-3-medium-4k-instruct) | 4k | MIT |
+| Phi-3.5 Vision 4B | None | [microsoft/Phi-3.5-vision-instruct](https://huggingface.co/micrmicrosoft/Phi-3.5-vision-instruct) | 128k | MIT |
+| Phi-4 14B | None | [microsoft/phi-4](https://huggingface.co/microsoft/phi-4) | 16k | MIT |
 
 ## LLM Tools
 
