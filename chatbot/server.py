@@ -120,13 +120,15 @@ def debug(text):
     logger.debug(text)
 
 # Configuration Settings
-API_KEY = os.environ.get("OPENAI_API_KEY", "open_api_key")                  # Required, use bogus string for Llama.cpp
+API_KEY = os.environ.get("OPENAI_API_KEY", "Asimov-3-Laws")                 # Required, use bogus string for local LLMs
 API_BASE = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Required, use https://api.openai.com for OpenAI
+LITELLM_PROXY = os.environ.get("LITELLM_PROXY", None)                       # Optional - LITELLM Proxy URL
+LITELLM_KEY = os.environ.get("LITELLM_KEY", "")                             # Optional - LITELLM Secret Key - Begins with sk-
 AGENTNAME = os.environ.get("AGENT_NAME", "")                                # Set the name of your bot
 MYMODEL = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
 MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Maximum number of concurrent clients
-MAXTOKENS = int(os.environ.get("MAXTOKENS", 16*1024))                       # Maximum number of tokens to send to LLM
+MAXTOKENS = int(os.environ.get("MAXTOKENS", 0))                             # Maximum number of tokens to send to LLM for RAG
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
 PROMPT_FILE = os.environ.get("PROMPT_FILE", f".tinyllm/prompts.json")       # File to store system prompts
@@ -147,11 +149,17 @@ if EXTRA_BODY:
         log("EXTRA_BODY is not valid JSON")
         EXTRA_BODY = {}
 else:
-    if API_BASE.startswith("https://api.openai.com"):
+    if API_BASE.startswith("https://api.openai.com") or LITELLM_PROXY:
         EXTRA_BODY = {}
     else:
         # Extra stop tokens are needed for some non-OpenAI LLMs
         EXTRA_BODY = {"stop_token_ids":[128001, 128009]}
+
+# LiteLLM Proxy
+if LITELLM_PROXY:
+    log(f"Using LiteLLM Proxy at {LITELLM_PROXY}")
+    API_BASE = LITELLM_PROXY
+    API_KEY = LITELLM_KEY
 
 # RAG Configuration Settings
 WEAVIATE_HOST = os.environ.get("WEAVIATE_HOST", "")                         # Empty = no Weaviate support
@@ -262,10 +270,9 @@ def test_model():
                 log("LLM: Switching to an available model: %s" % model_list[0])
                 MYMODEL = model_list[0]
         # Test LLM
-        log(f"LLM: Using and testing model {MYMODEL}")
+        log(f"LLM: Using model: {MYMODEL}")
         llm.chat.completions.create(
             model=MYMODEL,
-            max_tokens=MAXTOKENS,
             stream=False,
             temperature=TEMPERATURE,
             messages=[{"role": "user", "content": "Hello"}],
@@ -278,10 +285,6 @@ def test_model():
     except Exception as erro:
         log("OpenAI API Error: %s" % erro)
         log(f"Unable to connect to OpenAI API at {API_BASE} using model {MYMODEL}.")
-        if "maximum context length" in str(erro):
-            if MAXTOKENS > 1024:
-                MAXTOKENS = int(MAXTOKENS / 2)
-                log(f"LLM: Maximum context length exceeded reducing MAXTOKENS to {MAXTOKENS}.")
         return False
 
 # Fetch list of LLM models
@@ -308,9 +311,9 @@ while True:
 if WEAVIATE_HOST != "":
     try:
         rag_documents.connect()
-        log(f"Connected to Weaviate at {WEAVIATE_HOST}")
+        log(f"RAG: Connected to Weaviate at {WEAVIATE_HOST}")
     except Exception as err:
-        log(f"Unable to connect to Weaviate at {WEAVIATE_HOST} - {str(err)}")
+        log(f"RAG: Unable to connect to Weaviate at {WEAVIATE_HOST} - {str(err)}")
         WEAVIATE_HOST = ""
         log("RAG support disabled.")
 
@@ -335,7 +338,7 @@ def query_index(query, library, num_results=RESULTS):
         if ans['content'] == previous_content:
             continue
         new_content = ans['content']
-        if len(new_content) > MAXTOKENS:
+        if MAXTOKENS and len(new_content) > MAXTOKENS:
             debug("RAG: Content size exceeded maximum size using chunk.")
             # Cut the middle and insert the chunk in the middle
             new_content = ans['content'][:MAXTOKENS//4] + "..." + (ans.get('chunk') or " ") + "..." + ans['content'][-MAXTOKENS//4:]
@@ -475,7 +478,6 @@ async def ask(prompt, sid=None):
                 llm_stream = openai.OpenAI(api_key=API_KEY, base_url=API_BASE)
             response = llm_stream.chat.completions.create(
                 model=client[sid]["model"],
-                max_tokens=MAXTOKENS,
                 stream=True, # Send response chunks as LLM computes next tokens
                 temperature=TEMPERATURE,
                 messages=client[sid]["context"],
@@ -529,7 +531,6 @@ async def ask_llm(query, format="", model=MYMODEL):
     llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
     response = await llm.chat.completions.create(
         model=model,
-        max_tokens=MAXTOKENS,
         stream=False,
         temperature=TEMPERATURE,
         messages=content,
@@ -548,7 +549,6 @@ async def ask_context(messages, model=MYMODEL):
     llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
     response = await llm.chat.completions.create(
         model=model,
-        max_tokens=MAXTOKENS,
         stream=False,
         temperature=TEMPERATURE,
         messages=messages,
@@ -718,13 +718,15 @@ async def home(format: str = None):
         "LLM Main User Queries": stats["ask"],
         "LLM Helper Queries": stats["ask_llm"],
         "LLM CoT Context Queries": stats["ask_context"],
+        "OpenAI API URL (OPENAI_API_URL)": API_BASE if not LITELLM_PROXY else "Disabled",
         "OpenAI API Key (OPENAI_API_KEY)": "************" if API_KEY != "" else "Not Set",
-        "OpenAI API URL (OPENAI_API_URL)": API_BASE,
+        "LiteLLM Proxy (LITELLM_PROXY)": LITELLM_PROXY or "Disabled",
+        "LiteLLM Secret Key (LITELLM_KEY)": "************" if LITELLM_KEY != "" else "Not Set",
         "Agent Name (AGENT_NAME)": AGENTNAME,
         "LLM Model (LLM_MODEL)": MYMODEL,
         "Debug Mode (DEBUG)": DEBUG,
         "Current Clients (MAXCLIENTS)": f"{len(client)} of {MAXCLIENTS}",
-        "LLM Max tokens Limit (MAXTOKENS)": MAXTOKENS,
+        "LLM Max Tokens to Send (MAXTOKENS)": MAXTOKENS,
         "LLM Temperature (TEMPERATURE)": TEMPERATURE,
         "Server Port (PORT)": PORT,
         "Saved Prompts (PROMPT_FILE)": PROMPT_FILE,

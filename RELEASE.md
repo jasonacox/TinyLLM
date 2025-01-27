@@ -1,5 +1,12 @@
 # Releases
 
+## 0.15.15 - Docker Compose
+
+* Quick Start using Docker compose for Chatbot.
+* Chatbot - Bug Fix: Remove token limit on response. The `MAXTOKENS` setting is used to prune content sent to LLM. If not set, no pruning will happen.
+* Chatbot - Added additional LiteLLM support with the environmental settings `LITELLM_PROXY` and `LITELLM_KEY`. If set, these will override the OpenAI API settings to use LiteLLM and will remove `EXTRA_BODY` defaults that conflict with LiteLLM.
+* LiteLLM - Added docker compose to start LiteLLM, PostgreSQL, and Chatbot.
+
 ## 0.15.14 - Multi-model Support
 
 * Chatbot - Add `/model` command to list available models and dynamically set models during the session. 

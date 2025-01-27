@@ -12,7 +12,26 @@ Below are steps to get the Chatbot and Document Manager running.
 
 The Chatbot can be launched as a Docker container or via command line.
 
-### Docker
+### Method 1: Docker Compose
+
+A quickstart method is located in the [litellm](./litellm/) folder. This setup will launch the Chatbot + LiteLLM and PostgreSQL. This works on Mac and Linux (or WSL) systems.
+
+```bash
+cd litellm
+
+# Edit compose.yaml and config.yaml for your setup.
+nano compose.yaml
+nano config.yaml
+
+# Launch
+docker compose up -d
+```
+
+The containers will download and launch. The database will be set up in the `./db` folder.
+- The Chatbot will be available at http://localhost:5000
+- The LiteLLM usage dashboard will be available at http://localhost:4000/ui
+
+### Method 2: Docker
 
 ```bash
 # Create placeholder prompts.json
@@ -85,7 +104,8 @@ docker run \
     -d \
     -p 5000:5000 \
     -e PORT=5000 \
-    -e OPENAI_API_BASE="http://localhost:4000/v1" \
+    -e LITELLM_PROXY="http://localhost:4000/v1" \
+    -e LITELLM_KEY="sk-mykey" \
     -e LLM_MODEL="local-pixtral" \
     -e TZ="America/Los_Angeles" \
     -v $PWD/.tinyllm:/app/.tinyllm \
@@ -98,7 +118,7 @@ The Chatbot will try to use the specified model (`LLM_MODEL`) but if it is not a
 
 View the chatbot at http://localhost:5000
 
-#### Command Line Option
+### Method 3: Command Line
 
 ```bash
 # Install required packages
