@@ -1,0 +1,46 @@
+# LiteLLM Model Definitions
+#
+# This config.yaml file defines the models and settings for the LiteLLM proxy.
+# See https://docs.litellm.ai/docs/providers for examples.
+#
+# https://github.com/jasonacox/TinyLLM
+
+model_list:
+
+  # Local OpenAI Compatible API - e.g. vLLM
+  - model_name: local-pixtral
+    litellm_params:
+      model: openai/mistralai/Pixtral-12B-2409
+      api_base: os.environ/LOCAL_LLM_URL
+      api_key: os.environ/LOCAL_LLM_KEY
+
+  # AWS Bedrock Model Examples
+  - model_name: aws-titan
+    litellm_params:
+      model: bedrock/amazon.titan-text-premier-v1:0
+      aws_access_key_id: os.environ/CUSTOM_AWS_ACCESS_KEY_ID
+      aws_secret_access_key: os.environ/CUSTOM_AWS_SECRET_ACCESS_KEY
+      aws_region_name: os.environ/CUSTOM_AWS_REGION_NAME
+  - model_name: aws-mixtral
+    litellm_params:
+      model: bedrock/mistral.mixtral-8x7b-instruct-v0:1
+      aws_access_key_id: os.environ/CUSTOM_AWS_ACCESS_KEY_ID
+      aws_secret_access_key: os.environ/CUSTOM_AWS_SECRET_ACCESS_KEY
+      aws_region_name: os.environ/CUSTOM_AWS_REGION_NAME
+
+  # OpenAI Model Example - GPT-3.5 Turbo
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: openai/gpt-3.5-turbo
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Ollama Model Example
+  - model_name: ollama-llama3.1           
+    litellm_params:
+      model: ollama_chat/llama3.1
+      api_base: http://ollama:11434
+
+# General Settings for LiteLLM - no changes needed
+general_settings: 
+  master_key: sk-3-laws-safe 
+  database_url: "postgresql://litellm:3-laws-safe@container-pg:5432/litellm"

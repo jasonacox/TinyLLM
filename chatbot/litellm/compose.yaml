@@ -1,0 +1,84 @@
+# TinyLLM Chatbot with LiteLLM + PostgreSQL
+#
+# This docker-compose file will start a TinyLLM Chatbot with a LiteLLM proxy
+# and a PostgreSQL database.  The Chatbot will connect to the LiteLLM proxy
+# to access the models.  The LiteLLM proxy will connect to the PostgreSQL
+# database to store usage data.
+#
+# Instructions:
+#   1. Edit the config.yaml file to add your models and settings.
+#   2. Edit the environment variables in the services section below as needed.
+#   3. Run `docker-compose up -d` to start the services.
+# 
+# The Chatbot will be available at http://localhost:5000
+# The LiteLLM proxy will be available at http://localhost:4000/ui
+# The PostgreSQL pgAdmin interface will be available at http://localhost:5050
+#
+# https://github.com/jasonacox/TinyLLM
+
+services:
+  # PostgreSQL database setup - No changes needed
+  postgres:
+    container_name: container-pg
+    image: postgres
+    hostname: localhost
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: 3-laws-safe
+      POSTGRES_DB: litellm
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # pgAdmin interface for PostgreSQL - Edit login credentials as needed
+  pgadmin:
+    container_name: container-pgadmin
+    image: dpage/pgadmin4
+    depends_on:
+      - postgres
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: 3-laws-safe
+    restart: unless-stopped
+
+  # LiteLLM proxy service - Edit KEYs and LOCAL settings as needed
+  litellm-proxy:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm-proxy
+    ports:
+      - "4000:4000"
+    environment:
+      - CUSTOM_AWS_ACCESS_KEY_ID=YourAWSAccessKeyID
+      - CUSTOM_AWS_SECRET_ACCESS_KEY=YourAWSAccessKeyID
+      - CUSTOM_AWS_REGION_NAME=us-east-1
+      - OPENAI_API_KEY=YourOpenAIAPIKey
+      - LITELLM_MASTER_KEY=sk-3-laws-safe
+      - MASTER_KEY=sk-3-laws-safe
+      - LOCAL_LLM_URL=http://localhost:8000/v1
+      - LOCAL_LLM_KEY=sk-3-laws-safe
+      - DATABASE_URL=postgresql://litellm:3-laws-safe@container-pg:5432/litellm
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    command: --config /app/config.yaml
+    restart: unless-stopped
+
+  # Chatbot service - No changes needed
+  chatbot:
+    image: jasonacox/chatbot
+    container_name: chatbot
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - LITELLM_PROXY=http://litellm-proxy:4000/v1
+      - LITELLM_KEY=sk-3-laws-safe
+      - LLM_MODEL=local-pixtral
+      - TZ=America/Los_Angeles
+    volumes:
+      - ./.tinyllm:/app/.tinyllm
+    restart: unless-stopped
+
