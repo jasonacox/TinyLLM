@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.16 - Think Tags
+
+* Chatbot - Add `/think filter` command and `THINK_FILTER` envrionmental setting to have chatbot filter out (no display) the \<think>\</think> content from models that have built in CoT reasoning like [Deepseek R1](https://huggingface.co/deepseek-ai/DeepSeek-R1).
+
 ## 0.15.15 - Docker Compose
 
 * Quick Start using Docker compose for Chatbot.
