@@ -140,6 +140,7 @@ RAG_ONLY = os.environ.get("RAG_ONLY", "false").lower() == "true"            # Se
 EXTRA_BODY = os.environ.get("EXTRA_BODY", None)                             # Extra body parameters for OpenAI API
 TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # Toxicity threshold for responses 0-1 or 99 disable
 THINKING = os.environ.get("THINKING", "false").lower() == "true"            # Set to True to enable thinking mode by default
+THINK_FILTER = os.environ.get("THINK_FILTER", "false").lower() == "true"    # Set to True to enable thinking filter
 
 # Convert EXTRA_BODY to dictionary if it is proper JSON
 if EXTRA_BODY:
@@ -744,6 +745,7 @@ async def home(format: str = None):
         "Toxicity Threshold (TOXIC_THRESHOLD)": TOXIC_THRESHOLD,
         "Extra Body Parameters (EXTRA_BODY)": EXTRA_BODY,
         "Thinking Mode (THINKING)": THINKING,
+        "Think Tag Filter (THINK_FILTER)": THINK_FILTER,
     }
     if format == "json":
         return data
@@ -949,18 +951,30 @@ async def handle_connect(session_id, env):
                         response= await ask(client[session_id]["prompt"],session_id)
                         completion_text = ''
                         tokens = 0
+                        in_thinking = False
                         # Iterate through the stream of tokens and send to client
                         stime = time.time()
                         for event in response:
                             event_text = event.choices[0].delta.content
-                            # Skip prefixed newlines
-                            if tokens == 0 and event_text == "\n":
+                            # check for no tokens or a string just full of nany number of newlines only
+                            if tokens == 0 and event_text.strip() == "":
                                 continue
                             if event_text:
+                                if client[session_id]["think"]:
+                                    if "<think>" in event_text:
+                                        in_thinking = True
+                                        await sio.emit('update', {'update': '', 'voice': 'ai'},room=session_id)
+                                        continue
+                                    elif "</think>" in event_text:
+                                        in_thinking = False
+                                        token = 0
+                                        continue
+                                    if in_thinking:
+                                        continue
                                 chunk = event_text
                                 completion_text += chunk
                                 tokens += 1
-                                await sio.emit('update', {'update': chunk, 'voice': 'ai'},room=session_id)
+                                await sio.emit('update', {'update': chunk, 'voice': 'ai'}, room=session_id)
                         # Update footer with stats
                         await sio.emit('update', {'update': 
                                                   f"TinyLLM Chatbot {VERSION} - {client[session_id]['model']} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
@@ -1025,6 +1039,7 @@ async def handle_connect(session_id, env):
         client[session_id]["results"] = RESULTS
         client[session_id]["image_data"] = ""
         client[session_id]["model"] = MYMODEL
+        client[session_id]["think"] = THINK_FILTER
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -1270,6 +1285,7 @@ async def handle_think_command(session_id, p):
     /think on
     /think off
     /think always
+    /think filter
     """
     think = p[6:].strip()
     parts = think.split()
@@ -1287,10 +1303,24 @@ async def handle_think_command(session_id, p):
         client[session_id]["cot_always"] = True
         await sio.emit('update', {'update': '[Chain of Thought Mode Always On]', 'voice': 'user'}, room=session_id)
         return
+    elif parts and parts[0] == "filter":
+        state = ""
+        if len(parts) >= 2:
+            if parts[1] == "on":
+                client[session_id]["think"] = True
+                state = "ON"
+            else:
+                client[session_id]["think"] = False
+                state = "OFF"
+        else:
+            client[session_id]["think"] = not client[session_id]["think"]
+            state = "ON" if client[session_id]["think"] else "OFF"
+        await sio.emit('update', {'update': f'[Think Filter is {state}]', 'voice': 'user'}, room=session_id)
+        return
     else:
         state = "ON" if client[session_id]["cot"] else "OFF"
         state = "ALWAYS" if client[session_id]["cot_always"] else state
-        await sio.emit('update', {'update': f'[Chain of Thought is {state} - Commands: /think {{on|off|always}} ]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': f'Chain of Thought is {state}\n - Chain of Thought: /think {{on|off|always}}\n - Filter Think Tags: /think filter {{on|off}}', 'voice': 'user'}, room=session_id)
 
 async def handle_model_command(session_id, p):
     # List or set LLM Models
