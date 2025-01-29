@@ -148,6 +148,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 /rag off                                #   Disable
 /think on                               # Perform Chain of Thought thinking on relevant prompts
 /think off                              #   Disable
+/think filter [on|off]                  # Have chatbot filter out <think></think> content
 /model [LLM_name]                       # Display or select LLM model to use
 ```
 
