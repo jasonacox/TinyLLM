@@ -1,5 +1,11 @@
 # Releases
 
+## 0.15.17 - Model Selector
+
+* Chatbot - The `/model` command will now initiate a UI popup window and dropdown to allow the use to select a model from the list of available models. Alternatively, the user can specify the model with the command (e.g. `/model mixtral`) to select it immediately without the popup.
+
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/3b5740cb-e768-4174-aaf6-118f4080f68e" />
+
 ## 0.15.16 - Think Tags
 
 * Chatbot - Add `/think filter` command and `THINK_FILTER` envrionmental setting to have chatbot filter out (no display) the \<think>\</think> content from models that have built in CoT reasoning like [Deepseek R1](https://huggingface.co/deepseek-ai/DeepSeek-R1).

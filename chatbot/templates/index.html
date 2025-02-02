@@ -226,6 +226,12 @@
             border-radius: 5px;
             padding: 5px;
         }
+        .select-value {
+            width: calc(100% - 10px);
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 5px;
+        }
         .leftcolumn {
             width: 20px;
         }
@@ -308,9 +314,62 @@
             </div>
         </div>
     </div>
+    <div class="popup-overlay" id="modelOverlay">
+        <div class="popup-box" style="width: 90%;">
+            <h2 class="popup-title">LLM Models</h2>
+            <div class="popup-content">
+                <p class="popup-content-text">Use dropdown to select a model to use for the chatbot.</p>
+                <form id="modelForm">
+                    <div class="popup-table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="leftcolumn">Select Model</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <select id="modelSelect" class="select-value">
+                                            <option value="gpt2">GPT-2</option>
+                                            <option value="gpt3">GPT-3</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <p>
+                                            <strong>Current Model:</strong> <span id="currentModel">FPO</span>
+                                        </p>  
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>  
+                                        <p>
+                                            <strong>List of Models:</strong> <br>
+                                            <span id="modelList">FPO</span>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+                <div class="popup-divider"></div>
+                <div class="popup-button-container">
+                    <div id="popup-buttons">
+                        <button type="button" class="dialogue-button" onclick="closeDialogue()">Close</button>
+                        <button type="button" class="dialogue-button" onclick="saveModel()">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
+
         // Pop-up dialogue functions
 
+        // Function to open the settings dialogue
         function openDialogue() {
             document.getElementById("dialogueOverlay").style.display = "flex";
             // First clear the form from any previous settings
@@ -341,18 +400,69 @@
                 });
         }
 
+        // Function to open the model selection dialogue
+        function openModelDialogue() {
+            console.log('Opening model dialogue');
+            document.getElementById("modelOverlay").style.display = "flex";
+            // First clear the form from any previous settings
+            const modelSelect = document.getElementById('modelSelect');
+            modelSelect.innerHTML = '';
+            // Fetch the current models and populate the form
+            fetch('/models')
+            .then(response => response.json())
+            .then(data => {
+                const currentModel = getModel();
+                document.getElementById('currentModel').textContent = currentModel;
+                // List models as bullets
+                const modelList = document.getElementById('modelList');
+                modelList.innerHTML = data.map(model => `<li>${model}</li>`).join('');
+                // Create options for the models
+                data.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                if (model === currentModel) {
+                    option.selected = true;
+                }
+                modelSelect.appendChild(option);
+                });
+            });
+        }
+
+        // Function to read the footer and extract the model
+        function getModel() {
+            const footer = document.getElementById('footer').textContent;
+            const model = footer.split(' - ')[1];
+            return model;
+        }
+
+        // Function to save the selected model
+        function saveModel() {
+            const modelSelect = document.getElementById('modelSelect');
+            const selectedModel = modelSelect.value;
+            console.log('Selected model:', selectedModel);
+            // Send the selected model to server via socketio message
+            socket.emit('model', selectedModel);
+            // Close the dialogue
+            closeDialogue();
+        }
+
+        // Function to highlight the textarea when changed
         function highlightTextarea(textarea) {
             textarea.style.backgroundColor = '#ffffcc';
         }
     
+        // Generic function to close the dialogue
         function closeDialogue() {
             document.getElementById("dialogueOverlay").style.display = "none";
             document.getElementById("debugOverlay").style.display = "none";
+            document.getElementById("modelOverlay").style.display = "none";
             // Set focus back to the text input field
             var textInput = document.getElementById("messageInput");
             textInput.focus();
         }
 
+        // Function to reset the settings to the default values
         function resetSettings() {
             // Verify that the user wants to reset the settings
             if (!confirm('Are you sure you want to reset the settings to the default values?')) {
@@ -377,6 +487,7 @@
                 });
         }
 
+        // Function to save the settings to the server
         function saveSettings() {
             // Combine name and value into a JSON payload
             const payload = {};
@@ -631,6 +742,12 @@
                 console.error('Error:', error);
             });
         }
+
+        // Function to handle model dialog request
+        socket.on('model_dialog', function(data) {
+            console.log('Received model dialog request');
+            openModelDialogue();
+        });
 
         // Function to handle updates received from the server
         socket.on('update', function(data) {

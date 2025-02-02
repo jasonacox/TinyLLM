@@ -1059,13 +1059,16 @@ async def change_model(session_id, model):
     global client
     if session_id in client:
         # Verify model is valid
-        list_of_models = await get_models()
+        list_of_models = get_models()
         if model not in list_of_models:
             log(f"Requested invalid model {model}")
             await sio.emit('update', {'update': f"Model not found: {model}", 'voice': 'user'}, room=session_id)
             return
         debug(f"Changing model for {session_id} to {model}")
         client[session_id]["model"] = model
+        # Update footer
+        await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {model}", 'voice': 'footer'}, room=session_id)
+        await sio.emit('update', {'update': f'[Model changed to {model}]', 'voice': 'user'}, room=session_id)
     else:
         log(f"Invalid session {session_id}")
         await handle_invalid_session(session_id)
@@ -1327,11 +1330,13 @@ async def handle_model_command(session_id, p):
     words = p.split()
     args = words[1] if len(words) > 1 else ""
     if not args:
-        model_list = get_models()
-        msg = f'Current LLM Model: {client[session_id]["model"]}\n'
-        msg += f'- Available Models: {", ".join(model_list)}\n'
-        msg += '- Usage: /model {model_name}'
-        await sio.emit('update', {'update': msg, 'voice': 'user'}, room=session_id)
+         # Open Model Dialog
+        await sio.emit('model_dialog', {}, room=session_id)
+        #model_list = get_models()
+        #msg = f'Current LLM Model: {client[session_id]["model"]}\n'
+        #msg += f'- Available Models: {", ".join(model_list)}\n'
+        #msg += '- Usage: /model {model_name}'
+        #await sio.emit('update', {'update': msg, 'voice': 'user'}, room=session_id)
         return
     model_list = get_models()
     if not args in model_list:

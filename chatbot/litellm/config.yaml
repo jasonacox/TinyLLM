@@ -14,6 +14,12 @@ model_list:
       api_base: os.environ/LOCAL_LLM_URL
       api_key: os.environ/LOCAL_LLM_KEY
 
+  # OpenAI Model Example - GPT-3.5 Turbo
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: openai/gpt-3.5-turbo
+      api_key: os.environ/OPENAI_API_KEY
+
   # AWS Bedrock Model Examples
   - model_name: aws-titan
     litellm_params:
@@ -28,11 +34,13 @@ model_list:
       aws_secret_access_key: os.environ/CUSTOM_AWS_SECRET_ACCESS_KEY
       aws_region_name: os.environ/CUSTOM_AWS_REGION_NAME
 
-  # OpenAI Model Example - GPT-3.5 Turbo
-  - model_name: gpt-3.5-turbo
+  # Microsoft Azure OpenAI Examples
+  - model_name: azure-gpt-4o-mini
     litellm_params:
-      model: openai/gpt-3.5-turbo
-      api_key: os.environ/OPENAI_API_KEY
+      model: azure/gpt-4o-mini
+      api_base: os.environ/AZURE_API_BASE
+      api_version: "2023-05-15"
+      api_key: os.environ/AZURE_API_KEY
 
   # Ollama Model Example
   - model_name: ollama-llama3.1           

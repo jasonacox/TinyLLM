@@ -149,7 +149,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 /think on                               # Perform Chain of Thought thinking on relevant prompts
 /think off                              #   Disable
 /think filter [on|off]                  # Have chatbot filter out <think></think> content
-/model [LLM_name]                       # Display or select LLM model to use
+/model [LLM_name]                       # Display or select LLM model to use (dialogue popup)
 ```
 
 See the [rag](../rag/) for more details about RAG.
@@ -176,6 +176,11 @@ The `/news` command will fetch the latest news and have the LLM summarize the to
 
 <img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
 
+#### Model Selection
+
+The `/model` command will popup the list of available models. Use the dropdown to select your model. Alternatively, specify the model with the command (e.g. `/model mixtral`) to select it immediately without the popup.
+
+<img width="1168" alt="image" src="https://github.com/user-attachments/assets/3b5740cb-e768-4174-aaf6-118f4080f68e" />
 
 ## Document Manager (Weaviate)
 
