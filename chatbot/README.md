@@ -162,25 +162,25 @@ The examples below use a Llama 2 7B model served up with the OpenAI API compatib
 
 Open http://127.0.0.1:5000 - Example session:
 
-<img width="946" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
+<img width="800" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/08097e39-9c00-4f75-8c9a-d329c886b148">
 
 #### Read URL
 
 If a URL is pasted in the text box, the chatbot will read and summarize it.
 
-<img width="810" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/44d8a2f7-54c1-4b1c-8471-fdf13439be3b">
+<img width="800" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/44d8a2f7-54c1-4b1c-8471-fdf13439be3b">
 
 #### Current News
 
 The `/news` command will fetch the latest news and have the LLM summarize the top ten headlines. It will store the raw feed in the context prompt to allow follow-up questions.
 
-<img width="930" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
+<img width="800" alt="image" src="https://github.com/jasonacox/TinyLLM/assets/836718/2732fe07-99ee-4795-a8ac-42d9a9712f6b">
 
 #### Model Selection
 
 The `/model` command will popup the list of available models. Use the dropdown to select your model. Alternatively, specify the model with the command (e.g. `/model mixtral`) to select it immediately without the popup.
 
-<img width="1168" alt="image" src="https://github.com/user-attachments/assets/3b5740cb-e768-4174-aaf6-118f4080f68e" />
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/e21ad350-6ae0-47de-b7ee-135176d66fe7" />
 
 ## Document Manager (Weaviate)
 
@@ -229,9 +229,9 @@ Note - You can restrict collections by providing the environmental variable `COL
 
 You can now create collections (libraries of content) and upload files and URLs to be stored into the vector database for the Chatbot to reference.
 
-<img width="1035" alt="image" src="https://github.com/user-attachments/assets/544c75d4-a1a3-4c32-a95f-7f12ff11a450">
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/544c75d4-a1a3-4c32-a95f-7f12ff11a450">
 
-<img width="1035" alt="image" src="https://github.com/user-attachments/assets/4b15ef87-8f25-4d29-9214-801a326b406f">
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/4b15ef87-8f25-4d29-9214-801a326b406f">
 
 The Chatbot can use this information if you send the prompt command:
 
