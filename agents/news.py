@@ -43,7 +43,7 @@ MAXTOKENS = int(os.environ.get("MAXTOKENS", 4*1024))                        # Ma
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower() == "true"        # Use system in chat prompt if True
 RESULTS = int(os.environ.get("RESULTS", 10))                                # Number of results to return from Weaviate
-ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha-key")                        # Alpha Vantage API Key
+ALPHA_KEY = os.environ.get("ALPHA_KEY", "alpha-key")                        # Alpha Vantage API Key - https://www.alphavantage.co
 COMPANY = os.environ.get("COMPANY", "Google")                               # Company to use for stock news
 CITY = os.environ.get("CITY", "Los Angeles")                                # City to use for weather news
 CITY_WEEKEND = os.environ.get("CITY_WEEKEND", "Ventura")                    # City to use for weather news on weekends
