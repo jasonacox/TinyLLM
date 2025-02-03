@@ -1,7 +1,19 @@
-# This is a an example agent that communicates with two LLMs
-# to create a conversation.
-#
-# The first LLM is a teacher and the second LLM is a student.
+#!/usr/bin/python3
+"""
+Conversational Agent - Example of an agent that uses two LLMs to create a conversation.
+This agent is a teacher and student conversation.
+
+    * Currently set up to use one LLM but can be easily modified to use two LLMs.
+    * The first LLM is the teacher and the second LLM is the student.
+    * The teacher and student LLMs take turns responding to each other.
+    * The conversation continues until a stop prompt is given or a maximum number of rounds is reached.
+    * The teacher LLM then provides a summary of the conversation and an evaluation of the student.
+
+Author: Jason A. Cox
+1 Feb 2025
+https://github.com/jasonacox/TinyLLM
+
+"""
 
 import openai
 
