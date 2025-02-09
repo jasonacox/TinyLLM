@@ -1,5 +1,11 @@
 # Releases
 
+## 0.15.18 - Chatbot Updates
+
+* Model selection will now be stored as a cookie to allow it to persist between sessions. 
+* Image handling has been updated to recover when switching between vision models and language models. A new `MAX_IMAGES` setting has been added to allow persisting more than one image in the same conversation context (must be supported by model or the images will be pruned by chatbot)
+* Model selection option `/model list` will display list of available models in chat windows.
+
 ## 0.15.17 - Model Selector
 
 * Chatbot - The `/model` command will now initiate a UI popup window and dropdown to allow the use to select a model from the list of available models. Alternatively, the user can specify the model with the command (e.g. `/model mixtral`) to select it immediately without the popup.

@@ -725,7 +725,7 @@
             // Clear form
             document.getElementById('messageInput').value = "";
 
-            // Send a POST request to the Flask route
+            // Send a POST request to the backend
             fetch('/send_message', {
                 method: 'POST',
                 headers: {
@@ -735,8 +735,8 @@
             })
             .then(response => response.json())
             .then(data => {
-                console.log('Response from Flask:', data);
-                // Handle the response from Flask as needed
+                console.log('Response from backend:', data);
+                // Handle the response from backend as needed
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -805,14 +805,13 @@
                 messageContainer.innerHTML = messageText;
             }
 
-            if (data.voice === "model") {
-                getVersion();
-            }
-
             if (data.voice === "footer") {
                 // Update the footer with the update message
                 document.getElementById('footer').innerHTML = data.update +
                     ' - <a href="javascript:void(0);" onclick="requestConversation()">Debug Session</a>'
+                // Set my_model cookie if model is in the update message
+                document.cookie = "my_model=" + data.model;
+                console.log('Model cookie set:', data.model);
             }
 
             if (data.voice === "conversation") {
@@ -956,6 +955,12 @@
 
             // Fetch version and update footer
             getVersion();
+
+            // Check for my_model cookie and request the model
+            var model = document.cookie.replace(/(?:(?:^|.*;\s*)my_model\s*\=\s*([^;]*).*$)|^.*$/, "$1");
+            if (model) {
+                socket.emit('model', model);
+            }
         };
 
         // On window resize, scroll to the bottom of the message container

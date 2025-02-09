@@ -46,6 +46,7 @@ Environmental variables:
     * EXTRA_BODY - Extra body parameters for OpenAI API
     * TOXIC_THRESHOLD - Toxicity threshold for responses 0-1 or 99 disable
     * THINKING - Set to True to enable thinking mode by default
+    * MAX_IMAGES - Maximum number of images the chatbot will keep in context (default 1)
     
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
@@ -141,6 +142,7 @@ EXTRA_BODY = os.environ.get("EXTRA_BODY", None)                             # Ex
 TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # Toxicity threshold for responses 0-1 or 99 disable
 THINKING = os.environ.get("THINKING", "false").lower() == "true"            # Set to True to enable thinking mode by default
 THINK_FILTER = os.environ.get("THINK_FILTER", "false").lower() == "true"    # Set to True to enable thinking filter
+MAX_IMAGES = int(os.environ.get("MAX_IMAGES", 1))                           # Maximum number of images to keep in context
 
 # Convert EXTRA_BODY to dictionary if it is proper JSON
 if EXTRA_BODY:
@@ -457,12 +459,17 @@ async def ask(prompt, sid=None):
                 client[sid]["context"] = base_prompt()
             # Process image upload if present
             if client[sid]["image_data"]:
-                # Remove previous image data from context
-                for turn in client[sid]["context"]:
-                    # if turn["content"] is a list, remove image_url
+                # go through context and count images, remove if too many
+                image_count = 0
+                for turn in reversed(client[sid]["context"]):
                     if "content" in turn and isinstance(turn["content"], list):
-                        # convert list to string of text
-                        turn["content"] = ' '.join([x.get("text", "") for x in turn["content"]])
+                        for item in turn["content"]:
+                            if "image_url" in item:
+                                image_count += 1
+                                if image_count >= MAX_IMAGES:
+                                    # remove image from context
+                                    debug("Too many images - Found image in context, removing 1...")
+                                    turn["content"] = ' '.join([x.get("text", "") for x in turn["content"]])
                 message = {
                     "role": "user",
                     "content": [
@@ -470,7 +477,6 @@ async def ask(prompt, sid=None):
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{client[sid]['image_data']}"}}
                     ]
                 }
-                client[sid]["image_data"] = ""
                 client[sid]["context"].append(message)
             else:
                 client[sid]["context"].append({"role": "user", "content": prompt})
@@ -484,6 +490,7 @@ async def ask(prompt, sid=None):
                 messages=client[sid]["context"],
                 extra_body=EXTRA_BODY,
             )
+            client[sid]["image_data"] = ""
         except openai.OpenAIError as erro:
             # If we get an error, try to recover
             client[sid]["context"].pop()
@@ -494,8 +501,8 @@ async def ask(prompt, sid=None):
                 # set client model to default
                 client[sid]["model"] = MYMODEL
                 # update footer
-                await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {client[sid]['model']} ", 
-                                          'voice': 'footer'},room=sid)
+                await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {client[sid]['model']} ",
+                                          'voice': 'footer', 'model': client[sid]['model']},room=sid)
             elif "maximum context length" in str(erro):
                 if len(prompt) > 1000:
                     # assume we have very large prompt - cut out the middle
@@ -509,11 +516,40 @@ async def ask(prompt, sid=None):
                     # our context has grown too large, reset
                     client[sid]["context"] = base_prompt()
                     log(f"Session {sid} - Reset context to base prompt - Now: ~{len(client[sid]['context'])/4} tokens")
-            else:
+            elif "At most" in str(erro) and "image" in str(erro):
+                # Remove oldest image from context
+                for turn in reversed(client[sid]["context"]):
+                    # if turn["content"] is a list, remove image_url
+                    if "content" in turn and isinstance(turn["content"], list):
+                        debug("Too many images - Found last image in context, removing...")
+                        turn["content"] = ' '.join([x.get("text", "") for x in turn["content"]])
+                        break
+                continue
+            elif "Internal Server Error" in str(erro):
+                # Check to see if our context has images - if so, remove them
+                debug("Internal Server Error - Checking for images in context...")
+                removed_image_data = False
+                for turn in client[sid]["context"]:
+                    # if turn["content"] is a list, remove image_url
+                    if "content" in turn and isinstance(turn["content"], list):
+                        log("Found image in context, removing...")
+                        removed_image_data = True
+                        turn["content"] = ' '.join([x.get("text", "") for x in turn["content"]])
+                if removed_image_data:
+                    # remove last turn in context and retry
+                    await sio.emit('update', {'update': '[Images do not seem to be supported by model... Removing]', 'voice': 'user'},room=sid)
+                    client[sid]["context"].pop()
+                    continue
                 log(f"ERROR: {str(erro)}")
                 stats["errors"] += 1
                 await sio.emit('update', {'update': str(erro), 'voice': 'user'},room=sid)
-
+                break
+            else:
+                # If all else fails, log the error and break
+                log(f"ERROR: {str(erro)}")
+                stats["errors"] += 1
+                await sio.emit('update', {'update': str(erro), 'voice': 'user'},room=sid)
+                break
     if not client[sid]["remember"]:
         client[sid]["remember"] =True
         client[sid]["context"].pop()
@@ -915,7 +951,7 @@ async def handle_connect(session_id, env):
                     await sio.sleep(0.1)
                 else:
                     # Check to see of CoT is enabled but not while processing a file/image
-                    client_cot = client[session_id]["cot"] 
+                    client_cot = client[session_id]["cot"]
                     client_image_data = client[session_id]["image_data"]
                     client_visible = client[session_id]["visible"]
                     if client_cot and not client_image_data and client_visible:
@@ -978,7 +1014,7 @@ async def handle_connect(session_id, env):
                         # Update footer with stats
                         await sio.emit('update', {'update': 
                                                   f"TinyLLM Chatbot {VERSION} - {client[session_id]['model']} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
-                                                  'voice': 'footer'},room=session_id)
+                                                  'voice': 'footer', 'model': client[session_id]['model']},room=session_id)
                         # Check for link injection
                         if client[session_id]["links"]:
                             await sio.emit('update', {'update': json.dumps(client[session_id]["links"]), 'voice': 'links'},room=session_id)
@@ -1052,7 +1088,7 @@ async def handle_disconnect(session_id):
         # shutdown thread
         client[session_id]["stop_thread_flag"] = True
         client.pop(session_id)
-    
+
 # Change the LLM model
 @sio.on('model')
 async def change_model(session_id, model):
@@ -1062,13 +1098,18 @@ async def change_model(session_id, model):
         list_of_models = get_models()
         if model not in list_of_models:
             log(f"Requested invalid model {model}")
-            await sio.emit('update', {'update': f"Model not found: {model}", 'voice': 'user'}, room=session_id)
+            if len(client[session_id]["context"]) > 2:
+                await sio.emit('update', {'update': f"Model not found: {model}", 'voice': 'user'}, room=session_id)
             return
         debug(f"Changing model for {session_id} to {model}")
         client[session_id]["model"] = model
         # Update footer
-        await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {model}", 'voice': 'footer'}, room=session_id)
-        await sio.emit('update', {'update': f'[Model changed to {model}]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {model}", 'voice': 'footer',
+                                  'model': model}, room=session_id)
+        # Check to see if this is a new session
+        log(f"context length: {len(client[session_id]['context'])}")
+        if len(client[session_id]["context"]) > 2:
+            await sio.emit('update', {'update': f'[Model changed to {model}]', 'voice': 'user'}, room=session_id)
     else:
         log(f"Invalid session {session_id}")
         await handle_invalid_session(session_id)
@@ -1332,19 +1373,20 @@ async def handle_model_command(session_id, p):
     if not args:
          # Open Model Dialog
         await sio.emit('model_dialog', {}, room=session_id)
-        #model_list = get_models()
-        #msg = f'Current LLM Model: {client[session_id]["model"]}\n'
-        #msg += f'- Available Models: {", ".join(model_list)}\n'
-        #msg += '- Usage: /model {model_name}'
-        #await sio.emit('update', {'update': msg, 'voice': 'user'}, room=session_id)
         return
     model_list = get_models()
     if not args in model_list:
         args = args.lower()
     if args in model_list:
         client[session_id]["model"] = args
-        await sio.emit('update', {'update': f'[LLM Model set to {args}]', 'voice': 'user'}, room=session_id)
-        await sio.emit('update', {'update': f"TinyLLM Chatbot {args} - {client[session_id]['model']}", 'voice': 'footer'}, room=session_id)
+        await sio.emit('update', {'update': f'[Model changed to {args}]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {args}", 'voice': 'footer',
+                                  'model': args}, room=session_id)
+    elif args in ["list", "help"]:
+        msg = f'Current LLM Model: {client[session_id]["model"]}\n'
+        msg += f'- Available Models: {", ".join(model_list)}\n'
+        msg += '- Usage: /model {model_name}'
+        await sio.emit('update', {'update': msg, 'voice': 'user'}, room=session_id)
     else:
         await sio.emit('update', {'update': f'[Model {args} not found]', 'voice': 'user'}, room=session_id)
 
