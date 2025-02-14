@@ -4,7 +4,9 @@ Agents use LLMs to take action or provide curated reports.
 
 ## News Bot
 
-The [news.py](news.py) script will use an OpenAI API based LLM to process raw weather payloads, stock prices and top news items into a curated news report. This can be set up as a scheduled cron job to send a personalized news update (see [news-cron.sh](news-cron.sh)).
+The [news.py](news.py) script will use an OpenAI API based LLM to process raw weather payloads, stock prices and top news items into a curated news report. 
+
+This can be set up as a scheduled cron job to send a personalized news update (see [news-cron.sh](news-cron.sh)). You will need to set up the msmtp mail service to send email. See instructions https://wiki.archlinux.org/title/Msmtp.
 
 ```bash
 echo "Gathering the news for you..."
