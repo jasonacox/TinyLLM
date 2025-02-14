@@ -6,6 +6,9 @@ Author: Jason A. Cox
 17 Mar 2024
 https://github.com/jasonacox/TinyLLM
 
+Requires:
+    pip install openai bs4 requests
+
 """
 # Import Libraries
 import datetime
@@ -17,10 +20,9 @@ import re
 import openai
 import requests
 from bs4 import BeautifulSoup
-from pypdf import PdfReader
 
 # Version
-VERSION = "v0.0.2"
+VERSION = "v0.0.3"
 DEBUG = False
 
 def log(text):
@@ -222,7 +224,7 @@ def get_stock(company):
 def get_top_articles(url, max=10):
     response = requests.get(url, timeout=TIMEOUT)
     soup = BeautifulSoup(response.text, 'xml')
-    items = soup.findAll('item')
+    items = soup.find_all('item')
     articles = ""
     count = 0
     for item in items:
@@ -270,7 +272,7 @@ def get_news(topic, max=10):
     log(f"Fetching news for {topic} from {url}")
     response = requests.get(url, timeout=TIMEOUT)
     soup = BeautifulSoup(response.text, 'xml')
-    items = soup.findAll('item')
+    items = soup.find_all('item')
     articles = ""
     count = 0
     for item in items:
