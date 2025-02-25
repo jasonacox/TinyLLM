@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.19 - Chatbot Docs
+
+* Update URL reader to display reading status to user while processing document.
+
 ## 0.15.18 - Chatbot Updates
 
 * Model selection will now be stored as a cookie to allow it to persist between sessions. 

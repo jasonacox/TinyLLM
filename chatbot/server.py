@@ -1178,14 +1178,14 @@ async def handle_url_prompt(session_id, p):
     url = p.strip()
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
+    await sio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'}, room=session_id)
     website_text = await extract_text_from_url(url)
     if website_text:
         debug(f"* Reading {len(website_text)} bytes {url}")
-        await sio.emit('update', {'update': '%s [Reading...]' % url, 'voice': 'user'}, room=session_id)
         url_encoded = requests.utils.quote(url)
         client[session_id]["prompt"] = expand_prompt(prompts["website"], {"url": url_encoded, "website_text": website_text})
     else:
-        await sio.emit('update', {'update': '%s [ERROR: Unable to read URL]' % url, 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[ERROR: Unable to read URL]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
 
 async def handle_command(session_id, p):
