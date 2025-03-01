@@ -550,6 +550,31 @@
         let startY;
         let startHeight;
 
+        // Function to handle session storage of model
+        function setModel(model) {
+            sessionStorage.setItem('my_model', model);
+            // Also set the model in a cookie
+            document.cookie = `my_model=${model}`;
+        }
+
+        // Function to get the model from session storage
+        function getModel() {
+            // Check to see if there is one in session storage
+            if (!sessionStorage.getItem('my_model')) {
+                // If not, check to see if we have it in the cookie
+                if (document.cookie) {
+                    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('my_model='));
+                    if (cookie) {
+                        const model = cookie.split('=')[1];
+                        sessionStorage.setItem('my_model', model);
+                        return model;
+                    }
+                }
+                return '';
+            }
+            return sessionStorage.getItem('my_model');
+        }
+
         // Image upload functions
         const dropArea = document.getElementById('messageInput');
 
@@ -809,9 +834,9 @@
                 // Update the footer with the update message
                 document.getElementById('footer').innerHTML = data.update +
                     ' - <a href="javascript:void(0);" onclick="requestConversation()">Debug Session</a>'
-                // Set my_model cookie if model is in the update message
-                document.cookie = "my_model=" + data.model;
-                console.log('Model cookie set:', data.model);
+                // Set my_model into session storage
+                setModel(data.model);
+                console.log('Model set:', data.model);
             }
 
             if (data.voice === "conversation") {
@@ -956,8 +981,8 @@
             // Fetch version and update footer
             getVersion();
 
-            // Check for my_model cookie and request the model
-            var model = document.cookie.replace(/(?:(?:^|.*;\s*)my_model\s*\=\s*([^;]*).*$)|^.*$/, "$1");
+            // Check for my_model session storage
+            const model = getModel();
             if (model) {
                 socket.emit('model', model);
             }

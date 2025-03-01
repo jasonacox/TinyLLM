@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.19 - Chatbot Model
+
+* Model selection behavior improved. Session will persist with selected model in that session even when refreshed. Last model selection will be remembered and auto-selected for any new sessions but will not impact existing sessions.
+
 ## 0.15.19 - Chatbot Docs
 
 * Update URL reader to display reading status to user while processing document.
