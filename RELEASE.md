@@ -1,6 +1,6 @@
 # Releases
 
-## 0.15.19 - Chatbot Model
+## 0.15.20 - Chatbot Model
 
 * Model selection behavior improved. Session will persist with selected model in that session even when refreshed. Last model selection will be remembered and auto-selected for any new sessions but will not impact existing sessions.
 
