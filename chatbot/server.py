@@ -1093,22 +1093,28 @@ async def handle_disconnect(session_id):
 @sio.on('model')
 async def change_model(session_id, model):
     global client
+    # Remember the current model
+    current_model = client[session_id]["model"]
     if session_id in client:
-        # Verify model is valid
-        list_of_models = get_models()
-        if model not in list_of_models:
-            log(f"Requested invalid model {model}")
-            if len(client[session_id]["context"]) > 2:
-                await sio.emit('update', {'update': f"Model not found: {model}", 'voice': 'user'}, room=session_id)
-            return
-        debug(f"Changing model for {session_id} to {model}")
-        client[session_id]["model"] = model
+        if model != current_model:
+            # If empty model selected, use default
+            if model == "":
+                model = MYMODEL
+            # Verify model is valid
+            list_of_models = get_models()
+            if model not in list_of_models:
+                log(f"Requested invalid model {model}")
+                if len(client[session_id]["context"]) > 2:
+                    await sio.emit('update', {'update': f"Model not found: {model}", 'voice': 'user'}, room=session_id)
+                return
+            debug(f"Changing model for {session_id} to {model}")
+            client[session_id]["model"] = model
         # Update footer
         await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {model}", 'voice': 'footer',
                                   'model': model}, room=session_id)
         # Check to see if this is a new session
         log(f"context length: {len(client[session_id]['context'])}")
-        if len(client[session_id]["context"]) > 2:
+        if len(client[session_id]["context"]) > 2 and current_model != model:
             await sio.emit('update', {'update': f'[Model changed to {model}]', 'voice': 'user'}, room=session_id)
     else:
         log(f"Invalid session {session_id}")
@@ -1367,6 +1373,8 @@ async def handle_think_command(session_id, p):
         await sio.emit('update', {'update': f'Chain of Thought is {state}\n - Chain of Thought: /think {{on|off|always}}\n - Filter Think Tags: /think filter {{on|off}}', 'voice': 'user'}, room=session_id)
 
 async def handle_model_command(session_id, p):
+    # Remember current model
+    current_model = client[session_id]["model"]
     # List or set LLM Models
     words = p.split()
     args = words[1] if len(words) > 1 else ""
@@ -1377,7 +1385,8 @@ async def handle_model_command(session_id, p):
     model_list = get_models()
     if not args in model_list:
         args = args.lower()
-    if args in model_list:
+    if args in model_list and args != current_model:
+        debug(f"Changing model to {args}")
         client[session_id]["model"] = args
         await sio.emit('update', {'update': f'[Model changed to {args}]', 'voice': 'user'}, room=session_id)
         await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {args}", 'voice': 'footer',
