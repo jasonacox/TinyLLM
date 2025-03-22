@@ -185,7 +185,7 @@ The `/model` command will popup the list of available models. Use the dropdown t
 
 #### Search the Web
 
-The `/search` command will allow the chatbot to search the web to help answer your prompt. This requires a [SearXNG](https://docs.searxng.org/) server which can be set up using:
+The `/search` command will allow the chatbot to search the web to help answer your prompt. This requires a [SearXNG](https://docs.searxng.org/) server which is started as part of the docker compose setup or can be run using:
 
 ```bash
 echo "Starting $container container..."
