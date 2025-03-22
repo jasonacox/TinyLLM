@@ -47,6 +47,7 @@ Environmental variables:
     * TOXIC_THRESHOLD - Toxicity threshold for responses 0-1 or 99 disable
     * THINKING - Set to True to enable thinking mode by default
     * MAX_IMAGES - Maximum number of images the chatbot will keep in context (default 1)
+    * SEARXNG - SearXNG URL for search engine (Optional)
     
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
@@ -143,6 +144,7 @@ TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # To
 THINKING = os.environ.get("THINKING", "false").lower() == "true"            # Set to True to enable thinking mode by default
 THINK_FILTER = os.environ.get("THINK_FILTER", "false").lower() == "true"    # Set to True to enable thinking filter
 MAX_IMAGES = int(os.environ.get("MAX_IMAGES", 1))                           # Maximum number of images to keep in context
+SEARXNG = os.environ.get("SEARXNG", "http://localhost:8080")                # SearXNG URL for internet search engine  (Optional)
 
 # Convert EXTRA_BODY to dictionary if it is proper JSON
 if EXTRA_BODY:
@@ -205,7 +207,7 @@ default_prompts["news"] = "You are a newscaster who specializes in providing hea
 default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
-default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context.\\nContext: {context_str}\\nQuestion: {prompt}\\nAnswer:"
+default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context. Do not mention your answer was based on this context.\nContext: {context_str}\nQuestion: {prompt}\nAnswer:"
 default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nExplain what the link is about and provide a summary with the main points."
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
@@ -319,6 +321,20 @@ if WEAVIATE_HOST != "":
         log(f"RAG: Unable to connect to Weaviate at {WEAVIATE_HOST} - {str(err)}")
         WEAVIATE_HOST = ""
         log("RAG support disabled.")
+
+# Test SearXNG Connection
+if SEARXNG != "":
+    try:
+        response = requests.get(f"{SEARXNG}/search")
+        if response.status_code == 200:
+            log(f"SEARXNG: Connected to {SEARXNG}")
+        else:
+            log(f"SEARXNG Disabled: No search server available at {SEARXNG}")
+            SEARXNG = ""
+    except Exception as err:
+        log(f"SEARXNG: Unable to connect to {SEARXNG} - {str(err)}")
+        SEARXNG = ""
+        log("SEARXNG support disabled.")
 
 # Find document closely related to query
 def query_index(query, library, num_results=RESULTS):
@@ -987,15 +1003,18 @@ async def handle_connect(session_id, env):
                         response= await ask(client[session_id]["prompt"],session_id)
                         completion_text = ''
                         tokens = 0
-                        in_thinking = False
+                        in_thinking = client[session_id]["think"]
                         # Iterate through the stream of tokens and send to client
                         stime = time.time()
                         for event in response:
                             event_text = event.choices[0].delta.content
                             # check for no tokens or a string just full of nany number of newlines only
-                            if tokens == 0 and event_text.strip() == "":
+                            if tokens == 0 and event_text and event_text.strip() == "":
                                 continue
                             if event_text:
+                                chunk = event_text
+                                completion_text += chunk
+                                tokens += 1
                                 if client[session_id]["think"]:
                                     if "<think>" in event_text:
                                         in_thinking = True
@@ -1007,10 +1026,16 @@ async def handle_connect(session_id, env):
                                         continue
                                     if in_thinking:
                                         continue
-                                chunk = event_text
-                                completion_text += chunk
-                                tokens += 1
                                 await sio.emit('update', {'update': chunk, 'voice': 'ai'}, room=session_id)
+                        # Check to see if thinking filter blocked all tokens
+                        if in_thinking:
+                            # Disable thinking filter and reprocess
+                            client[session_id]["think"] = False
+                            await sio.emit('update', {'update': '', 'voice': 'ai'},room=session_id)
+                            await sio.emit('update', {'update': '[No thinking tags found - disabling filter]', 'voice': 'user'},room=session_id)
+                            # Send entire completion_text to client
+                            await sio.emit('update', {'update': completion_text, 'voice': 'ai'},room=session_id)
+                            tokens = len(completion_text)/4
                         # Update footer with stats
                         await sio.emit('update', {'update': 
                                                   f"TinyLLM Chatbot {VERSION} - {client[session_id]['model']} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
@@ -1197,7 +1222,7 @@ async def handle_url_prompt(session_id, p):
 async def handle_command(session_id, p):
     command = p[1:].split(" ")[0].lower()
     if command == "":
-        await sio.emit('update', {'update': '[Commands: /reset /version /sessions /rag /news /weather /stock /think/ /model]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Commands: /model /news /rag /reset /search /sessions /stock /think /version /weather]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
     elif command == "reset":
         await reset_context(session_id)
@@ -1217,6 +1242,8 @@ async def handle_command(session_id, p):
         await handle_think_command(session_id, p)
     elif command == "model" or command == "models":
         await handle_model_command(session_id, p)
+    elif command == "search":
+        await handle_search_command(session_id, p)
     else:
         await sio.emit('update', {'update': '[Invalid command]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
@@ -1464,6 +1491,57 @@ async def handle_normal_prompt(session_id, p):
             return
     # Process the prompt
     client[session_id]["prompt"] = p
+
+async def handle_search_command(session_id, p):
+    # Check to see if SEARXNG is enabled
+    if not SEARXNG:
+        await sio.emit('update', {'update': '[Search Engine Disabled - Check Config]', 'voice': 'user'}, room=session_id)
+        return
+    # format /search {opt:max} {prompt}
+    parts = p.split()
+    max_results = 5
+    prompt = ""
+    # check to see if optional max results is provided
+    if len(parts) >= 2 and parts[1].isdigit():
+        max_results = int(parts[1])
+        prompt = ' '.join(parts[2:])
+    else:
+        prompt = ' '.join(parts[1:])
+    if not prompt:
+        await sio.emit('update', {'update': '[Usage: /search {opt:number} {query}] - Search the web.', 'voice': 'user'}, room=session_id)
+        return
+    await sio.emit('update', {'update': '%s [Searching...]' % p, 'voice': 'user'}, room=session_id)
+    context_str = await search_web(session_id, prompt, max_results) or "[Error searching the web]"
+    client[session_id]["visible"] = False
+    client[session_id]["remember"] = True
+    client[session_id]["prompt"] = expand_prompt(prompts["rag"], {"context_str": context_str, "prompt": prompt})
+
+async def search_web(session_id, prompt, results=5):
+    # Search the web using SEARXNG
+    context_str = ""
+    references = ""
+    try:
+        # Search the SEARXNG service with URI: /search?q={prompt}&format=json
+        # use GET request to get the search results (max results)
+        search_results = requests.get(f"{SEARXNG}/search?q={prompt}&format=json").json()
+        count = 0
+        for result in search_results.get('results', []):
+            if count >= results:
+                break
+            count += 1
+            context_str += f"* {result['title']}\n{result['url']}\n{result['content']}\n\n"
+            # Build references
+            if "url" in result:
+                references = references + f"\n - {result['title']} - {result['url']}"
+        if not context_str:
+            context_str = "[No search results found]"
+        if references:
+            client[session_id]["references"] = references
+    except Exception as e:
+        log(f"Error searching web: {e}")
+        context_str = "[Error searching the web]"
+    return context_str
+
 
 #
 # Start dev server and listen for connections

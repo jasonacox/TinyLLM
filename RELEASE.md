@@ -1,5 +1,13 @@
 # Releases
 
+## 0.15.21 - Internet Search
+
+* Chatbot - The `/search` command has been added to allow the chatbot to search the internet to help answer your prompt. By default, the first 5 most relevant internet search results are added to the context.
+
+Usage: /search {opt:number} {query}
+
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/8ee65216-6b11-4590-bf19-695e5b6e9a63" />
+
 ## 0.15.20 - Chatbot Model
 
 * Model selection behavior improved. Session will persist with selected model in that session even when refreshed. Last model selection will be remembered and auto-selected for any new sessions but will not impact existing sessions.
