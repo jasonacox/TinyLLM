@@ -192,7 +192,7 @@ echo "Starting $container container..."
 docker run \
      -d \
      -p 8080:8080 \
-     -v "${PWD}/searxng:/etc/searxng:rw" \
+     -v "${PWD}/litellm/searxng:/etc/searxng:rw" \
      -e "BASE_URL=http://localhost:8080/" \
      -e "INSTANCE_NAME=my-instance" \
      --name $container \
@@ -200,7 +200,7 @@ docker run \
      searxng/searxng
 ```
 
-The [settings.yml](./searxng/settings.yml) file needs to be edited to allow the json format. 
+The [settings.yml](./litellm/searxng/settings.yml) file needs to be edited to allow the json format. 
 
 The chatbot looks for the environmental variable `SEARXNG` to set the URL of the search service, otherwise it uses http://localhost:8080.
 
