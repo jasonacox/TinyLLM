@@ -66,6 +66,20 @@ services:
     command: --config /app/config.yaml
     restart: unless-stopped
 
+  # SearXNG search engine - No changes needed
+  searxng:
+    image: searxng/searxng
+    container_name: searxng
+    ports:
+      - "8080:8080"
+    environment:
+      - INSTANCE_NAME=my-instance
+      - BASE_URL=http://searxng:8080/
+      - TZ=America/Los_Angeles
+    volumes:
+      - ./searxng:/etc/searxng
+    restart: unless-stopped
+    
   # Chatbot service - No changes needed
   chatbot:
     image: jasonacox/chatbot
@@ -76,6 +90,7 @@ services:
       - PORT=5000
       - LITELLM_PROXY=http://litellm-proxy:4000/v1
       - LITELLM_KEY=sk-3-laws-safe
+      - SEARXNG=http://searxng:8080
       - LLM_MODEL=local-pixtral
       - TZ=America/Los_Angeles
     volumes:

@@ -150,6 +150,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 /think off                              #   Disable
 /think filter [on|off]                  # Have chatbot filter out <think></think> content
 /model [LLM_name]                       # Display or select LLM model to use (dialogue popup)
+/search [opt:number] [prompt]           # Search the web to help answer the prompt
 ```
 
 See the [rag](../rag/) for more details about RAG.
@@ -181,6 +182,29 @@ The `/news` command will fetch the latest news and have the LLM summarize the to
 The `/model` command will popup the list of available models. Use the dropdown to select your model. Alternatively, specify the model with the command (e.g. `/model mixtral`) to select it immediately without the popup.
 
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/e21ad350-6ae0-47de-b7ee-135176d66fe7" />
+
+#### Search the Web
+
+The `/search` command will allow the chatbot to search the web to help answer your prompt. This requires a [SearXNG](https://docs.searxng.org/) server which is started as part of the docker compose setup or can be run using:
+
+```bash
+echo "Starting $container container..."
+docker run \
+     -d \
+     -p 8080:8080 \
+     -v "${PWD}/searxng:/etc/searxng:rw" \
+     -e "BASE_URL=http://localhost:8080/" \
+     -e "INSTANCE_NAME=my-instance" \
+     --name $container \
+     --restart unless-stopped \
+     searxng/searxng
+```
+
+The [settings.yml](./searxng/settings.yml) file needs to be edited to allow the json format. 
+
+The chatbot looks for the environmental variable `SEARXNG` to set the URL of the search service, otherwise it uses http://localhost:8080.
+
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/8ee65216-6b11-4590-bf19-695e5b6e9a63" />
 
 ## Document Manager (Weaviate)
 

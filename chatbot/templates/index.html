@@ -197,6 +197,17 @@
         .dialogue-button:hover {
             background-color: #0056b3;
         }
+        .dialogue-button-cancel {
+            padding: 10px 20px;
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .dialogue-button-cancel:hover {
+            background-color: #c82333;
+        }
         .button-container {
             display: flex;
             flex-direction: column;
@@ -287,8 +298,8 @@
                     <div class="popup-button-container">
                         <div id="popup-buttons">
                             <button type="button" class="dialogue-button" id="saveButton" onclick="saveSettings()">Save</button> 
-                            <button type="button" class="dialogue-button" onclick="closeDialogue()">Cancel</button> 
                             <button type="button" class="dialogue-button" id="resetButton" onclick="resetSettings()">Reset</button>
+                            <button type="button" class="dialogue-button-cancel" onclick="closeDialogue()">Cancel</button> 
                         </div>
                     </div>
                 </form>
@@ -306,8 +317,8 @@
                     <div class="popup-divider"></div>
                     <div class="popup-button-container">
                         <div id="popup-buttons">
-                            <button type="button" class="dialogue-button" onclick="closeDialogue()">Close</button>
                             <button type="button" class="dialogue-button" onclick="convCopy()">Copy</button>
+                            <button type="button" class="dialogue-button-cancel" onclick="closeDialogue()">Cancel</button>
                         </div>
                     </div>
                 </form>
@@ -358,8 +369,8 @@
                 <div class="popup-divider"></div>
                 <div class="popup-button-container">
                     <div id="popup-buttons">
-                        <button type="button" class="dialogue-button" onclick="closeDialogue()">Close</button>
-                        <button type="button" class="dialogue-button" onclick="saveModel()">Save</button>
+                        <button type="button" class="dialogue-button" onclick="saveModel()">Select</button>
+                        <button type="button" class="dialogue-button-cancel" onclick="closeDialogue()">Cancel</button>
                     </div>
                 </div>
             </div>
