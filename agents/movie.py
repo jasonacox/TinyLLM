@@ -224,8 +224,8 @@ def ask_chatbot(prompt):
 
 # Function to recommend a movie
 def recommend_movie():
-    # Get list of movies but limit it to last 12
-    movies = db.select_all_movies(sort_by='date_recommended')[-12:]
+    # Get list of movies but limit it to last 50 
+    movies = db.select_all_movies(sort_by='date_recommended')[-50:]
     # Get list of genres
     genres = db.select_genres()
     # Randomly mix up the elements in the list
@@ -237,13 +237,16 @@ def recommend_movie():
     prompt = f"""You are a expert movie bot that recommends movies based on user preferences.
         Today is {today}, in case it is helpful in suggesting a movie.
         Provide variety and interest.
-        Do no repeat previous recommendations.
         You have recommended the following movies in the past:
+
         {movies}
+
         You have the following genres available:
         {genres}
+
         {ABOUT_ME}
-        Please recommend a new movie to watch. Give interesting details about the movie.
+        Please recommend a new movie to watch. List only one. Try not to repeat something recommended already. 
+        Give interesting details about the movie.
         """
 
     # Ask the chatbot for a movie recommendation
@@ -279,6 +282,31 @@ def recommend_movie():
 # Main
 if __name__ == "__main__":
     log(f"Movie Bot {VERSION} - Recommends movies based on user preferences and history.")
+    
+    # Command line argument handling
+    commands = {
+        "clear": lambda: (db.delete_all_movies(), print("Database cleared.")),
+        "history": lambda: (
+            db.connect(),
+            print("\n".join([f"{row[2]} - {row[0]}" for row in 
+                  db.conn.cursor().execute("SELECT * FROM movies ORDER BY date_recommended").fetchall()])),
+            db.conn.close()
+        ),
+        "genres": lambda: print("\n".join(db.select_genres())),
+        "help": lambda: print("Usage: python movie.py [clear|history|genres|help]")
+    }
+
+    if len(os.sys.argv) > 1:
+        print(f"Movie Bot {VERSION} - Command Line Interface - DB: {DATABASE}\n")
+        cmd = os.sys.argv[1].lower()
+        if cmd in commands:
+            commands[cmd]()
+        else:
+            commands["help"]()
+        print("")
+        os.sys.exit(1)
+
+    # Default action
     movie, genre = recommend_movie()
     output = f"Movie Bot recommends the {genre} movie: {movie}"
     print(output)
