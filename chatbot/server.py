@@ -48,6 +48,7 @@ Environmental variables:
     * THINKING - Set to True to enable thinking mode by default
     * MAX_IMAGES - Maximum number of images the chatbot will keep in context (default 1)
     * SEARXNG - SearXNG URL for search engine (Optional)
+    * INTENT_ROUTER - Set to True to enable intent detection an function calls.
     
 Running a llama-cpp-python server:
     * CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
@@ -145,6 +146,8 @@ THINKING = os.environ.get("THINKING", "false").lower() == "true"            # Se
 THINK_FILTER = os.environ.get("THINK_FILTER", "false").lower() == "true"    # Set to True to enable thinking filter
 MAX_IMAGES = int(os.environ.get("MAX_IMAGES", 1))                           # Maximum number of images to keep in context
 SEARXNG = os.environ.get("SEARXNG", "http://localhost:8080")                # SearXNG URL for internet search engine  (Optional)
+INTENT_ROUTER = os.environ.get("INTENT_ROUTER", "false").lower() == "true"  # Set to True to enable intent detection
+WEB_SEARCH = os.environ.get("WEB_SEARCH", "false").lower() == "true"        # Set to True to enable web search for all queries
 
 # Convert EXTRA_BODY to dictionary if it is proper JSON
 if EXTRA_BODY:
@@ -204,10 +207,10 @@ default_prompts["baseprompt"] = "You are {agentname}, a highly intelligent assis
 default_prompts["weather"] = "You are a weather forecaster. Keep your answers brief and accurate. Current date is {date} and weather conditions:\n[DATA]{context_str}[/DATA]\nProvide a weather update, current weather alerts, conditions, precipitation and forecast for {location} and answer this: {prompt}."
 default_prompts["stock"] = "You are a stock analyst. Keep your answers brief and accurate. Current date is {date}."
 default_prompts["news"] = "You are a newscaster who specializes in providing headline news. Use only the following context provided by Google News to summarize the top 10 headlines for today. Rank headlines by most important to least important. Always include the news organization and ID. Do not add any commentary.\nAlways use this format:\n#. [News Item] - [News Source] - LnkID:[ID]\nHere are some examples, but do not use them: \n1. The World is Round - Science - LnkID:91\n2. The Election is over and Children have won - US News - LnkID:22\n3. Storms Hit the Southern Coast - ABC - LnkID:55\nContext: {context_str}\nTop 10 Headlines with Source and LnkID:"
-default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate. {format}."
+default_prompts["clarify"] = "You are a highly intelligent assistant. Keep your answers brief and accurate."
 default_prompts["location"] = "What location is specified in this prompt, state None if there isn't one. Use a single word answer. [BEGIN] {prompt} [END]"
 default_prompts["company"] = "What company is related to the stock price in this prompt? Please state none if there isn't one. Use a single word answer: [BEGIN] {prompt} [END]"
-default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context. Do not mention your answer was based on this context.\nContext: {context_str}\nQuestion: {prompt}\nAnswer:"
+default_prompts["rag"] = "You are an assistant for question-answering tasks. Use the above discussion thread and the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context. Do not mention your answer was based on this context.\nContext: {context_str}\nQuestion: {prompt}\nAnswer:"
 default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEGIN] {website_text} [END]\nExplain what the link is about and provide a summary with the main points."
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
@@ -244,6 +247,22 @@ Provide the best conclusion based on the context.
     If source code provided, include the code block and describe what it does. Do not include a code section otherwise.
     Make sure the answer addresses the original prompt: {prompt}
     """
+default_prompts_intent = {
+    "weather": "if the user is asking for weather or current temperature information.",
+    "stock": "if the user is asking for stock information.",
+    "current": "if the user is asking if the data is current.",
+    "news": "if and only if the user is asking for headline news.",
+    "search": "if the user is asking us to search the internet or web.",
+    "retry": "if the user asks us to try again.",
+    "code": "if the user is asking for code.",
+    "other": "if the user is not asking for any of the above."
+}
+default_prompts["intent"] = """You are a language expert. Consider this user prompt:\n<PROMPT>
+    {prompt}
+    </PROMPT>
+    Categorize the user's intent using one of these:
+    """ + "\n    ".join([f"{k}) {v}" for k, v in default_prompts_intent.items()]) + "\nLimit your response to one of the above categories."
+
 # Log ONE_SHOT mode
 if ONESHOT:
     log("ONESHOT mode enabled.")
@@ -572,13 +591,11 @@ async def ask(prompt, sid=None):
         client[sid]["context"].append({"role": "user", "content": "Help me remember."})
     return response
 
-async def ask_llm(query, format="", model=MYMODEL):
+async def ask_llm(query,  model=MYMODEL):
     # Ask LLM a question
     global stats
     stats["ask_llm"] += 1
-    if format == "":
-        format = f"Respond in {format}."
-    content = base_prompt(expand_prompt(prompts["clarify"], {"format": format})) + [{"role": "user",
+    content = base_prompt(expand_prompt(prompts["clarify"], values={})) + [{"role": "user",
                 "content": query}]
     debug(f"ask_llm: {content}")
     llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
@@ -942,6 +959,13 @@ async def upload_file(file: UploadFile = File(...), session_id: str = Form(...))
 
 app.mount("/", socket_app)  # Here we mount socket app to main fastapi app
 
+# Helper function to check for repeating text from LLM
+async def is_repeating_exact(text: str, window: int = 100, repeats: int = 5) -> bool:
+    if len(text) < window * (repeats + 1):
+        return False
+    tail = text[-window:]
+    return text[:-window].count(tail) >= repeats
+
 # Client connected - start thread to send updates
 @sio.on('connect')
 async def handle_connect(session_id, env):
@@ -1015,6 +1039,12 @@ async def handle_connect(session_id, env):
                                 chunk = event_text
                                 completion_text += chunk
                                 tokens += 1
+                                # Check for repeating text
+                                if await is_repeating_exact(completion_text):
+                                    debug(f"Repeating text detected - ending - {completion_text}")
+                                    await sio.emit('update', {'update': '[Repeating Text Detected - Ending]', 'voice': 'user'},room=session_id)
+                                    break
+                                # Check for thinking tags
                                 if client[session_id]["think"]:
                                     if "<think>" in event_text:
                                         in_thinking = True
@@ -1046,6 +1076,8 @@ async def handle_connect(session_id, env):
                             client[session_id]["links"] = ""
                         # Check for references
                         if client[session_id]["references"]:
+                            # remove any leading or trailing newlines
+                            client[session_id]["references"] = client[session_id]["references"].strip()
                             await sio.emit('update', {'update': client[session_id]["references"], 'voice': 'ref'},room=session_id)
                             client[session_id]["references"] = ""
                         if not ONESHOT:
@@ -1101,6 +1133,8 @@ async def handle_connect(session_id, env):
         client[session_id]["image_data"] = ""
         client[session_id]["model"] = MYMODEL
         client[session_id]["think"] = THINK_FILTER
+        client[session_id]["internet"] = WEB_SEARCH
+        client[session_id]["intent"] = INTENT_ROUTER
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -1222,7 +1256,7 @@ async def handle_url_prompt(session_id, p):
 async def handle_command(session_id, p):
     command = p[1:].split(" ")[0].lower()
     if command == "":
-        await sio.emit('update', {'update': '[Commands: /model /news /rag /reset /search /sessions /stock /think /version /weather]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Commands: /intent /model /news /rag /reset /search /sessions /stock /think /version /weather]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
     elif command == "reset":
         await reset_context(session_id)
@@ -1244,6 +1278,8 @@ async def handle_command(session_id, p):
         await handle_model_command(session_id, p)
     elif command == "search":
         await handle_search_command(session_id, p)
+    elif command == "intent":
+        await handle_intent_command(session_id, p)
     else:
         await sio.emit('update', {'update': '[Invalid command]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
@@ -1459,6 +1495,41 @@ async def handle_stock_command(session_id, p):
     client[session_id]["context"].append({"role": "assistant", "content" : context_str})
     client[session_id]["prompt"] = ''
 
+# Intent Engine Helpers
+
+async def prompt_similarity(session_id, prompt1, prompt2):
+    # Check for similarity between two prompts
+    query = f"""You help compare two sentences to see if they are semantically similar. Please rate the similarity between 0 and 10 with 0 being not similar at all, 10 being equivalent:
+
+    Sentence 1: {prompt1}
+
+    Sentence 2: {prompt2}
+    
+    Provide the answer in JSON format with keys: score and justification."""
+    answer = await ask_llm(query, model=client[session_id]["model"])
+    # replace any markdown formatting for json code
+    answer = answer.replace('```json', '')
+    answer = answer.replace('```', '')
+    # process JSON response looking for score and justification
+    try:
+        answer = json.loads(answer)
+        score = int(answer.get("score", 0))
+        justification = answer.get("justification", "None")
+        debug(f"Similarity Score: {score} - Justification: {justification}")
+        return score, justification
+    except:
+        debug(f"Unable to process response: {response}")
+        return 10, "Unable to process response"
+
+intent_questions = {
+    "weather": "Is this request asking about current weather conditions or forecast?",
+    "news": "s this request asking about news?",
+    "search": "Is this request asking to search the internet or web?",
+    "stock": "Does this prompt contain a company name?",
+    "dynamic": "Is is possible that the answer to this question changed over last 4 years, dependent on current events or news, or subject to change due to external factors?",
+    "followup": "Does this seems like a follow-up question or statment?"
+}
+
 async def handle_normal_prompt(session_id, p):
     if client[session_id]["visible"]:
         await sio.emit('update', {'update': p, 'voice': 'user'}, room=session_id)
@@ -1489,18 +1560,136 @@ async def handle_normal_prompt(session_id, p):
             client[session_id]["toxicity"] = 0.0
             log(f"Toxic Prompt Detected [{toxicity}] - {p}")
             return
-    # Process the prompt
+    if client[session_id]["intent"] and len(p) < 200:
+        # Intent Engine is enabled -  Give LLM context on previous prompt
+        prompt_context = client[session_id]["context"][-2]["content"]
+        prompt_context = ''.join(e for e in prompt_context if e.isalnum() or e.isspace())
+        prompt_context = prompt_context + "\nNew Request: " + p
+        # If it is just a greeting or plesantry, skip intent detection
+        answer = await ask_llm(f"PROMPT: {p}\nIs the user greeting or thanking us? (yes or no):", model=client[session_id]["model"])
+        if "yes" in answer.lower():
+            client[session_id]["prompt"] = p
+            return
+        intent = await ask_llm(expand_prompt(prompts["intent"], {"prompt": prompt_context}), model=client[session_id]["model"])
+        if intent:
+            intent = intent.lower().split()[-1]
+            debug(f"Intent detected: {intent}")
+            if "weather" in intent:
+                # Get the weather
+                if await double_check(session_id, p, intent_questions["weather"]):
+                    await handle_weather_command(session_id, p)
+                    return
+            if "stock" in intent and ALPHA_KEY:
+                # Get stock price
+                if await double_check(session_id, p, intent_questions["stock"]):
+                    stock_prompt = p
+                else:
+                    # check previous two threads for stock prompt
+                    prior_context = client[session_id]["context"][-2]["content"]
+                    prior_context = ''.join(e for e in prior_context if e.isalnum() or e.isspace())
+                    stock_prompt = await ask_llm(expand_prompt(prompts["company"], {"prompt": prior_context}), model=client[session_id]["model"])
+                await handle_stock_command(session_id, f"/stock {stock_prompt}")
+                return
+            if "news" in intent:
+                # Get news
+                type_of_news = await ask_llm(f"What specific company, person or type of news are they looking for in this request: {prompt_context}\nList a single word or state 'general news' if general news is requested. Always list the company name if given:", model=client[session_id]["model"])
+                score, _ = await prompt_similarity(session_id, p, "What is the current news?")
+                if score > 1:
+                    if "general" in type_of_news.lower():
+                        type_of_news = ""
+                    await fetch_news(session_id, f"/news {type_of_news}")
+                    return
+            if "code" in intent:
+                # Code requested
+                client[session_id]["prompt"] = p
+                return
+            if "retry" in intent and SEARXNG:
+                # Assume last answer was bad, find the previous prompt and ask again
+                if len(client[session_id]["context"]) > 2:
+                    # Grab prompt from context
+                    last_prompt = client[session_id]["context"][-2]["content"]
+                    if len(last_prompt) < 200:
+                        await sio.emit('update', {'update': 'Let me search the internet...', 'voice': 'ai'}, room=session_id)
+                        debug(f"Complaint detected - retrying: {last_prompt}")
+                        if await process_search(session_id, last_prompt, prompt_context):
+                            return
+                    else:
+                        client[session_id]["prompt"] = p
+                return
+            if await double_check(session_id, p, intent_questions["followup"]):
+                # Follow-up question
+                client[session_id]["prompt"] = p
+                return
+            if await double_check(session_id, p, intent_questions["dynamic"]):
+                intent = "search"
+            if SEARXNG and "search" in intent:
+                # Does it help to search the web? Ask LLM
+                #answer = await ask_llm(f"You said the answer to this query likely changed. Should we search the web for more details? (yes or no): {p}?", model=client[session_id]["model"])
+                answer = "yes"
+                debug(f"Search the web: {answer}")
+                if answer:
+                    answer = answer.lower()
+                    if "yes" in answer:
+                        debug(f"Search the web: {p}")
+                        await process_search(session_id, p, prompt_context)
+                        return
+    # Default: Process the prompt
     client[session_id]["prompt"] = p
+
+
+async def double_check(session_id, prompt, question):
+    # Ask LLM to double check the prompt
+    check = await ask_llm(f"<PROMPT>\n{prompt}\n</PROMPT>\n{question} - Answer yes or no:", model=client[session_id]["model"])
+    if check:
+        check = check.lower()
+        if "yes" in check:
+            return True
+    return False
+
+
+async def process_search(session_id, prompt, context):
+    # Ask LLM to determin topic to search
+    search_topic = await ask_llm(f"Context: {context}\n\nCreate a single internet search phrase to best answer the fllowing prompt. Don't add commentary.\nPROMPT: {prompt}", model=client[session_id]["model"])
+    if search_topic:
+        search_topic = search_topic.strip()
+        search_topic = search_topic.replace('"', '')
+        # limit to first line only if newlines found
+        if "\n" in search_topic:
+            search_topic = search_topic.split("\n")[0]
+        if search_topic:
+            await handle_search_command(session_id, f"/search {search_topic}")
+            return True
+        else:
+            return False
+
+
+async def handle_intent_command(session_id, p):
+    # Allow user to toggle intent engine
+    if p == "/intent on":
+        client[session_id]["intent"] = True
+        await sio.emit('update', {'update': '[Intent Engine Enabled]', 'voice': 'user'}, room=session_id)
+    elif p == "/intent off":
+        client[session_id]["intent"] = False
+        await sio.emit('update', {'update': '[Intent Engine Disabled]', 'voice': 'user'}, room=session_id)
+    else:
+        current_state = "ON" if client[session_id]["intent"] else "OFF"
+        await sio.emit('update', {'update': '[Usage: /intent on|off] - Enable or disable the intent engine. Currently: ' + current_state, 'voice': 'user'}, room=session_id)
+
 
 async def handle_search_command(session_id, p):
     # Check to see if SEARXNG is enabled
     if not SEARXNG:
         await sio.emit('update', {'update': '[Search Engine Disabled - Check Config]', 'voice': 'user'}, room=session_id)
         return
-    # format /search {opt:max} {prompt}
+    # format /search {opt:max} {prompt} or /search on|off
     parts = p.split()
     max_results = 5
     prompt = ""
+    # check if turn on/off
+    if len(parts) >= 2 and parts[0] == "search" and parts[1] in ["on", "off"]:
+        client[session_id]["internet"] = parts[1] == "on"
+        await sio.emit('update', {'update': f'[Web Search is {"On" if client[session_id]["internet"] else "Off"}]', 'voice': 'user'}, room=session_id)
+        return
     # check to see if optional max results is provided
     if len(parts) >= 2 and parts[1].isdigit():
         max_results = int(parts[1])
@@ -1508,9 +1697,11 @@ async def handle_search_command(session_id, p):
     else:
         prompt = ' '.join(parts[1:])
     if not prompt:
-        await sio.emit('update', {'update': '[Usage: /search {opt:number} {query}] - Search the web.', 'voice': 'user'}, room=session_id)
+        current_state = "ON" if client[session_id]["internet"] else "OFF"
+        await sio.emit('update', {'update': '[Usage: /search {opt:number} {query} or /search on|off] - Search the internet. State: ' + current_state, 'voice': 'user'}, room=session_id)
         return
     await sio.emit('update', {'update': '%s [Searching...]' % p, 'voice': 'user'}, room=session_id)
+    prompt = "Based on the above, " + prompt
     context_str = await search_web(session_id, prompt, max_results) or "[Error searching the web]"
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
@@ -1532,7 +1723,7 @@ async def search_web(session_id, prompt, results=5):
             context_str += f"* {result['title']}\n{result['url']}\n{result['content']}\n\n"
             # Build references
             if "url" in result:
-                references = references + f"\n - {result['title']} - {result['url']}"
+                references = references + f"\n - {result['title']} - <a href='{result['url']}' target='_blank'>[Link]</a>"
         if not context_str:
             context_str = "[No search results found]"
         if references:
