@@ -1657,7 +1657,7 @@ async def process_search(session_id, prompt, context):
         if "\n" in search_topic:
             search_topic = search_topic.split("\n")[0]
         if search_topic:
-            await handle_search_command(session_id, f"/search {search_topic}")
+            await handle_search_command(session_id, f"/search {search_topic}", original_prompt=prompt)
             return True
         else:
             return False
@@ -1676,7 +1676,7 @@ async def handle_intent_command(session_id, p):
         await sio.emit('update', {'update': '[Usage: /intent on|off] - Enable or disable the intent engine. Currently: ' + current_state, 'voice': 'user'}, room=session_id)
 
 
-async def handle_search_command(session_id, p):
+async def handle_search_command(session_id, p, original_prompt=""):
     # Check to see if SEARXNG is enabled
     if not SEARXNG:
         await sio.emit('update', {'update': '[Search Engine Disabled - Check Config]', 'voice': 'user'}, room=session_id)
@@ -1701,7 +1701,8 @@ async def handle_search_command(session_id, p):
         await sio.emit('update', {'update': '[Usage: /search {opt:number} {query} or /search on|off] - Search the internet. State: ' + current_state, 'voice': 'user'}, room=session_id)
         return
     await sio.emit('update', {'update': '%s [Searching...]' % p, 'voice': 'user'}, room=session_id)
-    prompt = "Based on the above, " + prompt
+    if original_prompt:
+        prompt = original_prompt
     context_str = await search_web(session_id, prompt, max_results) or "[Error searching the web]"
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
