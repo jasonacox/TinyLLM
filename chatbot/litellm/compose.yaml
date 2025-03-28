@@ -91,6 +91,7 @@ services:
       - LITELLM_PROXY=http://litellm-proxy:4000/v1
       - LITELLM_KEY=sk-3-laws-safe
       - SEARXNG=http://searxng:8080
+      - INTENT_ROUTER=false
       - LLM_MODEL=local-pixtral
       - TZ=America/Los_Angeles
     volumes:

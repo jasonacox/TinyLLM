@@ -1,5 +1,12 @@
 # Releases
 
+## 0.15.22 - Intent Router
+
+* Chatbot - The chatbot now has simple heuristics (based on LLM queries) to determine the users intent and to route to the built-in functions to ground the response. This includes internet search functions `/news`, `/stock`, `/weather` and `/search`.
+* To activate set environmental variable `INTENT_ROUTER=true` or use the prompt command `/intent on`.
+
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/564faa56-e5a9-4042-8635-dff3fcbbdb74" />
+
 ## 0.15.21 - Internet Search
 
 * Chatbot - The `/search` command has been added to allow the chatbot to search the internet to help answer your prompt. By default, the first 5 most relevant internet search results are added to the context.

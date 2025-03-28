@@ -43,6 +43,7 @@ docker run \
     -p 5000:5000 \
     -e PORT=5000 \
     -e OPENAI_API_BASE="http://localhost:8000/v1" \
+    -e INTENT_ROUTER=false \
     -e TZ="America/Los_Angeles" \
     -v $PWD/.tinyllm:/app/.tinyllm \
     --name chatbot \
@@ -151,6 +152,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 /think filter [on|off]                  # Have chatbot filter out <think></think> content
 /model [LLM_name]                       # Display or select LLM model to use (dialogue popup)
 /search [opt:number] [prompt]           # Search the web to help answer the prompt
+/intent [on|off]                        # Activate intent router to automatically run above functions
 ```
 
 See the [rag](../rag/) for more details about RAG.
@@ -202,9 +204,17 @@ docker run \
 
 The [settings.yml](./litellm/searxng/settings.yml) file needs to be edited to allow the json format. 
 
-The chatbot looks for the environmental variable `SEARXNG` to set the URL of the search service, otherwise it uses http://localhost:8080.
+The chatbot looks for the environmental variable `SEARXNG` to set the URL of the search service, otherwise it uses http://localhost:8080. You can activate it by using the prompt command like this: `/search What is the cost of gas in Texas?`
 
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/8ee65216-6b11-4590-bf19-695e5b6e9a63" />
+
+#### Intent Router
+
+The chatbot now has the ability to read prompts and determine if a function call would help provide a grounded answer. 
+
+It can be activated by setting the `INTENT_ROUTER=true` environmental variable or using the prompt command `/intent on`.  It will use things like /search to find current data on things that tend to change frequently (e.g. cost of eggs). It will also use /weather, /stock and /news. The heuristics it is using is based on LLM calls so the performance will vary based on the LLM you are using. It was tuned for use with the Llama-3.2-11B-Vision model.
+
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/422a7c13-ec6f-43bb-a959-e37d0bb709ec" />
 
 ## Document Manager (Weaviate)
 
