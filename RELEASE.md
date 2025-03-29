@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.23 - Intent Hotfix
+
+* Chatbot - Fix intent router to work with multi-modal (image) context. Updated internet search RAG to better handle conversation thread context answering.
+
 ## 0.15.22 - Intent Router
 
 * Chatbot - The chatbot now has simple heuristics (based on LLM queries) to determine the users intent and to route to the built-in functions to ground the response. This includes internet search functions `/news`, `/stock`, `/weather` and `/search`.
