@@ -251,7 +251,7 @@ default_prompts_intent = {
     "weather": "if the user is asking for weather or current temperature information.",
     "stock": "if the user is asking for stock information.",
     "current": "if the user is asking if the data is current.",
-    "news": "if and only if the user is asking for headline news.",
+    "news": "if and only if the user is asking for headline news or current news about a person, place or company.",
     "search": "if the user is asking us to search the internet or web.",
     "retry": "if the user asks us to try again.",
     "code": "if the user is asking for code.",
@@ -262,7 +262,7 @@ default_prompts["intent"] = """<BACKGROUND>{prompt_context}</BACKGROUND>
     <PROMPT>
     {prompt}
     </PROMPT>
-    Categorize the user's intent in the prompt using one of these:
+    Pay the most attention to the last request. Categorize the user's intent in the prompt using one of these:
     """ + "\n    ".join([f"{k}) {v}" for k, v in default_prompts_intent.items()]) + "\nLimit your response to one of the above categories."
 default_prompts["internet_rag"] = "You are an assistant for question-answering tasks. Use the above discussion thread and the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context. Do not mention your answer was based on this context.\nInternet Search Context: {context_str}\n\nQuestion: {prompt}\nAnswer:"
 
@@ -1568,10 +1568,10 @@ async def handle_normal_prompt(session_id, p):
             client[session_id]["toxicity"] = 0.0
             log(f"Toxic Prompt Detected [{toxicity}] - {p}")
             return
-    if client[session_id]["intent"] and len(p) < 200:
+    if client[session_id]["intent"] and len(p) < 200 and not client[session_id]["image_data"]:
         # Intent Engine is enabled -  Give LLM context on previous prompt
-        prompt_context = client[session_id]["context"][-2]["content"]
-        prompt_context += client[session_id]["context"][-1]["content"]
+        prompt_context = client[session_id]["context"][-2]["content"] if isinstance(client[session_id]["context"][-2]["content"], str) else ""
+        prompt_context += client[session_id]["context"][-1]["content"] if isinstance(client[session_id]["context"][-1]["content"], str) else ""
         # remove "stock" and "news" from context
         prompt_context = prompt_context.replace("stock", "")
         prompt_context = prompt_context.replace("news", "")
@@ -1600,11 +1600,11 @@ async def handle_normal_prompt(session_id, p):
                 return
             if "news" in intent:
                 # Get news
-                type_of_news = await ask_llm(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general' if general news is requested. Otherwise list the company, placer, person or subject if given:", model=client[session_id]["model"])
+                type_of_news = await ask_llm(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general news' if general news is requested. Otherwise list the company, placer, person or subject if given:", model=client[session_id]["model"])
                 log(f"Type of news: {type_of_news}")
                 score, _ = await prompt_similarity(session_id, p, "What is the current news?")
                 if score > 1:
-                    if "general" in type_of_news.lower():
+                    if "general news" in type_of_news.lower():
                         type_of_news = ""
                     await fetch_news(session_id, f"/news {type_of_news}")
                     return
