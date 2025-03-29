@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.24 - Intent Improvements
+
+* Chatbot - Improve the conversation context for intent routing. This allow conversational intent following. 
+
 ## 0.15.23 - Intent Hotfix
 
 * Chatbot - Fix intent router to work with multi-modal (image) context. Updated internet search RAG to better handle conversation thread context answering.

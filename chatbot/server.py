@@ -257,10 +257,12 @@ default_prompts_intent = {
     "code": "if the user is asking for code.",
     "other": "if the user is not asking for any of the above."
 }
-default_prompts["intent"] = """You are a language expert. Consider this user prompt:\n<PROMPT>
+default_prompts["intent"] = """<BACKGROUND>{prompt_context}</BACKGROUND>
+    You are a language expert. Consider this user prompt:
+    <PROMPT>
     {prompt}
     </PROMPT>
-    Categorize the user's intent using one of these:
+    Categorize the user's intent in the prompt using one of these:
     """ + "\n    ".join([f"{k}) {v}" for k, v in default_prompts_intent.items()]) + "\nLimit your response to one of the above categories."
 default_prompts["internet_rag"] = "You are an assistant for question-answering tasks. Use the above discussion thread and the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context. Do not mention your answer was based on this context.\nInternet Search Context: {context_str}\n\nQuestion: {prompt}\nAnswer:"
 
@@ -1568,12 +1570,12 @@ async def handle_normal_prompt(session_id, p):
             return
     if client[session_id]["intent"] and len(p) < 200:
         # Intent Engine is enabled -  Give LLM context on previous prompt
-        prompt_context = ""
-        context_thread = client[session_id]["context"][-2]["content"]
-        for i in context_thread:
-            if "text" in i:
-                prompt_context += i.get("text") or ""
-        prompt_context = prompt_context + "\nNew Request: " + p
+        prompt_context = client[session_id]["context"][-2]["content"]
+        prompt_context += client[session_id]["context"][-1]["content"]
+        # remove "stock" and "news" from context
+        prompt_context = prompt_context.replace("stock", "")
+        prompt_context = prompt_context.replace("news", "")
+        prompt_context += "\nNew Request: " + p
         # If it is just a greeting or plesantry, skip intent detection
         answer = await ask_llm(f"PROMPT: {p}\nIs the user greeting or thanking us? (yes or no):", model=client[session_id]["model"])
         if "yes" in answer.lower():
@@ -1593,15 +1595,13 @@ async def handle_normal_prompt(session_id, p):
                 if await double_check(session_id, p, intent_questions["stock"]):
                     stock_prompt = p
                 else:
-                    # check previous two threads for stock prompt
-                    prior_context = client[session_id]["context"][-2]["content"]
-                    prior_context = ''.join(e for e in prior_context if e.isalnum() or e.isspace())
-                    stock_prompt = await ask_llm(expand_prompt(prompts["company"], {"prompt": prior_context}), model=client[session_id]["model"])
+                    stock_prompt = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt_context}), model=client[session_id]["model"])
                 await handle_stock_command(session_id, f"/stock {stock_prompt}")
                 return
             if "news" in intent:
                 # Get news
-                type_of_news = await ask_llm(f"What specific company, person or type of news are they looking for in this request: {prompt_context}\nList a single word or state 'general news' if general news is requested. Always list the company name if given:", model=client[session_id]["model"])
+                type_of_news = await ask_llm(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general' if general news is requested. Otherwise list the company, placer, person or subject if given:", model=client[session_id]["model"])
+                log(f"Type of news: {type_of_news}")
                 score, _ = await prompt_similarity(session_id, p, "What is the current news?")
                 if score > 1:
                     if "general" in type_of_news.lower():
