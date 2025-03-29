@@ -262,6 +262,7 @@ default_prompts["intent"] = """You are a language expert. Consider this user pro
     </PROMPT>
     Categorize the user's intent using one of these:
     """ + "\n    ".join([f"{k}) {v}" for k, v in default_prompts_intent.items()]) + "\nLimit your response to one of the above categories."
+default_prompts["internet_rag"] = "You are an assistant for question-answering tasks. Use the above discussion thread and the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Back up your answer using facts from the following context. Do not mention your answer was based on this context.\nInternet Search Context: {context_str}\n\nQuestion: {prompt}\nAnswer:"
 
 # Log ONE_SHOT mode
 if ONESHOT:
@@ -421,16 +422,22 @@ app.router.lifespan_context = lifespan
 # Load system prompts from PROMPT_FILE
 def load_prompts():
     global prompts
+    newprompts = False
     try:
         with open(PROMPT_FILE, "r") as f:
             prompts = json.load(f)
+            log(f"Loaded {len(prompts)} prompts.")
         # Ensure prompts always include all keys from default_prompts
         for k in default_prompts:
             if k not in prompts:
+                newprompts = True
                 prompts[k] = default_prompts[k]
     except:
         log(f"Unable to load system prompts file {PROMPT_FILE}, creating with defaults.")
         reset_prompts()
+        save_prompts()
+    if newprompts:
+        log("Updating system prompts with new elements.")
         save_prompts()
 
 # Save prompts to PROMPT_FILE
@@ -463,7 +470,6 @@ def reset_prompts():
 
 # Load prompts
 load_prompts()
-log(f"Loaded {len(prompts)} prompts.")
 
 # Function to return base conversation prompt
 def base_prompt(content=None):
@@ -1562,8 +1568,11 @@ async def handle_normal_prompt(session_id, p):
             return
     if client[session_id]["intent"] and len(p) < 200:
         # Intent Engine is enabled -  Give LLM context on previous prompt
-        prompt_context = client[session_id]["context"][-2]["content"]
-        prompt_context = ''.join(e for e in prompt_context if e.isalnum() or e.isspace())
+        prompt_context = ""
+        context_thread = client[session_id]["context"][-2]["content"]
+        for i in context_thread:
+            if "text" in i:
+                prompt_context += i.get("text") or ""
         prompt_context = prompt_context + "\nNew Request: " + p
         # If it is just a greeting or plesantry, skip intent detection
         answer = await ask_llm(f"PROMPT: {p}\nIs the user greeting or thanking us? (yes or no):", model=client[session_id]["model"])
@@ -1706,7 +1715,7 @@ async def handle_search_command(session_id, p, original_prompt=""):
     context_str = await search_web(session_id, prompt, max_results) or "[Error searching the web]"
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
-    client[session_id]["prompt"] = expand_prompt(prompts["rag"], {"context_str": context_str, "prompt": prompt})
+    client[session_id]["prompt"] = expand_prompt(prompts["internet_rag"], {"context_str": context_str, "prompt": prompt})
 
 async def search_web(session_id, prompt, results=5):
     # Search the web using SEARXNG
