@@ -1,5 +1,9 @@
 # Releases
 
+## 0.15.25 - Improvements
+
+* Chatbot - Improve intent routing for news.
+
 ## 0.15.24 - Intent Improvements
 
 * Chatbot - Improve the conversation context for intent routing. This allow conversational intent following. 
