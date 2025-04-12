@@ -141,3 +141,5 @@ docker logs vllm -f
 | 12++    | sm_95    | 9.5                  | Blackwell    | 2024 | B1xx, GB1xx                         |
 
 CUDA showing maximum version that supports this architecture. (*) Fermi and Kepler are deprecated from CUDA 9 onwards. Maxwell is deprecated from CUDA 11.6 onwards. (++) The rest are still supported by latest CUDA versions. (**) Values used in TORCH_CUDA_ARCH_LIST list. [References](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/).
+
+Use this to determine GPU compute capability: `nvidia-smi --query-gpu=compute_cap --format=csv`
