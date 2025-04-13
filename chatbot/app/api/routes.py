@@ -14,32 +14,62 @@ import datetime
 import time
 import asyncio
 import socketio
-from fastapi import FastAPI, Request, File, UploadFile, Form
+from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+import pillow_heif
+from PIL import Image
 
-from src.config import (log, debug, VERSION, API_KEY, API_BASE, LITELLM_PROXY,
+from app.core.config import (log, debug, VERSION, API_KEY, API_BASE, LITELLM_PROXY,
                         LITELLM_KEY, AGENTNAME, MYMODEL, DEBUG, MAXCLIENTS,
                         MAXTOKENS, TEMPERATURE, PORT, PROMPT_FILE, PROMPT_RO,
                         USE_SYSTEM, TOKEN, ONESHOT, RAG_ONLY, EXTRA_BODY,
                         TOXIC_THRESHOLD, THINKING, THINK_FILTER, SEARXNG, 
                         INTENT_ROUTER, WEB_SEARCH)
-from src.rag import *
-from src.llm import *
-from src.prompts import *
-import pillow_heif
-from PIL import Image
+from app.rag.rag import *
+from app.core.llm import *
+from app.core.prompts import *
 
 # Ensure pillow_heif is properly registered with PIL
 pillow_heif.register_heif_opener()
 
 # Configure FastAPI App and SocketIO
 #
-sio = socketio.AsyncServer(async_mode="asgi")
-socket_app = socketio.ASGIApp(sio)
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+socket_app = socketio.ASGIApp(sio, socketio_path="socket.io")
 app = FastAPI()
+
+# Rate limiter configuration
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# Maximum file size (10MB)
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+# Session management
+SESSION_TIMEOUT = 3600  # 1 hour
+last_activity = {}
+
+def cleanup_old_sessions():
+    """Clean up sessions that have been inactive for too long"""
+    current_time = time.time()
+    sessions_to_remove = []
+    for session_id, last_time in last_activity.items():
+        if current_time - last_time > SESSION_TIMEOUT:
+            sessions_to_remove.append(session_id)
+    for session_id in sessions_to_remove:
+        if session_id in client:
+            del client[session_id]
+        del last_activity[session_id]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,7 +84,7 @@ app.router.lifespan_context = lifespan
 # FastAPI Routes
 #
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="app/templates")
 
 # Display the main chatbot page
 @app.get("/", response_class=HTMLResponse)
@@ -64,7 +94,7 @@ async def index(request: Request):
 # Serve static socket.io.js
 @app.get("/socket.io.js")
 def serve_socket_io_js():
-    return FileResponse("templates/socket.io.js", media_type="application/javascript")
+    return FileResponse("app/templates/socket.io.js", media_type="application/javascript")
 
 # Display settings and stats
 @app.get("/stats")
@@ -202,11 +232,21 @@ async def list_models():
 
 # Upload a file
 @app.post('/upload')
-async def upload_file(file: UploadFile = File(...), session_id: str = Form(...)):
+@limiter.limit("5/minute")
+async def upload_file(request: Request, file: UploadFile = File(...), session_id: str = Form(...)):
     global client
     file_name = file.filename
     session_id = session_id.strip()
-    content = await file.read()  # Read file content
+    
+    # Check file size
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB")
+    
+    # Update session activity
+    last_activity[session_id] = time.time()
+    cleanup_old_sessions()
+    
     # Open the image, checking for HEIC format
     try:
         image = Image.open(io.BytesIO(content))

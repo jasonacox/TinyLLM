@@ -14,9 +14,9 @@ from bs4 import BeautifulSoup
 import requests
 from pypdf import PdfReader
 
-from src.config import *
-from src.documents import Documents
-from src.llm import ask_llm
+from app.core.config import *
+from app.rag.documents import Documents
+from app.core.llm import ask_llm
 
 # Function - Get weather for location
 async def get_weather(location):

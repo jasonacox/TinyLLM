@@ -7,7 +7,7 @@ It also includes functions to expand variables in prompts and reset prompts to d
 """
 
 # Imports
-from src.config import *
+from app.core.config import *
 import os
 import json
 import datetime

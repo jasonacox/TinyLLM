@@ -70,28 +70,46 @@ https://github.com/jasonacox/TinyLLM
 # pylint: disable=global-statement
 # pylint: disable=global-variable-not-assigned
 
-# Import Libraries
 import uvicorn
 import sys
+import time
+import traceback
+from app.api.routes import app  # The FastAPI app instance
+from app.core.config import PORT, log, debug
+from app.core.llm import init_llm
+import asyncio
 
-# TinyLLM Dependencies
-from src.config import PORT, log
-from src.routes import app
-
-# Enable tracemalloc for memory usage
-import tracemalloc
-tracemalloc.start()
-
-#
-# Start dev server and listen for connections
-#
+def start_server(max_retries: int = 3, retry_delay: int = 5):
+    for attempt in range(max_retries):
+        try:
+            log(f"Starting server on port {PORT} (attempt {attempt + 1}/{max_retries})")
+            config = uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="info")
+            server = uvicorn.Server(config)
+            return server
+        except Exception as e:
+            log(f"Error starting server: {str(e)}")
+            debug(f"Traceback:\n{traceback.format_exc()}")
+            if attempt < max_retries - 1:
+                log(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                log("Max retries reached. Server failed to start.")
+                return None
 
 if __name__ == '__main__':
     try:
-        log(f"DEV MODE - Starting server on port {PORT}. Use uvicorn server:app for PROD mode.")
-        config = uvicorn.Config(app, host="0.0.0.0", port=PORT)
-        server = uvicorn.Server(config)
-        server.run()
+        log(f"DEV MODE - Starting server on port {PORT}. Use uvicorn for PROD mode.")
+        # Initialize LLM connection
+        asyncio.run(init_llm())
+        server = start_server()
+        if server:
+            server.run()
+        else:
+            sys.exit(1)
+    except KeyboardInterrupt:
+        log("Server stopped by user")
+        sys.exit(0)
     except Exception as e:
-        log(f"Error starting server: {e}")
+        log(f"Fatal error: {e}")
+        debug(f"Traceback:\n{traceback.format_exc()}")
         sys.exit(1)

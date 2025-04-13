@@ -39,7 +39,7 @@ import datetime
 from io import BytesIO
 import logging
 
-from src.documents import Documents
+from chatbot.app.rag.documents import Documents
 
 import requests
 import socketio
@@ -55,10 +55,10 @@ import secrets
 from contextlib import asynccontextmanager
 from pypdf import PdfReader
 
-from src.documents import Documents
+from app.rag.documents import Documents
 
 # TinyLLM Doc Manager Version
-from src.config import VERSION
+from app.core.config import VERSION
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
