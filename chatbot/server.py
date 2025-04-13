@@ -1590,14 +1590,6 @@ async def handle_normal_prompt(session_id, p):
                 if await double_check(session_id, p, intent_questions["weather"]):
                     await handle_weather_command(session_id, p)
                     return
-            if "stock" in intent and ALPHA_KEY:
-                # Get stock price
-                if await double_check(session_id, p, intent_questions["stock"]):
-                    stock_prompt = p
-                else:
-                    stock_prompt = await ask_llm(expand_prompt(prompts["company"], {"prompt": prompt_context}), model=client[session_id]["model"])
-                await handle_stock_command(session_id, f"/stock {stock_prompt}")
-                return
             if "news" in intent:
                 # Get news
                 type_of_news = await ask_llm(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general news' if general news is requested. Otherwise list the company, placer, person or subject if given:", model=client[session_id]["model"])
@@ -1631,17 +1623,13 @@ async def handle_normal_prompt(session_id, p):
                 return
             if await double_check(session_id, p, intent_questions["dynamic"]):
                 intent = "search"
-            if SEARXNG and "search" in intent:
-                # Does it help to search the web? Ask LLM
-                #answer = await ask_llm(f"You said the answer to this query likely changed. Should we search the web for more details? (yes or no): {p}?", model=client[session_id]["model"])
-                answer = "yes"
-                debug(f"Search the web: {answer}")
-                if answer:
-                    answer = answer.lower()
-                    if "yes" in answer:
-                        debug(f"Search the web: {p}")
-                        await process_search(session_id, p, prompt_context)
-                        return
+            if SEARXNG and ("search" in intent or "stock" in intent):
+                debug(f"Search the web: {p}")
+                if "stock" in intent:
+                    # Add instructions to also list company stock ticker
+                    p = f"{p} - Please also list the stock ticker symbol if relevant."
+                await process_search(session_id, p, prompt_context)
+                return
     # Default: Process the prompt
     client[session_id]["prompt"] = p
 
