@@ -40,6 +40,7 @@ COPY server.py /app/server.py
 COPY templates /app/templates
 COPY documents.py /app/documents.py
 COPY version.py /app/version.py
+COPY src /app/src
 
 # Network
 EXPOSE $PORT
