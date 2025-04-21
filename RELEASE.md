@@ -1,5 +1,10 @@
 # Releases
 
+## 0.16.0 - Refactor Chatbot
+
+* Chatbot - To improve maintainability and prepare for future expansions, the code has been modularized.
+* Image Generation - Starting framework to allow Chatbot to use image generation models.
+
 ## 0.15.25 - Improvements
 
 * Chatbot - Improve intent routing for news.
