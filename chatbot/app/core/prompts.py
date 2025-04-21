@@ -86,6 +86,7 @@ default_prompts_intent = {
     "search": "if the user is asking us to search the internet or web.",
     "retry": "if the user asks us to try again.",
     "code": "if the user is asking for code.",
+    "image": "if the user is asking for an image to be made.",
     "other": "if the user is not asking for any of the above."
 }
 default_prompts["intent"] = """<BACKGROUND>{prompt_context}</BACKGROUND>

@@ -45,11 +45,12 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         TOXIC_THRESHOLD, THINKING, THINK_FILTER, SEARXNG,
                         INTENT_ROUTER, WEB_SEARCH, WEAVIATE_LIBRARY, RESULTS,
                         WEAVIATE_HOST, WEAVIATE_GRPC_HOST, WEAVIATE_PORT,
-                        WEAVIATE_GRPC_PORT, ALPHA_KEY, baseprompt)
+                        WEAVIATE_GRPC_PORT, ALPHA_KEY, SWARMUI, baseprompt)
 from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
                         extract_text_from_url, query_index)
 from app.core.llm import (client, get_models, ask, ask_llm, ask_context)
 from app.core.prompts import (prompts, base_prompt, default_prompts, save_prompts, expand_prompt)
+from app.image import ImageGenerator
 
 # Ensure pillow_heif is properly registered with PIL
 pillow_heif.register_heif_opener()
@@ -68,6 +69,16 @@ app.add_middleware(SlowAPIMiddleware)
 
 # Maximum file size (10MB)
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
+# Image generator instance
+image_generator = ImageGenerator(host=SWARMUI, model="OfficialStableDiffusion/sd_xl_base_1.0",
+                                 width=1024, height=1024, cfgscale=7.5, steps=20, seed=-1,
+                                 gen_timeout=300)
+if not image_generator.test_connection():
+    log("Image generator not available - set SwarmUI server using SWARMUI environment variable")
+    image_generator = None
+else:
+    log(f"Image generator activated - {SWARMUI}")
 
 # Session management
 SESSION_TIMEOUT = 3600  # 1 hour
@@ -150,6 +161,10 @@ async def home(format: str = None):
         "Extra Body Parameters (EXTRA_BODY)": EXTRA_BODY,
         "Thinking Mode (THINKING)": THINKING,
         "Think Tag Filter (THINK_FILTER)": THINK_FILTER,
+        "SearXNG Search Engine (SEARXNG)": SEARXNG,
+        "Intent Router (INTENT_ROUTER)": INTENT_ROUTER,
+        "Web Search (WEB_SEARCH)": WEB_SEARCH,
+        "SwarmUI Host (SWARMUI)": SWARMUI,
     }
     if format == "json":
         return data
@@ -602,7 +617,7 @@ async def handle_url_prompt(session_id, p):
 async def handle_command(session_id, p):
     command = p[1:].split(" ")[0].lower()
     if command == "":
-        await sio.emit('update', {'update': '[Commands: /intent /model /news /rag /reset /search /sessions /stock /think /version /weather]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Commands: /image /intent /model /news /rag /reset /search /sessions /stock /think /version /weather]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
     elif command == "reset":
         await reset_context(session_id)
@@ -626,6 +641,8 @@ async def handle_command(session_id, p):
         await handle_search_command(session_id, p)
     elif command == "intent":
         await handle_intent_command(session_id, p)
+    elif command == "image":
+        await handle_image_command(session_id, p)
     else:
         await sio.emit('update', {'update': '[Invalid command]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
@@ -841,6 +858,50 @@ async def handle_stock_command(session_id, p):
     client[session_id]["context"].append({"role": "assistant", "content" : context_str})
     client[session_id]["prompt"] = ''
 
+async def handle_image_command(session_id, p):
+    if not image_generator:
+        await sio.emit('update', {'update': '[Image Generation is not enabled]', 'voice': 'user'}, room=session_id)
+        return
+    prompt = p[6:].strip()
+    if not prompt:
+        await sio.emit('update', {'update': '[Usage: /image {prompt}] - Generate image for prompt.', 'voice': 'user'}, room=session_id)
+        return
+    await sio.emit('update', {'update': '%s [Generating Image...]' % p, 'voice': 'user'}, room=session_id)
+    debug(f"Image Prompt: {prompt}")
+    client[session_id]["visible"] = False
+    client[session_id]["remember"] = True
+    # Generate image from image_generator
+
+    image_encoded = await image_generator.generate(prompt)
+    if image_encoded:
+        image = Image.open(io.BytesIO(base64.b64decode(image_encoded.split(",")[1])))
+        #image.show()
+    else:
+        await sio.emit('update', {'update': '[Unable to generate image]', 'voice': 'user'}, room=session_id)
+        return
+    # Resize image if height or width is greater than 1024
+    if image.height > 1024 or image.width > 1024:
+        image.thumbnail((1024, 1024))
+    # Convert image to RGB if it has an alpha channel
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+    # Save image to memory as JPEG
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='JPEG')
+    content = img_byte_arr.getvalue()
+    # Convert image to base64
+    image_data = base64.b64encode(content).decode('utf-8')
+    # Add to client session
+    client[session_id]["image_data"] = image_data
+    # Send image back to client to display
+    await sio.emit('update', {'filename': "generated.png",
+                            'generated': True,
+                            'image_data': image_data,
+                            'voice': 'image'}, room=session_id)
+    await sio.emit('update', {'update': '[Image Generated]', 'voice': 'user'}, room=session_id)
+    # Create a prompt to ask LLM to describe image
+    client[session_id]["prompt"] = "Describe the image in detail. The original prompt was: %s\n" % prompt
+
 # Intent Engine Helpers
 
 async def prompt_similarity(session_id, prompt1, prompt2):
@@ -942,6 +1003,14 @@ async def handle_normal_prompt(session_id, p):
                 # Code requested
                 client[session_id]["prompt"] = p
                 return
+            if "image" in intent:
+                # Image requested
+                image_prompt = await ask_llm(f"Create a single image generation prompt from the following request: <REQUEST>\n{prompt_context}\n</REQUEST>\n", model=client[session_id]["model"])
+                if image_prompt:
+                    # Add instructions to also list company stock ticker
+                    p = f"/image {image_prompt}"
+                    await handle_image_command(session_id, p)
+                    return
             if "retry" in intent and SEARXNG:
                 # Assume last answer was bad, find the previous prompt and ask again
                 if len(client[session_id]["context"]) > 2:

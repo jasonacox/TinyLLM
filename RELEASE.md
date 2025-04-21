@@ -2,8 +2,8 @@
 
 ## 0.16.0 - Refactor Chatbot
 
-* Chatbot - To improve maintainability and prepare for future expansions, the code has been modularized.
-* Image Generation - Starting framework to allow Chatbot to use image generation models.
+* Refactor - To improve maintainability and prepare for future expansions, the chatbot code has been modularized.
+* Image Generation - The chatbot now uses the SwarmUI APIs to generate images. Users can request image generation using the explicit `/image {prompt}` command or indirectly by using the intent router. Intent router will allow fo user dialogue to adjust the image via prompt updates. Research and details here: https://github.com/jasonacox/TinyLLM/discussions/26
 
 ## 0.15.25 - Improvements
 

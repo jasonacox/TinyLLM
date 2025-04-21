@@ -57,6 +57,7 @@ MAX_IMAGES = int(os.environ.get("MAX_IMAGES", 1))                           # Ma
 SEARXNG = os.environ.get("SEARXNG", "http://localhost:8080")                # SearXNG URL for internet search engine  (Optional)
 INTENT_ROUTER = os.environ.get("INTENT_ROUTER", "false").lower() == "true"  # Set to True to enable intent detection
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "false").lower() == "true"        # Set to True to enable web search for all queries
+SWARMUI = os.environ.get("SWARMUI", "http://localhost:7801")                # Set to SwarmUI host URL, eg. http://localhost:7801
 
 # Convert EXTRA_BODY to dictionary if it is proper JSON
 if EXTRA_BODY:

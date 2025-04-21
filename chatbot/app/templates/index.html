@@ -615,23 +615,23 @@
             console.log('File dropped');
             const files = e.dataTransfer.files;
             if (files.length > 0) {
-            const file = files[0];
-            uploadFile(file);
+                const file = files[0];
+                uploadFile(file);
             }
         }
         function handlePaste(event) {
             // Detect if paste is an image
             const items = (event.clipboardData || event.originalEvent.clipboardData).items;
             for (const item of items) {
-            if (item.kind === 'file' && item.type.includes('image')) {
-                const file = item.getAsFile();
-                uploadFile(file);
-            }
+                if (item.kind === 'file' && item.type.includes('image')) {
+                    const file = item.getAsFile();
+                    uploadFile(file);
+                }
             }
             // Otherwise paste as text
             const text = (event.clipboardData || event.originalEvent.clipboardData).getData('text');
             if (text) {
-            event.target.value += text;
+                event.target.value += text;
             }
             event.preventDefault();
         }
@@ -869,7 +869,11 @@
 
             if (data.voice === "image") {
                 // Display filename and image
-                updateContainer.innerHTML += `<p>Uploaded image: ${data.filename}</p>`;
+                if (data.generated) {
+                    updateContainer.innerHTML += `<p>Generated image</p>`;
+                } else {
+                    updateContainer.innerHTML += `<p>Uploaded image: ${data.filename}</p>`;
+                }
                 updateContainer.innerHTML += `<img src="data:image/png;base64,${data.image_data}" style="max-width: 50%; height: auto;">`;
             }
 
