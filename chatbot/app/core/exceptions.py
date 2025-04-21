@@ -3,6 +3,7 @@ ChatBot - Custom Exceptions
 
 This module defines custom exceptions for the TinyLLM Chatbot.
 """
+# pylint: disable=unnecessary-pass
 
 class ChatbotError(Exception):
     """Base exception for all chatbot errors"""
@@ -30,4 +31,4 @@ class AuthenticationError(ChatbotError):
 
 class FileError(ChatbotError):
     """Exception for file-related errors"""
-    pass 
+    pass

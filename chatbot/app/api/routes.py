@@ -4,38 +4,52 @@ ChatBot - FastAPI / SocketIO Routes Definition
 This module contains the FastAPI and SocketIO routes for the TinyLLM Chatbot.
 It handles user interactions, including sending and receiving messages, uploading files,
 and managing the chatbot's state.
-"""
 
-# Imports
-import json
-import base64
-import io
-import datetime
-import time
+Author: Jason A. Cox
+20 Apr 2025
+github.com/jasonacox/TinyLLM
+"""
+# pylint: disable=invalid-name
+# pylint: disable=global-statement
+# pylint: disable=global-variable-not-assigned
+
+# Standard library imports
 import asyncio
-import socketio
-from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import FileResponse
+import base64
+import datetime
+import io
+import json
+import re
+import time
 from contextlib import asynccontextmanager
-from fastapi.middleware.cors import CORSMiddleware
+import requests
+
+# Third-party imports
+from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.templating import Jinja2Templates
+from PIL import Image
+import pillow_heif
+import socketio
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-import pillow_heif
-from PIL import Image
+from slowapi.util import get_remote_address
 
-from app.core.config import (log, debug, VERSION, API_KEY, API_BASE, LITELLM_PROXY,
+# Local imports
+# pylint: disable=unused-import
+from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITELLM_PROXY,
                         LITELLM_KEY, AGENTNAME, MYMODEL, DEBUG, MAXCLIENTS,
                         MAXTOKENS, TEMPERATURE, PORT, PROMPT_FILE, PROMPT_RO,
                         USE_SYSTEM, TOKEN, ONESHOT, RAG_ONLY, EXTRA_BODY,
-                        TOXIC_THRESHOLD, THINKING, THINK_FILTER, SEARXNG, 
-                        INTENT_ROUTER, WEB_SEARCH)
-from app.rag.rag import *
-from app.core.llm import *
-from app.core.prompts import *
+                        TOXIC_THRESHOLD, THINKING, THINK_FILTER, SEARXNG,
+                        INTENT_ROUTER, WEB_SEARCH, WEAVIATE_LIBRARY, RESULTS,
+                        WEAVIATE_HOST, WEAVIATE_GRPC_HOST, WEAVIATE_PORT,
+                        WEAVIATE_GRPC_PORT, ALPHA_KEY, baseprompt)
+from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
+                        extract_text_from_url, query_index)
+from app.core.llm import (client, get_models, ask, ask_llm, ask_context)
+from app.core.prompts import (prompts, base_prompt, default_prompts, save_prompts, expand_prompt)
 
 # Ensure pillow_heif is properly registered with PIL
 pillow_heif.register_heif_opener()
@@ -72,7 +86,7 @@ def cleanup_old_sessions():
         del last_activity[session_id]
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI): # pylint: disable=unused-argument,redefined-outer-name
     log("Starting chatbot...")
     yield
     log("Shutting down chatbot...")
@@ -232,21 +246,21 @@ async def list_models():
 
 # Upload a file
 @app.post('/upload')
-@limiter.limit("5/minute")
-async def upload_file(request: Request, file: UploadFile = File(...), session_id: str = Form(...)):
+@limiter.limit("15/minute")
+async def upload_file(request: Request, file: UploadFile = File(...), session_id: str = Form(...)): # pylint: disable=unused-argument
     global client
     file_name = file.filename
     session_id = session_id.strip()
-    
+
     # Check file size
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB")
-    
+
     # Update session activity
     last_activity[session_id] = time.time()
     cleanup_old_sessions()
-    
+
     # Open the image, checking for HEIC format
     try:
         image = Image.open(io.BytesIO(content))
@@ -299,7 +313,7 @@ async def is_repeating_exact(text: str, window: int = 100, repeats: int = 5) -> 
 
 # Client connected - start thread to send updates
 @sio.on('connect')
-async def handle_connect(session_id, env):
+async def handle_connect(session_id, env): # pylint: disable=unused-argument
     debug(f"Client connected: {session_id}")
 
     # Convert each character to its hex representation
@@ -398,7 +412,7 @@ async def handle_connect(session_id, env):
                             await sio.emit('update', {'update': completion_text, 'voice': 'ai'},room=session_id)
                             tokens = len(completion_text)/4
                         # Update footer with stats
-                        await sio.emit('update', {'update': 
+                        await sio.emit('update', {'update':
                                                   f"TinyLLM Chatbot {VERSION} - {client[session_id]['model']} - Tokens: {tokens} - TPS: {tokens/(time.time()-stime):.1f}",
                                                   'voice': 'footer', 'model': client[session_id]['model']},room=session_id)
                         # Check for link injection
@@ -566,7 +580,6 @@ async def handle_request_conversation(session_id):
     else:
         log(f"Invalid session {session_id}")
         await handle_invalid_session(session_id)
-
 
 
 async def handle_invalid_session(session_id):
@@ -851,7 +864,7 @@ async def prompt_similarity(session_id, prompt1, prompt2):
         debug(f"Similarity Score: {score} - Justification: {justification}")
         return score, justification
     except:
-        debug(f"Unable to process response: {response}")
+        debug(f"Unable to process response: {answer}")
         return 10, "Unable to process response"
 
 intent_questions = {
@@ -860,7 +873,7 @@ intent_questions = {
     "search": "Is this request asking to search the internet or web?",
     "stock": "Does this prompt contain a company name?",
     "dynamic": "Is is possible that the answer to this question changed over last 4 years, dependent on current events or news, or subject to change due to external factors?",
-    "followup": "Does this seems like a follow-up question or statment?"
+    "followup": "Does this seems like a follow-up question or statement?"
 }
 
 async def handle_normal_prompt(session_id, p):
@@ -901,7 +914,7 @@ async def handle_normal_prompt(session_id, p):
         prompt_context = prompt_context.replace("stock", "")
         prompt_context = prompt_context.replace("news", "")
         prompt_context += "\nNew Request: " + p
-        # If it is just a greeting or plesantry, skip intent detection
+        # If it is just a greeting or pleasantry, skip intent detection
         answer = await ask_llm(f"PROMPT: {p}\nIs the user greeting or thanking us? (yes or no):", model=client[session_id]["model"])
         if "yes" in answer.lower():
             client[session_id]["prompt"] = p
@@ -1007,9 +1020,9 @@ async def handle_search_command(session_id, p, original_prompt=""):
     max_results = 5
     prompt = ""
     # check if turn on/off
-    if len(parts) >= 2 and parts[0] == "search" and parts[1] in ["on", "off"]:
-        client[session_id]["internet"] = parts[1] == "on"
-        await sio.emit('update', {'update': f'[Web Search is {"On" if client[session_id]["internet"] else "Off"}]', 'voice': 'user'}, room=session_id)
+    if len(parts) == 2 and parts[0] == "/search" and parts[1] in ["on", "off"]:
+        client[session_id]["internet"] = parts[1].lower() == "on"
+        await sio.emit('update', {'update': f'[Auto Web Search is {"On" if client[session_id]["internet"] else "Off"}]', 'voice': 'user'}, room=session_id)
         return
     # check to see if optional max results is provided
     if len(parts) >= 2 and parts[1].isdigit():
@@ -1019,7 +1032,7 @@ async def handle_search_command(session_id, p, original_prompt=""):
         prompt = ' '.join(parts[1:])
     if not prompt:
         current_state = "ON" if client[session_id]["internet"] else "OFF"
-        await sio.emit('update', {'update': '[Usage: /search {opt:number} {query} or /search on|off] - Search the internet. State: ' + current_state, 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Usage: /search {opt:number} {query} or /search {on|off}] - Auto Web Search: ' + current_state, 'voice': 'user'}, room=session_id)
         return
     await sio.emit('update', {'update': '%s [Searching...]' % p, 'voice': 'user'}, room=session_id)
     if original_prompt:
@@ -1036,7 +1049,7 @@ async def search_web(session_id, prompt, results=5):
     try:
         # Search the SEARXNG service with URI: /search?q={prompt}&format=json
         # use GET request to get the search results (max results)
-        search_results = requests.get(f"{SEARXNG}/search?q={prompt}&format=json").json()
+        search_results = requests.get(f"{SEARXNG}/search?q={prompt}&format=json", timeout=10).json()
         count = 0
         for result in search_results.get('results', []):
             if count >= results:

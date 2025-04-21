@@ -11,7 +11,18 @@ https://github.com/jasonacox/TinyLLM
 # pylint: disable=invalid-name
 # pylint: disable=global-statement
 # pylint: disable=global-variable-not-assigned
+# pylint: disable=unused-import
+
 
 # TinyLLM Dependencies
 from app.core.config import PORT, log, debug
-from app.api.routes import app 
+from app.api.routes import app
+from app.core.llm import test_model
+
+# Test LLM
+async def main():
+    await test_model()
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

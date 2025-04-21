@@ -4,13 +4,31 @@ ChatBot - System Prompts
 This module provides functions to load, save, and manage system prompts for the chatbot.
 It includes default prompts for various tasks such as weather, stock prices, news, and more.
 It also includes functions to expand variables in prompts and reset prompts to default values.
-"""
 
-# Imports
-from app.core.config import *
-import os
-import json
+Author: Jason A. Cox
+20 Apr 2025
+github.com/jasonacox/TinyLLM
+"""
+# pylint: disable=invalid-name
+# pylint: disable=global-statement
+# pylint: disable=global-variable-not-assigned
+
+# Standard library imports
 import datetime
+import json
+import os
+
+# Local imports
+from app.core.config import (
+    AGENTNAME,
+    MAXTOKENS,
+    PROMPT_FILE,
+    TEMPERATURE,
+    USE_SYSTEM,
+    baseprompt,
+    log,
+    prompts,
+)
 
 # Prompt Defaults
 default_prompts = {}
@@ -28,7 +46,7 @@ default_prompts["website"] = "Summarize the following text from URL {url}:\n[BEG
 default_prompts["LLM_temperature"] = TEMPERATURE
 default_prompts["LLM_max_tokens"] = MAXTOKENS
 default_prompts["toxic_filter"] = "You are a highly intelligent assistant. Review the following text and filter out any toxic or inappropriate content. Please respond with a toxicity rating. Use a scale of 0 to 1, where 0 is not toxic and 1 is highly toxic. [BEGIN] {prompt} [END]"
-default_prompts["chain_of_thought_check"] = """You are a language expert. 
+default_prompts["chain_of_thought_check"] = """You are a language expert.
     Consider this prompt:
     <prompt>{prompt}</prompt>
     Categorize the request using one of these:
@@ -143,7 +161,6 @@ def base_prompt(content=None):
     if not content:
         content = baseprompt
     if USE_SYSTEM:
-        return [{"role": "system", "content": content}] 
+        return [{"role": "system", "content": content}]
     else:
         return [{"role": "user", "content": content}, {"role": "assistant", "content": "Okay, let's get started."}]
-

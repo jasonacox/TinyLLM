@@ -4,7 +4,12 @@ ChatBot - Retrieval Augmented Generation (RAG) Functions
 This module provides functions to fetch and process information from various sources
 such as weather, stock prices, news articles, and documents. It also includes functions for
 document management and text extraction from different file formats.
+
+Author: Jason A. Cox
+20 Apr 2025
+github.com/jasonacox/TinyLLM
 """
+# pylint: disable=redefined-outer-name
 
 # Imports
 import io
@@ -14,7 +19,11 @@ from bs4 import BeautifulSoup
 import requests
 from pypdf import PdfReader
 
-from app.core.config import *
+# Local imports
+from app.core.config import (log, debug, MYMODEL, MAXTOKENS, SEARXNG, RESULTS,
+                        WEAVIATE_HOST, WEAVIATE_GRPC_HOST, WEAVIATE_PORT,
+                        WEAVIATE_GRPC_PORT, WEAVIATE_AUTH_KEY, UPLOAD_FOLDER,
+                        ALPHA_KEY)
 from app.rag.documents import Documents
 from app.core.llm import ask_llm
 
@@ -26,7 +35,7 @@ async def get_weather(location):
     location = location.replace(" ", "+")
     url = "https://wttr.in/%s?format=j2" % location
     debug(f"Fetching weather for {location} from {url}")
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     if response.status_code == 200:
         return response.text
     else:
@@ -50,10 +59,10 @@ async def get_stock(company, model=MYMODEL):
     # Now get the stock price
     url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s" % (symbol.upper(), ALPHA_KEY)
     debug(f"Fetching stock price for {company} from {url}")
-    response = requests.get(url)
-    if response.status_code == 200:
+    r = requests.get(url, timeout=10)
+    if r.status_code == 200:
         try:
-            price = response.json()["Global Quote"]["05. price"]
+            price = r.json()["Global Quote"]["05. price"]
             return f"The price of {company} (symbol {symbol}) is ${price}."
         except:
             return "Unable to fetch stock price for %s - No data available." % company
@@ -88,8 +97,8 @@ async def get_news(topic, max=10):
         url = "https://news.google.com/rss/search?q=%s" % topic
     debug(f"Fetching news for {topic} from {url}")
     async with aiohttp.ClientSession() as session:
-        response, links = await get_top_articles(url, max)
-        return response, links
+        r, links = await get_top_articles(url, max)
+        return r, links
 
 # Function - Extract text from URL
 async def extract_text_from_url(url):
@@ -150,7 +159,7 @@ async def extract_text_from_html(response):
 
 # Document Management Settings
 rag_documents = Documents(host=WEAVIATE_HOST, grpc_host=WEAVIATE_GRPC_HOST, port=WEAVIATE_PORT,
-                          grpc_port=WEAVIATE_GRPC_PORT, retry=3, filepath=UPLOAD_FOLDER, 
+                          grpc_port=WEAVIATE_GRPC_PORT, retry=3, filepath=UPLOAD_FOLDER,
                           auth_key=WEAVIATE_AUTH_KEY)
 
 # Test Weaviate Connection
@@ -166,7 +175,7 @@ if WEAVIATE_HOST != "":
 # Test SearXNG Connection
 if SEARXNG != "":
     try:
-        response = requests.get(f"{SEARXNG}/search")
+        response = requests.get(f"{SEARXNG}/search", timeout=10)
         if response.status_code == 200:
             log(f"SEARXNG: Connected to {SEARXNG}")
         else:

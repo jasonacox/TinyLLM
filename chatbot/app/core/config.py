@@ -3,6 +3,10 @@ ChatBot - Configuration Settings for the TinyLLM Chatbot.
 
 It includes settings for the OpenAI API, LiteLLM Proxy, Weaviate, and other options.
 It also includes settings for the chatbot's behavior, such as temperature, max tokens, and more.
+
+Author: Jason A. Cox
+20 Apr 2025
+github.com/jasonacox/TinyLLM
 """
 
 VERSION = "v0.16.0"
@@ -14,8 +18,8 @@ import time
 import logging
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s %(levelname)s %(message)s', 
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(levelname)s %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,9 +43,9 @@ MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Ma
 MAXTOKENS = int(os.environ.get("MAXTOKENS", 0))                             # Maximum number of tokens to send to LLM for RAG
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
-PROMPT_FILE = os.environ.get("PROMPT_FILE", f".tinyllm/prompts.json")       # File to store system prompts
+PROMPT_FILE = os.environ.get("PROMPT_FILE", ".tinyllm/prompts.json")        # File to store system prompts
 PROMPT_RO = os.environ.get("PROMPT_RO", "false").lower() == "true"          # Set to True to enable read-only prompts
-USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower() == "true"          # Use system in chat prompt if True
+USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower() == "true"        # Use system in chat prompt if True
 TOKEN = os.environ.get("TOKEN", "secret")                                   # Secret TinyLLM token for admin functions
 ONESHOT = os.environ.get("ONESHOT", "false").lower() == "true"              # Set to True to enable one-shot mode
 RAG_ONLY = os.environ.get("RAG_ONLY", "false").lower() == "true"            # Set to True to enable RAG only mode
@@ -93,7 +97,7 @@ if DEBUG:
     debug("Configuration Settings:")
     vars = globals()
     for n in list(vars):
-        if n.isupper(): 
+        if n.isupper():
             if vars[n] and n in ["API_KEY", "TOKEN", "WEAVIATE_AUTH_KEY", "ALPHA_KEY"]:
                 debug(f"   {n}: {'*' * len(vars[n])}")
             else:
@@ -106,6 +110,7 @@ if ONESHOT:
 # Globals
 client = {}
 prompts = {}
+baseprompt = ""
 stats = {
     "start_time": time.time(),
     "errors": 0,

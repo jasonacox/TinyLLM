@@ -70,22 +70,26 @@ https://github.com/jasonacox/TinyLLM
 # pylint: disable=global-statement
 # pylint: disable=global-variable-not-assigned
 
-import uvicorn
+# Standard library imports
+import asyncio
 import sys
 import time
 import traceback
+
+# Third-party imports
+import uvicorn
+
+# Local imports
 from app.api.routes import app  # The FastAPI app instance
 from app.core.config import PORT, log, debug
 from app.core.llm import init_llm
-import asyncio
 
 def start_server(max_retries: int = 3, retry_delay: int = 5):
     for attempt in range(max_retries):
         try:
             log(f"Starting server on port {PORT} (attempt {attempt + 1}/{max_retries})")
             config = uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="info")
-            server = uvicorn.Server(config)
-            return server
+            return uvicorn.Server(config)
         except Exception as e:
             log(f"Error starting server: {str(e)}")
             debug(f"Traceback:\n{traceback.format_exc()}")
@@ -95,6 +99,7 @@ def start_server(max_retries: int = 3, retry_delay: int = 5):
             else:
                 log("Max retries reached. Server failed to start.")
                 return None
+    return None
 
 if __name__ == '__main__':
     try:
