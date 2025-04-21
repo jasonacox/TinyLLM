@@ -31,8 +31,7 @@ RUN pip install passlib bcrypt
 
 # Copy local files into container
 COPY docman.py /app/docman.py
-COPY documents.py /app/documents.py
-COPY version.py /app/version.py
+COPY app/rag/documents.py /app/documents.py
 COPY docman /app/docman
 COPY setup_pandoc.py /app/setup_pandoc.py
 

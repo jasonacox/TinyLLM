@@ -2,7 +2,11 @@
 echo "** Build and Push TinyLLM chatbot and docman to Docker Hub"
 
 # Get version
-string=`grep "VERSION =" version.py`
+string=`grep "VERSION =" app/core/config.py`
+if [ -z "$string" ]; then
+    echo "VERSION not found in app/core/config.py"
+    exit 1
+fi
 VER=$(echo $string | awk '{print $NF}' | sed 's/v//' | sed 's/"//g')
 echo "** Version: $VER"
 echo ""

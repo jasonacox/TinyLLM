@@ -162,7 +162,7 @@ cython_debug/
 # LLM Models
 *.gguf
 
-# Exclude sandbox   
+# Exclude sandbox and local testing files
 sandbox/
 .DS_Store
 chatbot/prompts.json
@@ -178,3 +178,5 @@ lab/t
 chatbot/uploads/?*.*
 chatbot/t2
 agents/m
+chatbot/d
+images/output.png
