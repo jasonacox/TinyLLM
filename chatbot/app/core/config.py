@@ -9,7 +9,7 @@ Author: Jason A. Cox
 github.com/jasonacox/TinyLLM
 """
 
-VERSION = "v0.16.0"
+VERSION = "v0.16.1"  # Version of the TinyLLM (Major, Minor, Patch)
 
 # Imports
 import os
@@ -32,32 +32,56 @@ def debug(text):
     logger.debug(text)
 
 # Configuration Settings
+
+# Core Language Model Settings
 API_KEY = os.environ.get("OPENAI_API_KEY", "Asimov-3-Laws")                 # Required, use bogus string for local LLMs
 API_BASE = os.environ.get("OPENAI_API_BASE", "http://localhost:8000/v1")    # Required, use https://api.openai.com for OpenAI
+MYMODEL = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
+TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
+USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower() == "true"        # Use system in chat prompt if True
+EXTRA_BODY = os.environ.get("EXTRA_BODY", None)                             # Extra body parameters for OpenAI API
+
+# LiteLLM Proxy Settings
 LITELLM_PROXY = os.environ.get("LITELLM_PROXY", None)                       # Optional - LITELLM Proxy URL
 LITELLM_KEY = os.environ.get("LITELLM_KEY", "")                             # Optional - LITELLM Secret Key - Begins with sk-
-AGENTNAME = os.environ.get("AGENT_NAME", "")                                # Set the name of your bot
-MYMODEL = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pick model to use e.g. gpt-3.5-turbo for OpenAI
-DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
-MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Maximum number of concurrent clients
-MAXTOKENS = int(os.environ.get("MAXTOKENS", 0))                             # Maximum number of tokens to send to LLM for RAG
-TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
+
+# Chatbot Server Configuration
 PORT = int(os.environ.get("PORT", 5000))                                    # Port to listen on
-PROMPT_FILE = os.environ.get("PROMPT_FILE", ".tinyllm/prompts.json")        # File to store system prompts
-PROMPT_RO = os.environ.get("PROMPT_RO", "false").lower() == "true"          # Set to True to enable read-only prompts
-USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower() == "true"        # Use system in chat prompt if True
+MAXCLIENTS = int(os.environ.get("MAXCLIENTS", 1000))                        # Maximum number of concurrent clients
 TOKEN = os.environ.get("TOKEN", "secret")                                   # Secret TinyLLM token for admin functions
+MAXTOKENS = int(os.environ.get("MAXTOKENS", 0))                             # Maximum number of tokens to send to LLM for RAG
+
+# Chatbot Behavior Settings
+AGENTNAME = os.environ.get("AGENT_NAME", "")                                # Set the name of your bot
 ONESHOT = os.environ.get("ONESHOT", "false").lower() == "true"              # Set to True to enable one-shot mode
 RAG_ONLY = os.environ.get("RAG_ONLY", "false").lower() == "true"            # Set to True to enable RAG only mode
-EXTRA_BODY = os.environ.get("EXTRA_BODY", None)                             # Extra body parameters for OpenAI API
-TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # Toxicity threshold for responses 0-1 or 99 disable
 THINKING = os.environ.get("THINKING", "false").lower() == "true"            # Set to True to enable thinking mode by default
 THINK_FILTER = os.environ.get("THINK_FILTER", "false").lower() == "true"    # Set to True to enable thinking filter
+TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # Toxicity threshold for responses 0-1 or 99 disable
+INTENT_ROUTER = os.environ.get("INTENT_ROUTER", "false").lower() == "true"  # Set to True to enable intent detection & routing
 MAX_IMAGES = int(os.environ.get("MAX_IMAGES", 1))                           # Maximum number of images to keep in context
+
+# Prompt Management
+PROMPT_FILE = os.environ.get("PROMPT_FILE", ".tinyllm/prompts.json")        # File to store system prompts
+PROMPT_RO = os.environ.get("PROMPT_RO", "false").lower() == "true"          # Set to True to enable read-only prompts
+
+# Web Search Integration
 SEARXNG = os.environ.get("SEARXNG", "http://localhost:8080")                # SearXNG URL for internet search engine  (Optional)
-INTENT_ROUTER = os.environ.get("INTENT_ROUTER", "false").lower() == "true"  # Set to True to enable intent detection
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "false").lower() == "true"        # Set to True to enable web search for all queries
+
+# Image Generation Settings
 SWARMUI = os.environ.get("SWARMUI", "http://localhost:7801")                # Set to SwarmUI host URL, eg. http://localhost:7801
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", 
+                           "OfficialStableDiffusion/sd_xl_base_1.0")        # Image model to use
+IMAGE_CFGSCALE = float(os.environ.get("IMAGE_CFGSCALE", 7.5))               # CFG Scale for image generation (7 for SDXL, 1 for Flux)
+IMAGE_STEPS = int(os.environ.get("IMAGE_STEPS", 20))                        # Steps for image generation (20 for SDXL, 4 for Flux)
+IMAGE_SEED = int(os.environ.get("IMAGE_SEED", -1))                          # Seed for image generation
+IMAGE_TIMEOUT = int(os.environ.get("IMAGE_TIMEOUT", 300))                   # Timeout for image generation (seconds)
+IMAGE_WIDTH = int(os.environ.get("IMAGE_WIDTH", 1024))                      # Width for image generation
+IMAGE_HEIGHT = int(os.environ.get("IMAGE_HEIGHT", 1024))                    # Height for image generation
+
+# Debug Settings
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
 
 # Convert EXTRA_BODY to dictionary if it is proper JSON
 if EXTRA_BODY:

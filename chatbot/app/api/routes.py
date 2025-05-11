@@ -45,7 +45,9 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         TOXIC_THRESHOLD, THINKING, THINK_FILTER, SEARXNG,
                         INTENT_ROUTER, WEB_SEARCH, WEAVIATE_LIBRARY, RESULTS,
                         WEAVIATE_HOST, WEAVIATE_GRPC_HOST, WEAVIATE_PORT,
-                        WEAVIATE_GRPC_PORT, ALPHA_KEY, SWARMUI, baseprompt)
+                        WEAVIATE_GRPC_PORT, ALPHA_KEY, SWARMUI, IMAGE_MODEL,
+                        IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CFGSCALE, IMAGE_STEPS,
+                        IMAGE_SEED, IMAGE_TIMEOUT, baseprompt)
 from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
                         extract_text_from_url, query_index)
 from app.core.llm import (client, get_models, ask, ask_llm, ask_context)
@@ -71,9 +73,10 @@ app.add_middleware(SlowAPIMiddleware)
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
 # Image generator instance
-image_generator = ImageGenerator(host=SWARMUI, model="OfficialStableDiffusion/sd_xl_base_1.0",
-                                 width=1024, height=1024, cfgscale=7.5, steps=20, seed=-1,
-                                 gen_timeout=300)
+image_generator = ImageGenerator(host=SWARMUI, model=IMAGE_MODEL, width=IMAGE_WIDTH,
+                                    height=IMAGE_HEIGHT, cfgscale=IMAGE_CFGSCALE,
+                                    steps=IMAGE_STEPS, seed=IMAGE_SEED,
+                                    gen_timeout=IMAGE_TIMEOUT)
 if not image_generator.test_connection():
     log("Image generator not available - set SwarmUI server using SWARMUI environment variable")
     image_generator = None
