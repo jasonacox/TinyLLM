@@ -1,5 +1,14 @@
 # Releases
 
+## 0.16.1 - Image Generation
+
+* Added environment variables for image generation settings: `IMAGE_MODEL`, `IMAGE_CFGSCALE`, `IMAGE_STEPS`, `IMAGE_SEED`, `IMAGE_TIMEOUT`, `IMAGE_WIDTH`, and `IMAGE_HEIGHT`.
+
+* Some suggestions based on models (see https://github.com/mcmonkeyprojects/SwarmUI/blob/master/docs/Model%20Support.md for more):
+   * OfficialStableDiffusion/sd_xl_base_1.0 - use `IMAGE_CFGSCALE=20` and `IMAGE_STEPS=20`
+   * Flux/flux1-schnell-fp8 - use `IMAGE_CFGSCALE=1` and `IMAGE_STEPS=4` 
+   * Flux/flux1-schnell-fp8 - use `IMAGE_CFGSCALE=1` and `IMAGE_STEPS=20` 
+
 ## 0.16.0 - Refactor Chatbot
 
 * Refactor - To improve maintainability and prepare for future expansions, the chatbot code has been modularized.
