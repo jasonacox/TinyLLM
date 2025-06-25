@@ -50,7 +50,7 @@ MESSAGE_FILE = os.environ.get("MESSAGE_FILE", "message.txt")                # Fi
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://localhost:6060/")       # SearxNG instance URL
 ABOUT_ME = os.environ.get("ABOUT_ME",
          "We love movies! Action, adventure, sci-fi and feel good movies are our favorites.")  # About me text
-TMDB_API_KEY = os.environ.get("TMD_API_KEY", "tmd_api_key")                 # Optional - The Movie Database API key
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "tmdb_api_key")               # Optional - The Movie Database API key
 
 
 #DEBUG = True
