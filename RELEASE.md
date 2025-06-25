@@ -1,5 +1,15 @@
 # Releases
 
+## 0.16.2 - Repetition Filter Settings
+
+* Added environment variables for repetition filter: `REPEAT_WINDOW` and `REPEAT_COUNT`.
+* These control the window size and repeat count for the LLM output repetition filter. Users can now adjust these via environment variables to fine-tune anti-repetition behavior.
+* MovieBot: Improved `get_movies_released_today()` to return a RAG-ready context string, listing only movies with popularity over 10, and including title, year, rated, genre, and popularity.
+* MovieBot: Refactored and optimized code for genre/holiday logic, prompt formatting, and error handling.
+* MovieBot: Fixed bug with TypeError in holiday detection and improved SearxNG integration for internet movie searches.
+* Documentation: Updated Chatbot and Document Manager environment variable sections in the README to use consistent tables.
+* Documentation: Improved clarity, formatting, and consistency in README and environment variable documentation.
+
 ## 0.16.1 - Image Generation
 
 * Added environment variables for image generation settings: `IMAGE_MODEL`, `IMAGE_CFGSCALE`, `IMAGE_STEPS`, `IMAGE_SEED`, `IMAGE_TIMEOUT`, `IMAGE_WIDTH`, and `IMAGE_HEIGHT`.

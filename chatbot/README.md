@@ -12,6 +12,59 @@ Below are steps to get the Chatbot and Document Manager running.
 
 The Chatbot can be launched as a Docker container or via command line.
 
+### Environmental Variables
+
+Below are the main environment variables you can set to configure the TinyLLM Chatbot. These can be set in your shell, Docker environment, or .env file as needed.
+
+| Variable                | Default / Example                        | Description |
+|-------------------------|------------------------------------------|-------------|
+| `OPENAI_API_KEY`        | Asimov-3-Laws                            | API key for OpenAI or local LLM (required) |
+| `OPENAI_API_BASE`       | http://localhost:8000/v1                 | Base URL for OpenAI-compatible API |
+| `LLM_MODEL`             | models/7B/gguf-model.bin                 | Model to use (e.g. gpt-3.5-turbo, local file) |
+| `TEMPERATURE`           | 0.0                                      | LLM temperature (creativity) |
+| `USE_SYSTEM`            | false                                    | Use system prompt in chat if true |
+| `EXTRA_BODY`            |                                          | Extra body parameters for OpenAI API (JSON) |
+| `LITELLM_PROXY`         |                                          | LiteLLM Proxy URL (optional) |
+| `LITELLM_KEY`           |                                          | LiteLLM Secret Key (optional) |
+| `PORT`                  | 5000                                     | Port for chatbot server |
+| `MAXCLIENTS`            | 1000                                     | Max concurrent clients |
+| `TOKEN`                 | secret                                   | Admin token for TinyLLM |
+| `MAXTOKENS`             | 0                                        | Max tokens to send to LLM for RAG |
+| `AGENT_NAME`            |                                          | Name of your bot |
+| `ONESHOT`               | false                                    | Enable one-shot mode |
+| `RAG_ONLY`              | false                                    | Enable RAG-only mode |
+| `THINKING`              | false                                    | Enable thinking mode by default |
+| `THINK_FILTER`          | false                                    | Enable thinking filter |
+| `TOXIC_THRESHOLD`       | 99                                       | Toxicity threshold (0-1, 99 disables) |
+| `INTENT_ROUTER`         | false                                    | Enable intent detection & routing |
+| `MAX_IMAGES`            | 1                                        | Max images to keep in context |
+| `PROMPT_FILE`           | .tinyllm/prompts.json                    | File to store system prompts |
+| `PROMPT_RO`             | false                                    | Enable read-only prompts |
+| `SEARXNG`               | http://localhost:8080                    | SearxNG URL for web search |
+| `WEB_SEARCH`            | false                                    | Enable web search for all queries |
+| `SWARMUI`               | http://localhost:7801                    | SwarmUI host URL for image generation |
+| `IMAGE_MODEL`           | OfficialStableDiffusion/sd_xl_base_1.0   | Image model to use |
+| `IMAGE_CFGSCALE`        | 7.5                                      | CFG scale for image generation |
+| `IMAGE_STEPS`           | 20                                       | Steps for image generation |
+| `IMAGE_SEED`            | -1                                       | Seed for image generation |
+| `IMAGE_TIMEOUT`         | 300                                      | Timeout for image generation (seconds) |
+| `IMAGE_WIDTH`           | 1024                                     | Image width |
+| `IMAGE_HEIGHT`          | 1024                                     | Image height |
+| `REPEAT_WINDOW`         | 200                                      | Window size for repetition detection |
+| `REPEAT_COUNT`          | 5                                        | Number of repeats to trigger detection |
+| `DEBUG`                 | false                                    | Enable debug mode |
+| `WEAVIATE_HOST`         |                                          | Weaviate host for RAG (optional) |
+| `WEAVIATE_GRPC_HOST`    |                                          | Weaviate gRPC host (optional) |
+| `WEAVIATE_PORT`         | 8080                                     | Weaviate port |
+| `WEAVIATE_GRPC_PORT`    | 50051                                    | Weaviate gRPC port |
+| `WEAVIATE_LIBRARY`      | tinyllm                                  | Weaviate library to use |
+| `WEAVIATE_AUTH_KEY`     |                                          | Weaviate Auth Key |
+| `RESULTS`               | 1                                        | Number of results to return from RAG |
+| `ALPHA_KEY`             | alpha_key                                | Alpha Vantage API Key |
+| `UPLOAD_FOLDER`         | /tmp                                     | Folder to store uploaded documents |
+
+> **Note:** Most boolean settings accept `true` or `false` (case-insensitive). For more details, see the comments in `chatbot/app/core/config.py`.
+
 ### Method 1: Docker Compose
 
 A quickstart method is located in the [litellm](./litellm/) folder. This setup will launch the Chatbot + LiteLLM and PostgreSQL. This works on Mac and Linux (or WSL) systems.
@@ -142,7 +195,7 @@ Some RAG (Retrieval Augmented Generation) features including:
 /reset                                  # Reset session
 /version                                # Display chatbot version
 /sessions                               # Display current sessions
-/news                                   # List top 10 headlines from current new
+/news                                   # List top 10 headlines from current news
 /stock [company]                        # Display stock symbol and current price
 /weather [location]                     # Provide current weather conditions
 /rag on [library] [opt:number]          # Route all prompts through RAG using specified library
@@ -159,7 +212,7 @@ See the [rag](../rag/) for more details about RAG.
 
 ### Example Session
 
-The examples below use a Llama 2 7B model served up with the OpenAI API compatible [llmserver](https://github.com/jasonacox/TinyLLM/tree/main/llmserver) on an Intel i5 systems with an Nvidia GeForce GTX 1060 GPU.
+The examples below use a Llama 2 7B model served up with the OpenAI API compatible [llmserver](https://github.com/jasonacox/TinyLLM/tree/main/llmserver) on an Intel i5 system with an Nvidia GeForce GTX 1060 GPU.
 
 #### Chatbot
 
@@ -181,7 +234,7 @@ The `/news` command will fetch the latest news and have the LLM summarize the to
 
 #### Model Selection
 
-The `/model` command will popup the list of available models. Use the dropdown to select your model. Alternatively, specify the model with the command (e.g. `/model mixtral`) to select it immediately without the popup.
+The `/model` command will pop up the list of available models. Use the dropdown to select your model. Alternatively, specify the model with the command (e.g. `/model mixtral`) to select it immediately without the popup.
 
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/e21ad350-6ae0-47de-b7ee-135176d66fe7" />
 
@@ -190,6 +243,8 @@ The `/model` command will popup the list of available models. Use the dropdown t
 The `/search` command will allow the chatbot to search the web to help answer your prompt. This requires a [SearXNG](https://docs.searxng.org/) server which is started as part of the docker compose setup or can be run using:
 
 ```bash
+# Start SearXNG container
+
 echo "Starting $container container..."
 docker run \
      -d \
@@ -218,16 +273,28 @@ It can be activated by setting the `INTENT_ROUTER=true` environmental variable o
 
 ## Document Manager (Weaviate)
 
-The document manager allows you to manage the collections and documents in the Weaviate vector database. It provides an easy way for you to upload and ingest the content from files or URL. It performs simple chunking (if requested). The simple UI let's you navigate through the collections and documents.
+The document manager allows you to manage the collections and documents in the Weaviate vector database. It provides an easy way for you to upload and ingest the content from files or URLs. It performs simple chunking (if requested). The simple UI lets you navigate through the collections and documents.
 
-### Environment Variables
+### Environmental Variables
 
-- MAX_CHUNK_SIZE: Maximum size of a chunk in bytes (default 1024)
-- UPLOAD_FOLDER: Folder where uploaded files are stored (default uploads)
-- HOST: Weaviate host (default localhost)
-- COLLECTIONS: Comma separated list of collections allowed (default all)
-- PORT: Port for the web server (default 8000)
-- COLLECTIONS_ADMIN: Allow users to create and delete collections (default True)
+Below are the main environment variables for the Document Manager (Weaviate):
+
+| Variable              | Default / Example | Description |
+|-----------------------|-------------------|-------------|
+| `MAX_CHUNK_SIZE`      | 1024              | Maximum size of a chunk in bytes |
+| `UPLOAD_FOLDER`       | uploads           | Folder where uploaded files are stored |
+| `HOST`                | localhost         | Weaviate host |
+| `COLLECTIONS`         | all               | Comma separated list of collections allowed |
+| `PORT`                | 8000              | Port for the web server |
+| `COLLECTIONS_ADMIN`   | true              | Allow users to create and delete collections |
+| `WEAVIATE_HOST`       | localhost         | Weaviate host |
+| `WEAVIATE_GRPC_HOST`  | localhost         | Weaviate gRPC host |
+| `WEAVIATE_PORT`       | 8080              | Weaviate port |
+| `WEAVIATE_GRPC_PORT`  | 50051             | Weaviate gRPC port |
+| `WEAVIATE_LIBRARY`    | tinyllm           | Weaviate library to use |
+| `WEAVIATE_AUTH_KEY`   |                   | Weaviate Auth Key |
+
+> **Note:** Most boolean settings accept `true` or `false` (case-insensitive).
 
 ### Docker Setup
 

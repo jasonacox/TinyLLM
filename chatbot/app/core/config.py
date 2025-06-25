@@ -9,7 +9,8 @@ Author: Jason A. Cox
 github.com/jasonacox/TinyLLM
 """
 
-VERSION = "v0.16.1"  # Version of the TinyLLM (Major, Minor, Patch)
+# Version of the TinyLLM (Major, Minor, Patch)
+VERSION = "v0.16.2"
 
 # Imports
 import os
@@ -79,6 +80,10 @@ IMAGE_SEED = int(os.environ.get("IMAGE_SEED", -1))                          # Se
 IMAGE_TIMEOUT = int(os.environ.get("IMAGE_TIMEOUT", 300))                   # Timeout for image generation (seconds)
 IMAGE_WIDTH = int(os.environ.get("IMAGE_WIDTH", 1024))                      # Width for image generation
 IMAGE_HEIGHT = int(os.environ.get("IMAGE_HEIGHT", 1024))                    # Height for image generation
+
+# Repetition Filter Settings
+REPEAT_WINDOW = int(os.environ.get("REPEAT_WINDOW", 200))                   # Window size for repetition detection
+REPEAT_COUNT = int(os.environ.get("REPEAT_COUNT", 5))                       # Number of repeats to trigger detection
 
 # Debug Settings
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"                  # Set to True to enable debug mode
