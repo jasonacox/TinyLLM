@@ -47,7 +47,7 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         WEAVIATE_HOST, WEAVIATE_GRPC_HOST, WEAVIATE_PORT,
                         WEAVIATE_GRPC_PORT, ALPHA_KEY, SWARMUI, IMAGE_MODEL,
                         IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CFGSCALE, IMAGE_STEPS,
-                        IMAGE_SEED, IMAGE_TIMEOUT, baseprompt)
+                        IMAGE_SEED, IMAGE_TIMEOUT, baseprompt, REPEAT_WINDOW, REPEAT_COUNT)
 from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
                         extract_text_from_url, query_index)
 from app.core.llm import (client, get_models, ask, ask_llm, ask_context)
@@ -323,7 +323,16 @@ async def upload_file(request: Request, file: UploadFile = File(...), session_id
 app.mount("/", socket_app)  # Here we mount socket app to main fastapi app
 
 # Helper function to check for repeating text from LLM
-async def is_repeating_exact(text: str, window: int = 100, repeats: int = 5) -> bool:
+async def is_repeating_exact(text: str, session_id=None) -> bool:
+    window = REPEAT_WINDOW
+    repeats = REPEAT_COUNT
+    # If code/data block detected (at least one triple backtick), double window and repeats
+    if text.count("```") >= 1:
+        window = window * 2
+        repeats = repeats * 2
+    # Check if repeat detection is disabled for this session
+    if session_id and session_id in client and not client[session_id].get("repeat_detect", True):
+        return False
     if len(text) < window * (repeats + 1):
         return False
     tail = text[-window:]
@@ -477,27 +486,28 @@ async def handle_connect(session_id, env): # pylint: disable=unused-argument
             log(f"Too many clients connected: {len(client)}")
             await sio.emit('update', {'update': 'Too many clients connected. Try again later.', 'voice': 'user'},room=session_id)
             return
-        # Create client session
-        client[session_id]={}
-        # Initialize context for this client
-        client[session_id]["context"] = base_prompt()
-        client[session_id]["remember"] = True
-        client[session_id]["visible"] = True
-        client[session_id]["prompt"] = ""
-        client[session_id]["stop_thread_flag"] = False
-        client[session_id]["references"] = ""
-        client[session_id]["links"] = {}
-        client[session_id]["toxicity"] = 0.0
-        client[session_id]["rag_only"] = False
-        client[session_id]["cot"] = THINKING
-        client[session_id]["cot_always"] = False
-        client[session_id]["library"] = WEAVIATE_LIBRARY
-        client[session_id]["results"] = RESULTS
-        client[session_id]["image_data"] = ""
-        client[session_id]["model"] = MYMODEL
-        client[session_id]["think"] = THINK_FILTER
-        client[session_id]["internet"] = WEB_SEARCH
-        client[session_id]["intent"] = INTENT_ROUTER
+        # Create client session with default values
+        client[session_id] = {
+            "context": base_prompt(),
+            "remember": True,
+            "visible": True,
+            "prompt": "",
+            "stop_thread_flag": False,
+            "references": "",
+            "links": {},
+            "toxicity": 0.0,
+            "rag_only": False,
+            "cot": THINKING,
+            "cot_always": False,
+            "library": WEAVIATE_LIBRARY,
+            "results": RESULTS,
+            "image_data": "",
+            "model": MYMODEL,
+            "think": THINK_FILTER,
+            "internet": WEB_SEARCH,
+            "intent": INTENT_ROUTER,
+            "repeat_detect": True
+        }
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
 
@@ -620,8 +630,10 @@ async def handle_url_prompt(session_id, p):
 async def handle_command(session_id, p):
     command = p[1:].split(" ")[0].lower()
     if command == "":
-        await sio.emit('update', {'update': '[Commands: /image /intent /model /news /rag /reset /search /sessions /stock /think /version /weather]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Commands: /image /intent /model /news /rag /reset /search /sessions /stock /think /version /weather /repeat]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
+    elif command == "repeat":
+        await handle_repeat_command(session_id, p)
     elif command == "reset":
         await reset_context(session_id)
     elif command == "version":
@@ -649,6 +661,22 @@ async def handle_command(session_id, p):
     else:
         await sio.emit('update', {'update': '[Invalid command]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
+
+async def handle_repeat_command(session_id, p):
+    # Toggle repeat detection for this session
+    arg = p[7:].strip().lower()
+    if "repeat_detect" not in client[session_id]:
+        client[session_id]["repeat_detect"] = True
+    if arg == "on":
+        client[session_id]["repeat_detect"] = True
+    elif arg == "off":
+        client[session_id]["repeat_detect"] = False
+    else:
+        # Toggle if no argument
+        client[session_id]["repeat_detect"] = not client[session_id]["repeat_detect"]
+    state = "ON" if client[session_id]["repeat_detect"] else "OFF"
+    await sio.emit('update', {'update': f'[Repeat Detection is {state}]', 'voice': 'user'}, room=session_id)
+    client[session_id]["prompt"] = ''
 
 async def reset_context(session_id):
     client[session_id]["context"] = base_prompt()
