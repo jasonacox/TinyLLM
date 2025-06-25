@@ -50,10 +50,6 @@ MESSAGE_FILE = os.environ.get("MESSAGE_FILE", "message.txt")                # Fi
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://localhost:6060/")       # SearxNG instance URL
 ABOUT_ME = os.environ.get("ABOUT_ME",
          "We love movies! Action, adventure, sci-fi and feel good movies are our favorites.")  # About me text
-TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "tmdb_api_key")               # Optional - The Movie Database API key
-
-
-#DEBUG = True
 
 # Debugging functions
 def log(text):
@@ -238,37 +234,47 @@ while True:
 
 # Pull movies released today from MoviesThisDay.com API
 # # Movies released today (JSON)
-# curl -X GET 'http://localhost:8000/movies/today'
-"""{
-"movies": [
-{
-"id": "8587",
-"title": "The Lion King",
-"release_date": "1994-06-24",
-"original_language": "en",
-"popularity": "87.384",
-"vote_average": "8.256",
-"vote_count": "16991",
-"imdb_id": "tt0110357",
-"language": "en",
-"release_year": "1994",
-"runtime": 89,
-"omdb_genre": "Animation, Adventure, Drama",
-"omdb_imdb_rating": "8.5",
-"omdb_imdb_votes": "1,204,496",
-"omdb_box_office": "$424,979,720",
-"production_companies": "Walt Disney Pictures, Walt Disney Feature Animation",
-"omdb_poster": "https://m.media-amazon.com/images/M/MV5BZGRiZDZhZjItM2M3ZC00Y2IyLTk3Y2MtMWY5YjliNDFkZTJlXkEyXkFqcGc@._V1_SX300.jpg",
-"omdb_plot": "Lion prince Simba and his father are targeted by his bitter uncle, who wants to ascend the throne himself.",
-"omdb_rated": "G",
-"popularity_rank": 249,
-"is_new_release": false
-},
-"""
-def get_movies_released_today():
+# curl -X GET 'http://moviesthisday.com/movies/today'
+# {
+#     "movies": [
+#         {
+#             "id": "8587",
+#             "title": "The Lion King",
+#             "release_date": "1994-06-24",
+#             "original_language": "en",
+#             "popularity": "87.384",
+#             "vote_average": "8.256",
+#             "vote_count": "16991",
+#             "imdb_id": "tt0110357",
+#             "language": "en",
+#             "release_year": "1994",
+#             "runtime": 89,
+#             "omdb_genre": "Animation, Adventure, Drama",
+#             "omdb_imdb_rating": "8.5",
+#             "omdb_imdb_votes": "1,204,496",
+#             "omdb_box_office": "$424,979,720",
+#             "production_companies": "Walt Disney Pictures, Walt Disney Feature Animation",
+#             "omdb_poster": "https://m.media-amazon.com/x.jpg",
+#             "omdb_plot": "Lion prince Simba and his father are targeted by his bitter uncle, who wants to ascend the throne himself.",
+#             "omdb_rated": "G",
+#             "popularity_rank": 249,
+#             "is_new_release": false
+#         }
+#     ]
+# }...
+def get_movies_released_today(movie_only=False):
     """
-    Fetch movies released today from the local MoviesThisDay API and return a string prompt suitable for RAG context.
-    Only include movies with popularity over 10. List: Movie title, year, rated, genre, and popularity number.
+    Fetch movies released today from the local MoviesThisDay API.
+
+    Args:
+        movie_only (bool):
+            - If True, return a list of movie names (titles) only (popularity > 10).
+            - If False, return a string prompt suitable for RAG context, listing title, year, rated, genre, and popularity.
+
+    Returns:
+        list[str]: If movie_only is True, a list of movie titles with popularity > 10.
+        str: If movie_only is False, a formatted string for RAG context.
+        [] or str: If no movies found or error, returns [] (if movie_only) or error string (if not).
     """
     url = "http://moviesthisday.com/movies/today"
     today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -278,19 +284,22 @@ def get_movies_released_today():
         data = response.json()
         movies = data.get("movies", [])
         if not movies:
-            return None
+            # No movies found for today
+            return [] if movie_only else None
+        # Filter movies by popularity > 10
+        filtered_movies = [m for m in movies if float(m.get('popularity', 0)) >= 10]
+        if movie_only:
+            # Return only the movie titles
+            return [m.get('title', 'Unknown') for m in filtered_movies]
+        # Build a formatted string for RAG context
         movie_lines = []
-        for m in movies:
-            try:
-                popularity = float(m.get('popularity', 0))
-            except Exception:
-                popularity = 0
-            if popularity < 10:
-                continue
+        for m in filtered_movies:
             title = m.get('title', 'Unknown')
             year = m.get('release_year', '')
             rated = m.get('omdb_rated', 'NR')
             genre = m.get('omdb_genre', 'Unknown')
+            popularity = float(m.get('popularity', 0))
+            # Format each movie's info as a line
             line = f"- {title} ({year}), Rated: {rated}, Genre: {genre}, Popularity: {popularity:.1f}"
             movie_lines.append(line)
         if not movie_lines:
@@ -301,7 +310,8 @@ def get_movies_released_today():
         )
         return context
     except Exception as e:
-        return f"Could not retrieve today's movie releases due to error: {e}"
+        # Handle network or parsing errors
+        return [] if movie_only else f"Could not retrieve today's movie releases due to error: {e}"
 
 # LLM Function to ask the chatbot a question
 def ask_chatbot(prompt):
@@ -478,7 +488,7 @@ if __name__ == "__main__":
     # Default action
     suffix = ""
     movie, genre = recommend_movie()
-    if movie in get_movies_released_today():
+    if movie in get_movies_released_today(movie_only=True):
         suffix = " (released this day)"
     output = f"Movie Bot recommends the {genre} movie: {movie}{suffix}"
     log("\n\n\n------------------------------------")
