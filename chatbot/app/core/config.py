@@ -10,7 +10,7 @@ github.com/jasonacox/TinyLLM
 """
 
 # Version of the TinyLLM (Major, Minor, Patch)
-VERSION = "v0.16.2"
+VERSION = "v0.16.3"
 
 # Imports
 import os
@@ -71,6 +71,7 @@ SEARXNG = os.environ.get("SEARXNG", "http://localhost:8080")                # Se
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "false").lower() == "true"        # Set to True to enable web search for all queries
 
 # Image Generation Settings
+IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "swarmui").lower()       # Image provider: "swarmui" or "openai"
 SWARMUI = os.environ.get("SWARMUI", "http://localhost:7801")                # Set to SwarmUI host URL, eg. http://localhost:7801
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", 
                            "OfficialStableDiffusion/sd_xl_base_1.0")        # Image model to use
@@ -80,6 +81,13 @@ IMAGE_SEED = int(os.environ.get("IMAGE_SEED", -1))                          # Se
 IMAGE_TIMEOUT = int(os.environ.get("IMAGE_TIMEOUT", 300))                   # Timeout for image generation (seconds)
 IMAGE_WIDTH = int(os.environ.get("IMAGE_WIDTH", 1024))                      # Width for image generation
 IMAGE_HEIGHT = int(os.environ.get("IMAGE_HEIGHT", 1024))                    # Height for image generation
+# OpenAI specific settings
+OPENAI_IMAGE_API_KEY = os.environ.get("OPENAI_IMAGE_API_KEY", "")           # Dedicated OpenAI API key for image generation
+OPENAI_IMAGE_API_BASE = os.environ.get("OPENAI_IMAGE_API_BASE", "https://api.openai.com/v1")  # Dedicated OpenAI API base
+OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "dall-e-3")       # OpenAI image model (dall-e-2 or dall-e-3)
+OPENAI_IMAGE_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")        # OpenAI image size
+OPENAI_IMAGE_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "standard")   # OpenAI image quality (standard or hd)
+OPENAI_IMAGE_STYLE = os.environ.get("OPENAI_IMAGE_STYLE", "vivid")          # OpenAI image style (vivid or natural)
 
 # Repetition Filter Settings
 REPEAT_WINDOW = int(os.environ.get("REPEAT_WINDOW", 200))                   # Window size for repetition detection
@@ -128,8 +136,8 @@ if DEBUG:
     vars = globals()
     for n in list(vars):
         if n.isupper():
-            if vars[n] and n in ["API_KEY", "TOKEN", "WEAVIATE_AUTH_KEY", "ALPHA_KEY"]:
-                debug(f"   {n}: {'*' * len(vars[n])}")
+            if vars[n] and n in ["API_KEY", "TOKEN", "WEAVIATE_AUTH_KEY", "ALPHA_KEY", "OPENAI_IMAGE_API_KEY", "LITELLM_KEY", "OPENAI_API_KEY"]:
+                debug(f"   {n}: {'*' * 16}")  # Mask sensitive keys
             else:
                 debug(f"   {n}: {vars[n]}")
 

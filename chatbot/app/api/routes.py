@@ -45,14 +45,16 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         TOXIC_THRESHOLD, THINKING, THINK_FILTER, SEARXNG,
                         INTENT_ROUTER, WEB_SEARCH, WEAVIATE_LIBRARY, RESULTS,
                         WEAVIATE_HOST, WEAVIATE_GRPC_HOST, WEAVIATE_PORT,
-                        WEAVIATE_GRPC_PORT, ALPHA_KEY, SWARMUI, IMAGE_MODEL,
+                        WEAVIATE_GRPC_PORT, ALPHA_KEY, IMAGE_PROVIDER, SWARMUI, IMAGE_MODEL,
                         IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CFGSCALE, IMAGE_STEPS,
-                        IMAGE_SEED, IMAGE_TIMEOUT, baseprompt, REPEAT_WINDOW, REPEAT_COUNT)
+                        IMAGE_SEED, IMAGE_TIMEOUT, OPENAI_IMAGE_API_KEY, OPENAI_IMAGE_API_BASE,
+                        OPENAI_IMAGE_MODEL, OPENAI_IMAGE_SIZE,
+                        OPENAI_IMAGE_QUALITY, OPENAI_IMAGE_STYLE, baseprompt, REPEAT_WINDOW, REPEAT_COUNT)
 from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
                         extract_text_from_url, query_index)
 from app.core.llm import (client, get_models, ask, ask_llm, ask_context)
 from app.core.prompts import (prompts, base_prompt, default_prompts, save_prompts, expand_prompt)
-from app.image import ImageGenerator
+from app.image import create_image_generator
 
 # Ensure pillow_heif is properly registered with PIL
 pillow_heif.register_heif_opener()
@@ -72,16 +74,46 @@ app.add_middleware(SlowAPIMiddleware)
 # Maximum file size (10MB)
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
-# Image generator instance
-image_generator = ImageGenerator(host=SWARMUI, model=IMAGE_MODEL, width=IMAGE_WIDTH,
-                                    height=IMAGE_HEIGHT, cfgscale=IMAGE_CFGSCALE,
-                                    steps=IMAGE_STEPS, seed=IMAGE_SEED,
-                                    gen_timeout=IMAGE_TIMEOUT)
-if not image_generator.test_connection():
-    log("Image generator not available - set SwarmUI server using SWARMUI environment variable")
-    image_generator = None
-else:
-    log(f"Image generator activated - {SWARMUI}")
+# Image generator instance - Create based on configured provider
+def create_configured_image_generator():
+    """Create image generator based on the configured provider."""
+    if IMAGE_PROVIDER == "openai":
+        log(f"Initializing OpenAI image generator with model: {OPENAI_IMAGE_MODEL}")
+        # Let the generator read from dedicated environment variables
+        image_gen = create_image_generator(provider="openai")
+        if not image_gen.test_connection():
+            log("OpenAI image generator not available - check OPENAI_IMAGE_API_KEY environment variable")
+            return None
+        log(f"OpenAI image generator activated - Model: {OPENAI_IMAGE_MODEL}")
+        return image_gen
+    else:  # Default to SwarmUI
+        log(f"Initializing SwarmUI image generator at: {SWARMUI}")
+        image_gen = create_image_generator(
+            provider="swarmui",
+            host=SWARMUI,
+            model=IMAGE_MODEL,
+            width=IMAGE_WIDTH,
+            height=IMAGE_HEIGHT,
+            cfgscale=IMAGE_CFGSCALE,
+            steps=IMAGE_STEPS,
+            seed=IMAGE_SEED,
+            gen_timeout=IMAGE_TIMEOUT
+        )
+        if not image_gen.test_connection():
+            log("SwarmUI image generator not available - set SwarmUI server using SWARMUI environment variable")
+            return None
+        log(f"SwarmUI image generator activated - {SWARMUI}")
+        return image_gen
+
+# Initialize image generator lazily to ensure environment variables are loaded
+image_generator = None
+
+def get_image_generator():
+    """Get or create the image generator instance."""
+    global image_generator
+    if image_generator is None:
+        image_generator = create_configured_image_generator()
+    return image_generator
 
 # Session management
 SESSION_TIMEOUT = 3600  # 1 hour
@@ -167,8 +199,14 @@ async def home(format: str = None):
         "SearXNG Search Engine (SEARXNG)": SEARXNG,
         "Intent Router (INTENT_ROUTER)": INTENT_ROUTER,
         "Web Search (WEB_SEARCH)": WEB_SEARCH,
-        "SwarmUI Host (SWARMUI)": SWARMUI,
+        "Image Provider (IMAGE_PROVIDER)": IMAGE_PROVIDER,
+        "SwarmUI Host (SWARMUI)": SWARMUI if IMAGE_PROVIDER == "swarmui" else "Not Used",
     }
+    
+    # Get image generator status efficiently (avoid duplicate calls)
+    current_image_generator = get_image_generator()
+    data["Image Generation Status"] = current_image_generator.get_provider_name() if current_image_generator else "Disabled"
+    
     if format == "json":
         return data
     # Build a simple HTML page based on data facets
@@ -890,7 +928,8 @@ async def handle_stock_command(session_id, p):
     client[session_id]["prompt"] = ''
 
 async def handle_image_command(session_id, p):
-    if not image_generator:
+    current_image_generator = get_image_generator()
+    if not current_image_generator:
         await sio.emit('update', {'update': '[Image Generation is not enabled]', 'voice': 'user'}, room=session_id)
         return
     prompt = p[6:].strip()
@@ -901,11 +940,18 @@ async def handle_image_command(session_id, p):
     debug(f"Image Prompt: {prompt}")
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
-    # Generate image from image_generator
+    # Generate image from current_image_generator
 
-    image_encoded = await image_generator.generate(prompt)
+    image_encoded = await current_image_generator.generate(prompt)
     if image_encoded:
-        image = Image.open(io.BytesIO(base64.b64decode(image_encoded.split(",")[1])))
+        # Handle different response formats - OpenAI returns raw base64, SwarmUI returns data URI
+        if "," in image_encoded:
+            # SwarmUI format: data:image/png;base64,{data}
+            image_data = image_encoded.split(",")[1]
+        else:
+            # OpenAI format: raw base64 data
+            image_data = image_encoded
+        image = Image.open(io.BytesIO(base64.b64decode(image_data)))
         #image.show()
     else:
         await sio.emit('update', {'update': '[Unable to generate image]', 'voice': 'user'}, room=session_id)

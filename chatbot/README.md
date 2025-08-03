@@ -8,6 +8,49 @@ The intent of this project is to build and interact with a locally hosted LLM us
 
 Below are steps to get the Chatbot and Document Manager running.
 
+## Quick Start
+
+The fastest way to get started is using Docker Compose with LiteLLM:
+
+```bash
+# Clone the repository
+git clone https://github.com/jasonacox/TinyLLM.git
+cd TinyLLM/chatbot/litellm
+
+# Edit the configuration files for your setup
+nano compose.yaml    # Configure your models and API keys
+nano config.yaml     # Set up LLM providers (OpenAI, local models, etc.)
+
+# Launch the complete stack
+docker compose up -d
+```
+
+This will start:
+- **Chatbot** at http://localhost:5000
+- **LiteLLM Dashboard** at http://localhost:4000/ui
+- **PostgreSQL** database for usage tracking
+- **SearXNG** search engine at http://localhost:8080
+
+### Alternative: Docker Only
+
+If you prefer to run just the chatbot with a local LLM:
+
+```bash
+# Create the configuration directory
+mkdir -p .tinyllm
+
+# Run with your local LLM endpoint
+docker run -d \
+    -p 5000:5000 \
+    -e OPENAI_API_BASE="http://localhost:8000/v1" \
+    -e OPENAI_API_KEY="your-api-key" \
+    -v $PWD/.tinyllm:/app/.tinyllm \
+    --name chatbot \
+    jasonacox/chatbot
+```
+
+Visit http://localhost:5000 to start chatting!
+
 ## Chatbot
 
 The Chatbot can be launched as a Docker container or via command line.
@@ -42,12 +85,17 @@ Below are the main environment variables you can set to configure the TinyLLM Ch
 | `PROMPT_RO`             | false                                    | Enable read-only prompts |
 | `SEARXNG`               | http://localhost:8080                    | SearxNG URL for web search |
 | `WEB_SEARCH`            | false                                    | Enable web search for all queries |
+| `IMAGE_PROVIDER`        | swarmui                                  | Image generation provider (swarmui or openai) |
 | `SWARMUI`               | http://localhost:7801                    | SwarmUI host URL for image generation |
-| `IMAGE_MODEL`           | OfficialStableDiffusion/sd_xl_base_1.0   | Image model to use |
-| `IMAGE_CFGSCALE`        | 7.5                                      | CFG scale for image generation |
-| `IMAGE_STEPS`           | 20                                       | Steps for image generation |
-| `IMAGE_SEED`            | -1                                       | Seed for image generation |
+| `IMAGE_MODEL`           | OfficialStableDiffusion/sd_xl_base_1.0   | SwarmUI image model to use |
+| `IMAGE_CFGSCALE`        | 7.5                                      | CFG scale for SwarmUI image generation |
+| `IMAGE_STEPS`           | 20                                       | Steps for SwarmUI image generation |
+| `IMAGE_SEED`            | -1                                       | Seed for SwarmUI image generation |
 | `IMAGE_TIMEOUT`         | 300                                      | Timeout for image generation (seconds) |
+| `OPENAI_IMAGE_MODEL`    | dall-e-3                                 | OpenAI image model (dall-e-2 or dall-e-3) |
+| `OPENAI_IMAGE_SIZE`     | 1024x1024                                | OpenAI image size |
+| `OPENAI_IMAGE_QUALITY`  | standard                                 | OpenAI image quality (standard or hd) |
+| `OPENAI_IMAGE_STYLE`    | vivid                                    | OpenAI image style (vivid or natural) |
 | `IMAGE_WIDTH`           | 1024                                     | Image width |
 | `IMAGE_HEIGHT`          | 1024                                     | Image height |
 | `REPEAT_WINDOW`         | 200                                      | Window size for repetition detection |
@@ -206,9 +254,35 @@ Some RAG (Retrieval Augmented Generation) features including:
 /model [LLM_name]                       # Display or select LLM model to use (dialogue popup)
 /search [opt:number] [prompt]           # Search the web to help answer the prompt
 /intent [on|off]                        # Activate intent router to automatically run above functions
+/image [prompt]                         # Generate an image based on the prompt
 ```
 
 See the [rag](../rag/) for more details about RAG.
+
+### Image Generation
+
+The chatbot supports image generation through two providers:
+
+1. **SwarmUI** (default) - Local image generation using Stable Diffusion models
+2. **OpenAI** - Cloud-based image generation using DALL-E models
+
+#### SwarmUI Configuration
+
+```bash
+export IMAGE_PROVIDER="swarmui"
+export SWARMUI="http://localhost:7801"
+export IMAGE_MODEL="OfficialStableDiffusion/sd_xl_base_1.0"
+```
+
+#### OpenAI Configuration
+
+```bash
+export IMAGE_PROVIDER="openai"
+export OPENAI_API_KEY="your-openai-api-key"
+export OPENAI_IMAGE_MODEL="dall-e-3"
+```
+
+See [IMAGE_CONFIG.md](IMAGE_CONFIG.md) for complete configuration options.
 
 ### Example Session
 
