@@ -201,8 +201,12 @@ async def home(format: str = None):
         "Web Search (WEB_SEARCH)": WEB_SEARCH,
         "Image Provider (IMAGE_PROVIDER)": IMAGE_PROVIDER,
         "SwarmUI Host (SWARMUI)": SWARMUI if IMAGE_PROVIDER == "swarmui" else "Not Used",
-        "Image Generation Status": get_image_generator().get_provider_name() if get_image_generator() else "Disabled",
     }
+    
+    # Get image generator status efficiently (avoid duplicate calls)
+    current_image_generator = get_image_generator()
+    data["Image Generation Status"] = current_image_generator.get_provider_name() if current_image_generator else "Disabled"
+    
     if format == "json":
         return data
     # Build a simple HTML page based on data facets

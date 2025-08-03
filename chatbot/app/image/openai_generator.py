@@ -82,15 +82,15 @@ class OpenAIImageGenerator(BaseImageGenerator):
         )
         
         # Validate model and size combination
-        if model == "dall-e-2":
+        if self.model == "dall-e-2":
             valid_sizes = ["256x256", "512x512", "1024x1024"]
-            if size not in valid_sizes:
-                log(f"Warning: Size {size} not valid for DALL-E 2. Using 1024x1024")
+            if self.size not in valid_sizes:
+                log(f"Warning: Size {self.size} not valid for DALL-E 2. Using 1024x1024")
                 self.size = "1024x1024"
-        elif model == "dall-e-3":
+        elif self.model == "dall-e-3":
             valid_sizes = ["1024x1024", "1792x1024", "1024x1792"]
-            if size not in valid_sizes:
-                log(f"Warning: Size {size} not valid for DALL-E 3. Using 1024x1024")
+            if self.size not in valid_sizes:
+                log(f"Warning: Size {self.size} not valid for DALL-E 3. Using 1024x1024")
                 self.size = "1024x1024"
 
     def get_provider_name(self) -> str:

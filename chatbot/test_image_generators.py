@@ -47,7 +47,7 @@ def test_openai_generator():
         
         generator = create_image_generator(
             provider="openai",
-            api_key="test-api-key-12345",  # Use a safe test key
+            api_key=os.environ.get("OPENAI_API_KEY", "sk-test-fake-key"),  # Use env var or obviously fake key
             api_base="https://api.openai.com/v1",  # Ensure we test against real OpenAI
             model="dall-e-3",
             size="1024x1024"
@@ -75,7 +75,7 @@ def test_local_llm_compatibility():
         # Test with typical local LLM server endpoint
         generator = create_image_generator(
             provider="openai",
-            api_key="test-key",
+            api_key=os.environ.get("OPENAI_API_KEY", "sk-test-fake-key"),  # Use env var or obviously fake key
             api_base="http://localhost:8000/v1",  # Typical local LLM server
             model="dall-e-3",
             size="1024x1024"
