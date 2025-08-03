@@ -136,7 +136,7 @@ if DEBUG:
     vars = globals()
     for n in list(vars):
         if n.isupper():
-            if vars[n] and n in ["API_KEY", "TOKEN", "WEAVIATE_AUTH_KEY", "ALPHA_KEY", "OPENAI_IMAGE_API_KEY", "LITELLM_KEY"]:
+            if vars[n] and n in ["API_KEY", "TOKEN", "WEAVIATE_AUTH_KEY", "ALPHA_KEY", "OPENAI_IMAGE_API_KEY", "LITELLM_KEY", "OPENAI_API_KEY"]:
                 debug(f"   {n}: {'*' * 16}")  # Mask sensitive keys
             else:
                 debug(f"   {n}: {vars[n]}")
