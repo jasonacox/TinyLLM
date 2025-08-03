@@ -71,7 +71,7 @@ class OpenAIImageGenerator(BaseImageGenerator):
         
         # Log the configuration being used
         if self.api_key:
-            masked_key = "***" + self.api_key[-4:] if len(self.api_key) > 4 else "***"
+            masked_key = "*" * 16
             log(f"OpenAI Image Generator initialized with API key: {masked_key}")
         else:
             log("OpenAI Image Generator initialized with API key: NOT SET")

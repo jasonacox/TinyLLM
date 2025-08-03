@@ -158,9 +158,15 @@ class SwarmUIImageGenerator(BaseImageGenerator):
 # Test
 if __name__ == "__main__":
     import asyncio
+    import os
 
     async def main():
-        image_gen = SwarmUIImageGenerator(host="http://10.0.1.25:7801")
+        # Use environment variable or default to localhost for portability
+        test_host = os.environ.get("SWARMUI_TEST_HOST", "http://localhost:7801")
+        image_gen = SwarmUIImageGenerator(host=test_host)
+        
+        print(f"Testing SwarmUI connection to: {test_host}")
+        
         async def test_image_gen():
             image_encoded = await image_gen.generate(prompt="A beautiful sunset over the mountains")
             if image_encoded:
