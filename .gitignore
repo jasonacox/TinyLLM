@@ -182,3 +182,4 @@ chatbot/d
 images/output.png
 agents/moviebot.db
 agents/message.txt
+chatbot/localtest.sh
