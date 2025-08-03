@@ -47,7 +47,7 @@ def test_openai_generator():
         
         generator = create_image_generator(
             provider="openai",
-            api_key=os.environ.get("OPENAI_API_KEY", "sk-test-fake-key"),  # Use env var or obviously fake key
+            api_key=os.environ.get("OPENAI_API_KEY", "fake-key-for-testing"),  # Use env var or clearly fake key
             api_base="https://api.openai.com/v1",  # Ensure we test against real OpenAI
             model="dall-e-3",
             size="1024x1024"
