@@ -10,7 +10,7 @@ github.com/jasonacox/TinyLLM
 """
 
 # Version of the TinyLLM (Major, Minor, Patch)
-VERSION = "v0.16.3"
+VERSION = "v0.16.4"
 
 # Imports
 import os
