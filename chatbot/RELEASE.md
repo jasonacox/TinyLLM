@@ -4,6 +4,17 @@
 
 The TinyLLM Chatbot docker container is available at: [jasonacox/chatbot](https://hub.docker.com/r/jasonacox/chatbot).
 
+## 0.16.4 - Document Generation Support
+
+* Added comprehensive document generation functionality with support for PDF, Word, Excel, and PowerPoint formats.
+* Added intelligent document intent detection that automatically recognizes when users request document creation.
+* Added document download functionality with direct browser download links for generated documents.
+* Added dedicated document generation module with structured content processing and LLM-enhanced formatting.
+* Added support for conversation context in document generation, allowing users to create documents from previous responses.
+* Fixed route mounting order to ensure document download routes are properly accessible.
+* Enhanced frontend to display download links with document icons for generated files.
+* Added comprehensive debug logging throughout the document generation pipeline for better troubleshooting.
+
 ## 0.16.3 - OpenAI Image Generation Support
 
 * Added OpenAI DALL-E image generation support with dedicated environment variables.
