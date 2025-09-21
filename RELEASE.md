@@ -1,5 +1,37 @@
 # Releases
 
+## 0.16.4 - Document Generation & Security
+
+* Chatbot - Document Generation: End-to-end document creation (PDF, DOCX, XLSX, PPTX) with download links.
+* Security - Download Route Hardening: The `/download/{filename}` endpoint now validates filenames to prevent path traversal.
+    - Sanitizes input using `os.path.basename()` and rejects empty/`.`/`..` values.
+    - Enforces allowed extensions: `.pdf`, `.docx`, `.pptx`, `.xlsx`.
+    - Resolves real paths and ensures they stay within the `generated_docs` directory.
+    - Returns `400` for invalid filenames and `404` for missing files.
+* Markdown Rendering:
+    - PDF: Lightweight Markdown renderer (headings, bold/italic, bullet and numbered lists, Markdown tables).
+        - Supports internal links: headings emit anchors, and `[text](#anchor)` links navigate within the PDF.
+        - Fenced code blocks now render as shaded, monospaced sections with a small header (e.g., "Code (python)") instead of literal Markdown fences.
+        - Fenced code blocks now render as shaded, monospaced sections with a small header (e.g., "Code (python)") instead of literal Markdown fences.
+    - DOCX: Render a useful subset of Markdown (headings `#..######`, bullet/numbered lists, Markdown tables, inline bold/italic). Preserves table column structure and empty cells. Lists use built-in Word list styles.
+    - XLSX: Spreadsheet-friendly Markdown rendering:
+        - Headings styled and merged across columns for readability.
+        - Bullet/numbered list items now in a single cell (e.g., `• Item text`, `1. Item text`) with wrapping.
+        - Tables with styled header row, borders, and wrapping; preserves empty cells to maintain column alignment.
+        - Fenced code blocks (```...```) render as monospaced, shaded cells with wrapping.
+        - Entire-line links `[text](url)` become clickable hyperlinks.
+    - PPTX: Presentation-friendly behavior:
+        - Added a PowerPoint-specific LLM prompt that requests a Markdown outline with `# Presentation:` and `## Slide N:` sections, bullets, and tables.
+        - Parser normalizes titles by stripping `Presentation:` and `Slide N:` prefixes so slides have clean titles.
+        - Disabled native PowerPoint bullet styling on paragraphs to prevent double bullets when using manual prefixes; list items now render with a single bullet or number consistently.
+* Format Handling & UI:
+    - Format aliases normalized (e.g., `word|doc|docx -> docx`, `excel|spreadsheet|xlsx -> xlsx`, `powerpoint|ppt|pptx -> pptx`).
+    - `/stats` page lists supported document types and aliases.
+* Privacy & Reliability:
+    - Generated filenames use UUID-based opaque IDs (no session identifiers).
+    - Fixed route mounting order so Socket.IO is mounted last, preventing route interception of downloads.
+    - Excel generator stability fixes (prevent infinite loops and Excel row overflow in extreme cases).
+
 ## 0.16.2 - Repetition Filter Settings
 
 * Added environment variables for repetition filter: `REPEAT_WINDOW` and `REPEAT_COUNT`.
