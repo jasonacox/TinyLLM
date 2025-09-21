@@ -32,6 +32,11 @@
     - Fixed route mounting order so Socket.IO is mounted last, preventing route interception of downloads.
     - Excel generator stability fixes (prevent infinite loops and Excel row overflow in extreme cases).
 
+Example Usage
+
+> Write an algorithm in python to sort a list of number. Create a PDF to describe how it works.
+
+
 ## 0.16.2 - Repetition Filter Settings
 
 * Added environment variables for repetition filter: `REPEAT_WINDOW` and `REPEAT_COUNT`.

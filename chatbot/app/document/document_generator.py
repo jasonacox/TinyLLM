@@ -25,6 +25,14 @@ GENERATED_DOCS_DIR = os.path.join(_chatbot_dir, "generated_docs")
 os.makedirs(GENERATED_DOCS_DIR, exist_ok=True)
 
 
+def _split_md_pipes(row: str) -> list[str]:
+    """Split a Markdown table row by pipes, trimming cells while preserving
+    leading/trailing empty cells. Example: "| a | b |" -> ["", "a", "b", ""]
+    """
+    parts = [p.strip() for p in row.split('|')]
+    return parts
+
+
 class DocumentGenerator:
     """Handles document generation for various formats."""
     
@@ -132,13 +140,13 @@ class DocumentGenerator:
                 Here is the response content: {llm_response}
                 
                 Please structure this content appropriately for a {doc_request["type"]} document.
-                For the format, provide:
+                For the format, provide in markdown:
                 - A clear title
                 - Organized sections with headers
                 - Any data that should be formatted as tables
                 - Proper formatting suggestions
                 
-                Return the structured content in a clear, organized format.
+                Return the structured content in a clear, organized format. Do not include any preamble or commentary.
                 """
             
             debug(f"Sending structure prompt to LLM (length: {len(structure_prompt)} chars)")
@@ -218,7 +226,7 @@ class DocumentGenerator:
             debug(f"Content length: {len(content)} characters")
             
             from reportlab.lib.pagesizes import letter
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, ListFlowable, ListItem, XPreformatted
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, ListFlowable, ListItem, XPreformatted, HRFlowable
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import inch
             from reportlab.lib import colors
@@ -302,6 +310,14 @@ class DocumentGenerator:
                 if not line:
                     story.append(Spacer(1, 0.15 * inch))
                     i += 1
+                    continue
+                # Horizontal rules: lines of 3+ '-' or '=' characters (no pipes)
+                if re.fullmatch(r"[-=]{3,}", line):
+                    story.append(Spacer(1, 0.06 * inch))
+                    story.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
+                    story.append(Spacer(1, 0.06 * inch))
+                    i += 1
+                    processed_lines += 1
                     continue
                 # Fenced code block: ```lang (optional) ... ```
                 if line.startswith("```"):
@@ -483,12 +499,7 @@ class DocumentGenerator:
                 # Markdown table separator e.g., |---|:---:|---|
                 return all(ch in "-|:+ " for ch in sep) and ('-' in sep)
 
-            def split_pipes(row: str) -> list[str]:
-                # keep empty leading/trailing cells
-                parts = [p.strip() for p in row.split('|')]
-                # If line starts/ends with pipe, first/last will be '' which we keep
-                # Remove accidental double-pipe empties in middle only
-                return [p for p in parts]
+            # Use shared Markdown pipe splitter
 
             # -----------------------------------------------------------------
             lines = content.split('\n')
@@ -502,6 +513,28 @@ class DocumentGenerator:
                 if line.strip() == "":
                     # blank line - add spacing paragraph
                     doc.add_paragraph("")
+                    i += 1
+                    processed_lines += 1
+                    continue
+                # Horizontal rules: lines of 3+ '-' or '=' characters (no pipes)
+                if re.fullmatch(r"[-=]{3,}", line.strip()):
+                    # Add a paragraph with bottom border to simulate a horizontal rule
+                    try:
+                        from docx.oxml import OxmlElement
+                        from docx.oxml.ns import qn
+                        p = doc.add_paragraph("")
+                        pPr = p._p.get_or_add_pPr()
+                        pBdr = OxmlElement('w:pBdr')
+                        bottom = OxmlElement('w:bottom')
+                        bottom.set(qn('w:val'), 'single')
+                        bottom.set(qn('w:sz'), '6')  # thickness
+                        bottom.set(qn('w:space'), '1')
+                        bottom.set(qn('w:color'), 'auto')
+                        pBdr.append(bottom)
+                        pPr.append(pBdr)
+                    except Exception:
+                        # Fallback: a thin underscore line
+                        doc.add_paragraph("\u2014\u2014\u2014")
                     i += 1
                     processed_lines += 1
                     continue
@@ -520,7 +553,7 @@ class DocumentGenerator:
                 # Markdown table
                 next_line = lines[i+1] if i + 1 < len(lines) else None
                 if is_table_header(line, next_line):
-                    header_cells = [c for c in split_pipes(line) if c != ""]
+                    header_cells = [c for c in _split_md_pipes(line) if c != ""]
                     # advance past header and separator
                     i += 2
                     data_rows = []
@@ -528,7 +561,7 @@ class DocumentGenerator:
                         r = lines[i]
                         if '|' not in r or r.strip() == "":
                             break
-                        cells = [c for c in split_pipes(r) if c != ""]
+                        cells = [c for c in _split_md_pipes(r) if c != ""]
                         data_rows.append(cells)
                         i += 1
                     rows = [header_cells] + data_rows
@@ -950,8 +983,7 @@ class DocumentGenerator:
                     return False
                 return t.startswith('|') or t.endswith('|')
 
-            def split_pipes(row: str) -> list[str]:
-                return [p.strip() for p in row.split('|')]
+            # Use shared _split_md_pipes if needed for future parsing
 
             # -----------------------------------------------------------------
             lines = content.split('\n')
