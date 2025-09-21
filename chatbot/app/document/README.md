@@ -104,7 +104,7 @@ chatbot/generated_docs/
 └── ...
 ```
 
-Filename format: `document_{session_id[:8]}_{timestamp}.{extension}`
+Filename format: `document_{opaque_id}_{timestamp}.{extension}` where `opaque_id` is a UUID-based identifier.
 
 ## Dependencies
 
