@@ -19,6 +19,7 @@ import base64
 import datetime
 import io
 import json
+import os
 import re
 import time
 from contextlib import asynccontextmanager
@@ -55,6 +56,7 @@ from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
 from app.core.llm import (client, get_models, ask, ask_llm, ask_context)
 from app.core.prompts import (prompts, base_prompt, default_prompts, save_prompts, expand_prompt)
 from app.image import create_image_generator
+from app.document import generate_document_from_response, get_document_generator
 
 # Ensure pillow_heif is properly registered with PIL
 pillow_heif.register_heif_opener()
@@ -202,6 +204,12 @@ async def home(format: str = None):
         "Image Provider (IMAGE_PROVIDER)": IMAGE_PROVIDER,
         "SwarmUI Host (SWARMUI)": SWARMUI if IMAGE_PROVIDER == "swarmui" else "Not Used",
     }
+    # Add supported document formats (aliases) to status page
+    try:
+        doc_gen = get_document_generator()
+        data["Supported Document Formats"] = ", ".join(sorted(doc_gen.get_supported_formats()))
+    except Exception as e:
+        debug(f"Unable to load document generator formats: {e}")
     
     # Get image generator status efficiently (avoid duplicate calls)
     current_image_generator = get_image_generator()
@@ -354,11 +362,110 @@ async def upload_file(request: Request, file: UploadFile = File(...), session_id
     await sio.emit('update', {'update': update, 'voice': 'user'}, room=session_id)
     return {"result": "Success", "filename": file.filename, "size": len(content), "image_data": image_data}
 
+
+# Document Generation Handler
+
+async def handle_document_generation(session_id: str, llm_response: str):
+    """Handle document generation request using the document generator module."""
+    doc_request = client[session_id]["document_request"]
+    
+    try:
+        await sio.emit('update', {'update': f'[Generating {doc_request["type"].upper()} document...]', 'voice': 'user'}, room=session_id)
+        
+        # Generate document using the dedicated document generator
+        file_path = await generate_document_from_response(
+            session_id, 
+            llm_response, 
+            doc_request, 
+            client[session_id]["model"]
+        )
+        
+        if file_path:
+            await sio.emit('update', {
+                'update': '[Document Generated Successfully]',
+                'voice': 'user',
+                'document_download': file_path
+            }, room=session_id)
+        else:
+            await sio.emit('update', {
+                'update': '[Error: Document generation failed]',
+                'voice': 'user'
+            }, room=session_id)
+        
+    except Exception as e:
+        log(f"Document generation error: {e}")
+        await sio.emit('update', {
+            'update': '[Error generating document]',
+            'voice': 'user'
+        }, room=session_id)
+    
+    # Reset the document request flags
+    client[session_id]["document_request"]["requested"] = False
+    client[session_id]["document_request"]["content_ready"] = False
+
+
+# Document download route
+@app.get("/download/{filename}")
+async def download_document(filename: str):
+    """Serve generated documents for download."""
+    from app.document.document_generator import GENERATED_DOCS_DIR
+    
+    debug(f"Download request for filename: {filename}")
+    debug(f"GENERATED_DOCS_DIR: {GENERATED_DOCS_DIR}")
+    debug(f"Current working directory: {os.getcwd()}")
+
+    # 1) Basic sanitization: reject paths with directories or special names
+    safe_name = os.path.basename(filename)
+    if safe_name != filename or safe_name in ("", ".", ".."):
+        debug(f"Invalid filename (path traversal attempt): {filename} -> {safe_name}")
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # 2) Enforce allowed extensions
+    allowed_exts = {".pdf", ".docx", ".pptx", ".xlsx"}
+    _, ext = os.path.splitext(safe_name)
+    if ext.lower() not in allowed_exts:
+        debug(f"Disallowed file extension: {ext}")
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    # 3) Resolve real paths and ensure contained within GENERATED_DOCS_DIR
+    base_dir = os.path.realpath(GENERATED_DOCS_DIR)
+    abs_file_path = os.path.realpath(os.path.join(base_dir, safe_name))
+    debug(f"Resolved base_dir: {base_dir}")
+    debug(f"Resolved abs_file_path: {abs_file_path}")
+
+    # Ensure abs_file_path is within base_dir
+    try:
+        common = os.path.commonpath([base_dir, abs_file_path])
+    except Exception as e:
+        debug(f"Path resolution error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid filename") from e
+    if common != base_dir:
+        debug(f"Resolved path escapes base dir: {abs_file_path}")
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # 4) Serve file if present
+    if os.path.exists(abs_file_path) and os.path.isfile(abs_file_path):
+        debug(f"Serving file: {abs_file_path}")
+        return FileResponse(abs_file_path, filename=safe_name)
+
+    # 5) Not found
+    debug(f"File not found: {abs_file_path}")
+    if os.path.exists(base_dir):
+        try:
+            debug(f"Directory contents: {os.listdir(base_dir)}")
+        except Exception:
+            pass
+    else:
+        debug(f"Directory doesn't exist: {base_dir}")
+    raise HTTPException(status_code=404, detail="File not found")
+
+
 #
 # SocketIO Events
 #
 
-app.mount("/", socket_app)  # Here we mount socket app to main fastapi app
+# Mount the SocketIO app at the root - this must be last to avoid intercepting other routes
+app.mount("/", socket_app)
 
 # Helper function to check for repeating text from LLM
 async def is_repeating_exact(text: str, session_id=None) -> bool:
@@ -490,6 +597,12 @@ async def handle_connect(session_id, env): # pylint: disable=unused-argument
                             client[session_id]["references"] = client[session_id]["references"].strip()
                             await sio.emit('update', {'update': client[session_id]["references"], 'voice': 'ref'},room=session_id)
                             client[session_id]["references"] = ""
+                        
+                        # Check for document generation request
+                        if client[session_id]["document_request"]["requested"]:
+                            client[session_id]["document_request"]["content_ready"] = True
+                            await handle_document_generation(session_id, completion_text)
+                        
                         if not ONESHOT:
                             # If COT mode replace CoT context in conversation thread with user prompt
                             if client_cot:
@@ -544,7 +657,13 @@ async def handle_connect(session_id, env): # pylint: disable=unused-argument
             "think": THINK_FILTER,
             "internet": WEB_SEARCH,
             "intent": INTENT_ROUTER,
-            "repeat_detect": True
+            "repeat_detect": True,
+            "document_request": {
+                "type": None,           # pdf, word, excel, powerpoint
+                "original_prompt": "",  # original user request
+                "requested": False,     # flag to trigger doc generation
+                "content_ready": False  # flag when LLM response is complete
+            }
         }
         # Start continuous task to send updates
         asyncio.create_task(send_update(session_id))
@@ -1011,12 +1130,63 @@ intent_questions = {
     "search": "Is this request asking to search the internet or web?",
     "stock": "Does this prompt contain a company name?",
     "dynamic": "Is is possible that the answer to this question changed over last 4 years, dependent on current events or news, or subject to change due to external factors?",
-    "followup": "Does this seems like a follow-up question or statement?"
+    "followup": "Does this seems like a follow-up question or statement?",
+    "document": "Is this request asking to create, generate, produce, or export a document (PDF, Word doc, spreadsheet, presentation, report, etc.)?"
 }
 
 async def handle_normal_prompt(session_id, p):
     if client[session_id]["visible"]:
         await sio.emit('update', {'update': p, 'voice': 'user'}, room=session_id)
+    
+    # Check for document generation intent first
+    if client[session_id]["intent"] and await double_check(session_id, p, intent_questions["document"]):
+        debug(f"Document generation request detected: {p}")
+        # Determine document type
+        doc_type_prompt = (
+            f"What type of document format is being requested in this prompt: '{p}'\n"
+            "Respond with only one word: pdf, word, excel, or powerpoint. If the format is unclear, respond with 'pdf'."
+        )
+        doc_type = await ask_llm(doc_type_prompt, model=client[session_id]["model"])
+        doc_type = doc_type.lower().strip()
+        
+        # Set document request flag
+        client[session_id]["document_request"] = {
+            "type": doc_type,
+            "original_prompt": p,
+            "requested": True,
+            "content_ready": False
+        }
+        
+        # Extract the content request from the document request, including conversation context
+        conversation_context = ""
+        if len(client[session_id]["context"]) > 2:
+            # Get recent conversation history for context
+            recent_context = client[session_id]["context"][-4:]  # Last 4 exchanges
+            for msg in recent_context:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role == "user":
+                    conversation_context += f"User: {content}\n"
+                elif role == "assistant":
+                    conversation_context += f"Assistant: {content}\n"
+        
+        content_prompt = f"""Extract the main content request from this document generation request, ignoring the format specification.
+        
+        Conversation Context:
+        {conversation_context}
+        
+        Current Request: {p}
+        
+        Based on the full conversation context, what content should be included in the document? Provide a clear, comprehensive description of what the user wants documented."""
+        
+        content_request = await ask_llm(content_prompt, model=client[session_id]["model"])
+        
+        await sio.emit('update', {'update': f'[Document Generation Requested: {doc_type.upper()}]', 'voice': 'user'}, room=session_id)
+        
+        # Process the content request normally
+        client[session_id]["prompt"] = content_request
+        return
+    
     if WEAVIATE_HOST and RAG_ONLY and p is not prompts["greeting"]:
         # Activate RAG every time
         await handle_rag_command(session_id, f"/rag {WEAVIATE_LIBRARY} {RESULTS} {p}")

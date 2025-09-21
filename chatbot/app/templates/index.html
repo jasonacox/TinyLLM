@@ -877,6 +877,12 @@
                 updateContainer.innerHTML += `<img src="data:image/png;base64,${data.image_data}" style="max-width: 50%; height: auto;">`;
             }
 
+            // Handle document download
+            if (data.document_download) {
+                const downloadUrl = `/download/${data.document_download}`;
+                updateContainer.innerHTML += `<p class='user-text'><a href="${downloadUrl}" target="_blank" download style="color: #007bff; text-decoration: underline;">📄 Download ${data.document_download}</a></p>`;
+            }
+
             // Ensure we always show the latest
             updateContainer.scrollTop = updateContainer.scrollHeight;
         });
