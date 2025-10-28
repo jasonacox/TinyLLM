@@ -27,7 +27,7 @@ import requests
 
 # Third-party imports
 from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.templating import Jinja2Templates
 from PIL import Image
 import pillow_heif
@@ -153,10 +153,28 @@ templates = Jinja2Templates(directory="app/templates")
 async def index(request: Request):
     return templates.TemplateResponse(request, "index.html")
 
-# Serve static socket.io.js
-@app.get("/socket.io.js")
-def serve_socket_io_js():
-    return FileResponse("app/templates/socket.io.js", media_type="application/javascript")
+# Serve favicon.ico (return 204 No Content to avoid console errors)
+@app.get("/favicon.ico")
+async def favicon():
+    # Serve the SVG favicon
+    return FileResponse("app/static/favicon.svg", media_type="image/svg+xml")
+
+# Serve static files from app/static directory
+@app.get("/static/{filename}")
+def serve_static_files(filename: str):
+    file_path = f"app/static/{filename}"
+    if os.path.exists(file_path):
+        # Determine media type based on file extension
+        if filename.endswith('.js'):
+            media_type = "application/javascript"
+        elif filename.endswith('.css'):
+            media_type = "text/css"
+        elif filename.endswith('.svg'):
+            media_type = "image/svg+xml"
+        else:
+            media_type = "application/octet-stream"
+        return FileResponse(file_path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="File not found")
 
 # Display settings and stats
 @app.get("/stats")
