@@ -1,5 +1,12 @@
 # Releases
 
+## 0.16.5 - Image Edit
+
+* SwarmUI: Added support for sending an image along with the prompt (image+prompt / img2img). If an image is uploaded in the chat UI, `/image {prompt}` will pass it as an init image to SwarmUI, keeping external link behavior. Backwards compatible when no image is attached. Internally, we now populate `rawInput` with `initimage`/`maskimage` data-URLs for the Swarm API.
+* New command: `/image edit {prompt}` explicitly selects edit mode. Requires an uploaded image and applies a default edit noise/strength (configurable via `IMAGE_EDIT_NOISE`, default 0.35). Helpful for workflows like object additions, style changes, or masked edits when combined with a `maskimage` in future UI updates.
+
+
+
 ## 0.16.4 - Document Generation & Security
 
 * Chatbot - Document Generation: End-to-end document creation (PDF, DOCX, XLSX, PPTX) with download links.
@@ -35,7 +42,6 @@
 Example Usage
 
 > Write an algorithm in python to sort a list of number. Create a PDF to describe how it works.
-
 
 ## 0.16.2 - Repetition Filter Settings
 

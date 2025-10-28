@@ -130,13 +130,78 @@ class SwarmUIImageGenerator(BaseImageGenerator):
             "seed": seed,
         }
 
+        # Optional image-to-image / mask parameters
+        # Accept either pre-wrapped data URLs (init_image_data_url) or raw base64 without header (init_image_b64)
+        init_image_data_url: Optional[str] = kwargs.get("init_image_data_url")
+        init_image_b64: Optional[str] = kwargs.get("init_image_b64")
+        mask_image_data_url: Optional[str] = kwargs.get("mask_image_data_url")
+        mask_image_b64: Optional[str] = kwargs.get("mask_image_b64")
+        init_image_noise: Optional[float] = kwargs.get("init_image_noise")  # 0..1 strength where applicable
+
+        def _to_data_url(b64: str) -> str:
+            # Heuristic MIME detection from base64 header
+            if not b64:
+                return ""
+            head = b64[:10]
+            if head.startswith("iVBORw0KGg"):  # PNG signature
+                return f"data:image/png;base64,{b64}"
+            if head.startswith("/9j/"):  # JPEG signature
+                return f"data:image/jpeg;base64,{b64}"
+            # Default to PNG
+            return f"data:image/png;base64,{b64}"
+
+        # Build rawInput map for Swarm parameters, including optional init/mask images
+        raw_input = {
+            "prompt": str(prompt),
+            **{k: v for k, v in params.items()},
+            "donotsave": True,
+        }
+        if init_image_data_url or init_image_b64:
+            raw_input["initimage"] = init_image_data_url or _to_data_url(init_image_b64)
+            if init_image_noise is not None:
+                # Swarm parameter for img2img noise control
+                raw_input["initimagenoise"] = float(init_image_noise)
+        if mask_image_data_url or mask_image_b64:
+            raw_input["maskimage"] = mask_image_data_url or _to_data_url(mask_image_b64)
+
+        # Maintain existing flattened parameters for compatibility, and include rawInput for extended params
         data = {
             "session_id": self.session_id,
             "images": "1",
+            # Flattened common params (Swarm also accepts these at root)
             "prompt": str(prompt),
             **{k: str(v) for k, v in params.items()},
             "donotsave": True,
+            # Raw param map for features like initimage/maskimage
+            "rawInput": raw_input,
         }
+
+        # Mirror critical raw input fields at the top-level to ensure backend parses them
+        if "initimage" in raw_input and raw_input["initimage"]:
+            data["initimage"] = raw_input["initimage"]
+            # Some Swarm backends read from an array of images
+            try:
+                data["inputimages"] = [raw_input["initimage"]]
+            except Exception:
+                pass
+        if "maskimage" in raw_input and raw_input["maskimage"]:
+            data["maskimage"] = raw_input["maskimage"]
+        if "initimagenoise" in raw_input and raw_input["initimagenoise"] is not None:
+            data["initimagenoise"] = raw_input["initimagenoise"]
+
+        # Debug: confirm what we're about to send without dumping image data
+        try:
+            has_init_top = "initimage" in data and isinstance(data["initimage"], str)
+            has_init_raw = "initimage" in raw_input and isinstance(raw_input["initimage"], str)
+            mime = None
+            if has_init_top:
+                if data["initimage"].startswith("data:image/"):
+                    mime = data["initimage"].split(";")[0][5:]
+                else:
+                    mime = "base64"
+            debug(f"SwarmUI payload: init(top)={has_init_top} init(raw)={has_init_raw} mime={mime} noise={raw_input.get('initimagenoise', None)}")
+        except Exception:
+            pass
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -150,6 +215,12 @@ class SwarmUIImageGenerator(BaseImageGenerator):
                         response_data = await response.json()
                         image_encoded = response_data["images"][0]
                         return image_encoded
+                    else:
+                        # Helpful debug to confirm whether init image was included
+                        try:
+                            log(f"SwarmUI reply {response.status} - initimage at top: {'initimage' in data}, in rawInput: {'initimage' in raw_input}")
+                        except Exception:
+                            pass
 
         except Exception as e:
             log(f"SwarmUI server ({self.host}) error: {e}")

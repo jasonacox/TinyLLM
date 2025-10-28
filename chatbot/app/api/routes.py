@@ -204,6 +204,12 @@ async def home(format: str = None):
         "Image Provider (IMAGE_PROVIDER)": IMAGE_PROVIDER,
         "SwarmUI Host (SWARMUI)": SWARMUI if IMAGE_PROVIDER == "swarmui" else "Not Used",
     }
+    # Image edit config
+    try:
+        from app.core.config import IMAGE_EDIT_NOISE
+        data["Image Edit Default Noise (IMAGE_EDIT_NOISE)"] = IMAGE_EDIT_NOISE
+    except Exception:
+        pass
     # Add supported document formats (aliases) to status page
     try:
         doc_gen = get_document_generator()
@@ -787,7 +793,7 @@ async def handle_url_prompt(session_id, p):
 async def handle_command(session_id, p):
     command = p[1:].split(" ")[0].lower()
     if command == "":
-        await sio.emit('update', {'update': '[Commands: /image /intent /model /news /rag /reset /search /sessions /stock /think /version /weather /repeat]', 'voice': 'user'}, room=session_id)
+        await sio.emit('update', {'update': '[Commands: /image (or /image edit) /intent /model /news /rag /reset /search /sessions /stock /think /version /weather /repeat]', 'voice': 'user'}, room=session_id)
         client[session_id]["prompt"] = ''
     elif command == "repeat":
         await handle_repeat_command(session_id, p)
@@ -1051,17 +1057,73 @@ async def handle_image_command(session_id, p):
     if not current_image_generator:
         await sio.emit('update', {'update': '[Image Generation is not enabled]', 'voice': 'user'}, room=session_id)
         return
-    prompt = p[6:].strip()
-    if not prompt:
-        await sio.emit('update', {'update': '[Usage: /image {prompt}] - Generate image for prompt.', 'voice': 'user'}, room=session_id)
+    raw_args = p[6:].strip()
+    if not raw_args:
+        await sio.emit('update', {'update': '[Usage: /image {prompt} | /image edit {prompt}]', 'voice': 'user'}, room=session_id)
         return
+    # Support explicit edit intent: "/image edit {prompt}"
+    is_edit = False
+    prompt = raw_args
+    parts = raw_args.split()
+    if parts and parts[0].lower() in ["edit", "eidt"]:
+        is_edit = True
+        prompt = ' '.join(parts[1:]).strip()
+        if not prompt:
+            await sio.emit('update', {'update': '[Usage: /image edit {prompt}] - Provide a prompt describing the edit.', 'voice': 'user'}, room=session_id)
+            return
     await sio.emit('update', {'update': '%s [Generating Image...]' % p, 'voice': 'user'}, room=session_id)
     debug(f"Image Prompt: {prompt}")
     client[session_id]["visible"] = False
     client[session_id]["remember"] = True
     # Generate image from current_image_generator
+    # If the user has uploaded an image already, pass it along as an init image (image+prompt)
+    gen_kwargs = {}
+    try:
+        client_image_data = client[session_id].get("image_data")
+    except Exception:  # pragma: no cover - defensive
+        client_image_data = None
+    if client_image_data:
+        # client_image_data is base64 without header from our upload route
+        # Some frontends may include data URLs already; handle both
+        if client_image_data.startswith("data:image/"):
+            gen_kwargs["init_image_data_url"] = client_image_data
+            # Debug: show a short preview of the image data URL to keep logs readable
+            try:
+                preview = client_image_data[:80]
+                debug(f"Init image (data URL) preview: {preview}... (len={len(client_image_data)})")
+            except Exception:
+                pass
+        else:
+            gen_kwargs["init_image_b64"] = client_image_data
+            # Debug: show a short preview of the raw base64 image payload
+            try:
+                preview = client_image_data[:80]
+                debug(f"Init image (base64) preview: {preview}... (len={len(client_image_data)})")
+            except Exception:
+                pass
+        debug("Passing init image to generator for image+prompt mode")
+    elif is_edit:
+        # Edit mode requires an init image
+        await sio.emit('update', {'update': '[Image Edit requires an uploaded image. Drag-and-drop an image, then run: /image edit {prompt}]', 'voice': 'user'}, room=session_id)
+        return
 
-    image_encoded = await current_image_generator.generate(prompt)
+    # Apply default edit noise for explicit edit flow
+    if is_edit:
+        try:
+            from app.core.config import IMAGE_EDIT_NOISE
+            gen_kwargs["init_image_noise"] = IMAGE_EDIT_NOISE
+        except Exception:
+            pass
+        # If using Flux base models, stronger edit often needs max creativity (1.0) or dedicated edit models
+        try:
+            model_name = getattr(current_image_generator, "model", "") or IMAGE_MODEL
+            if isinstance(model_name, str) and "flux" in model_name.lower():
+                gen_kwargs["init_image_noise"] = 1.0
+                await sio.emit('update', {'update': '[Note: Flux base models may ignore edits without a mask. Consider Flux Kontext/Fill or SDXL Inpainting for stronger edits.]', 'voice': 'user'}, room=session_id)
+        except Exception:
+            pass
+
+    image_encoded = await current_image_generator.generate(prompt, **gen_kwargs)
     if image_encoded:
         # Handle different response formats - OpenAI returns raw base64, SwarmUI returns data URI
         if "," in image_encoded:
