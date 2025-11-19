@@ -3,6 +3,7 @@
 <head>
     <title>TinyLLM Chatbot</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/prism.min.css">
     <meta name="viewport" content="width=device-width, height=device-height, maximum-scale=1.0">
     <style>
         body {
@@ -82,7 +83,7 @@
         .code-box code {
             display: block; /* Ensures line breaks are preserved */
             font-family: "Courier New", Courier, monospace; /* Use a monospace font for code */
-            font-size: 14px;
+            font-size: 12px;
             line-height: 1.5;
             color: #333;
         }
@@ -135,6 +136,9 @@
         }
         .ai-response:hover .toggle-raw-button {
             opacity: 1;
+        }
+        .streaming-text {
+            margin: 0 0 20px 0;
         }
         .notification {
             position: fixed;
@@ -276,6 +280,12 @@
         }
         /* Markdown element styling */
         /* Headers */
+        p {
+            margin: 0 0 18px 0;
+        }
+        p:first-child {
+            margin-top: 0;
+        }
         h1, h2, h3, h4, h5, h6 {
             margin-top: 20px;
             margin-bottom: 10px;
@@ -376,20 +386,28 @@
             padding: 2px 6px;
             border-radius: 3px;
             font-family: "Courier New", monospace;
-            font-size: 13px;
+            font-size: 14px;
         }
-        /* Pre-formatted code blocks (already handled by code-box) */
+        /* Pre-formatted code blocks with syntax highlighting */
         pre {
             margin: 10px 0;
-            background-color: #f4f4f4;
             padding: 10px;
             border-radius: 5px;
             overflow-x: auto;
         }
-        pre code {
-            background-color: transparent;
+        pre[class*="language-"] {
+            background-color: #202020 !important;
+        }
+        pre code,
+        code[class*="language-"],
+        pre[class*="language-"] code {
             padding: 0;
             border-radius: 0;
+            background-color: #202020 !important;
+            font-family: "Courier New", Consolas, Monaco, monospace;
+            font-size: 14px !important;
+            line-height: 1.2 !important;
+            color: #ccc !important;
         }
 
         @media only screen and (max-width: 430px) {
@@ -397,7 +415,7 @@
             body {
                 font-family: Arial, sans-serif;
                 overflow: hidden; /* Hide scrollbars */
-                font-size: 16px;
+                font-size: 12px;
             }
             #container {
                 display: flex;
@@ -679,6 +697,11 @@
     <script src="/static/socket.io.js"></script>
     <!-- Markdown parser library for full markdown support -->
     <script src="/static/marked.min.js"></script>
+    <!-- Syntax highlighting library -->
+    <script src="/static/prism.min.js"></script>
+    <script src="/static/prism-python.min.js"></script>
+    <script src="/static/prism-javascript.min.js"></script>
+    <script src="/static/prism-markup.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -1073,6 +1096,13 @@
                         });
                         const htmlContent = marked.parse(aiResponseBuffer);
                         aiResponseElement.innerHTML = htmlContent;
+                        
+                        // Apply syntax highlighting to all code blocks
+                        const codeBlocks = aiResponseElement.querySelectorAll('pre code');
+                        codeBlocks.forEach(block => {
+                            Prism.highlightElement(block);
+                        });
+                        
                         // Add copy buttons to code blocks
                         addCopyButtonsToCodeBlocks(aiResponseElement);
                         
@@ -1117,6 +1147,7 @@
                 // Create or update the AI response container
                 if (!aiResponseElement) {
                     const wrapper = document.createElement('div');
+                    wrapper.className = 'streaming-text';
                     wrapper.innerHTML = '';
                     updateContainer.appendChild(wrapper);
                     aiResponseElement = wrapper;
@@ -1124,8 +1155,8 @@
                 
                 // Display tokens in real-time as plain text while streaming
                 // Markdown will be applied when streaming completes (on "done")
-                // Add temporary line breaks for readability
-                aiResponseElement.innerHTML = aiResponseBuffer.replace(/\n/g, '<br>');
+                // Escape HTML and add temporary line breaks for readability
+                aiResponseElement.innerHTML = escapeHtml(aiResponseBuffer).replace(/\n/g, '<br>');
                 
                 // Scroll to show latest content
                 updateContainer.scrollTop = updateContainer.scrollHeight;

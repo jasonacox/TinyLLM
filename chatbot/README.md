@@ -417,3 +417,13 @@ The Chatbot can use this information if you send the prompt command:
 /rag records How much did we donate to charity in 2022?
 /rag blog 5 List some facts about solar energy.
 ```
+
+## Credits
+
+This project uses the following open-source libraries:
+
+- **[Prism.js](https://prismjs.com/)** - Syntax highlighting (MIT License)
+- **[marked.js](https://marked.js.org/)** - Markdown parsing (MIT License)
+- **[Socket.IO](https://socket.io/)** - Real-time communication (MIT License)
+
+See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for full license details.
