@@ -4,6 +4,15 @@
 
 The TinyLLM Chatbot docker container is available at: [jasonacox/chatbot](https://hub.docker.com/r/jasonacox/chatbot).
 
+## 0.16.5 - Enhanced Markdown and Code Rendering
+
+* Added syntax highlighting for code blocks using Prism.js with support for Python, JavaScript, and HTML.
+* Improved streaming output rendering with proper HTML escaping to prevent code interpretation during display.
+* Enhanced code block styling with dark theme background and optimized font size and line spacing.
+* Fixed content jump issue when streaming text transitions to rendered markdown by adding consistent margin spacing.
+* Added comprehensive third-party license attribution for all frontend and backend libraries.
+* All static assets (Prism.js, marked.js, Socket.IO) now served locally to support air-gapped deployments.
+
 ## 0.16.4 - Document Generation Support
 
 * Added comprehensive document generation functionality with support for PDF, Word, Excel, and PowerPoint formats.
