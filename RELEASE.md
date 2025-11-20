@@ -1,5 +1,31 @@
 # Releases
 
+## 0.16.5 - Chatbot Updates
+
+Image Edit
+
+* SwarmUI: Added support for sending an image along with the prompt (image+prompt / img2img). If an image is uploaded in the chat UI, `/image {prompt}` will pass it as an init image to SwarmUI, keeping external link behavior. Backwards compatible when no image is attached. Internally, we now populate `rawInput` with `initimage`/`maskimage` data-URLs for the Swarm API.
+* New command: `/image edit {prompt}` explicitly selects edit mode. Requires an uploaded image and applies a default edit noise/strength (configurable via `IMAGE_EDIT_NOISE`, default 0.35). Helpful for workflows like object additions, style changes, or masked edits when combined with a `maskimage` in future UI updates.
+
+Markdown Rendering in Chat UI
+
+* Full Markdown Support: Integrated `marked.js` library (v5+) with GitHub-flavored markdown for comprehensive rendering of LLM responses.
+* Supported Elements: Headers (h1-h6 with borders), bold/italic text, tables (auto-width with tight padding), bullet/numbered lists (compact spacing), blockquotes, horizontal rules, inline code, code blocks, and hyperlinks.
+* Live Streaming: Real-time markdown rendering during token streaming with 300ms debounced parsing for smooth display.
+* Code Block Features:
+  - Language detection with "Copy [language]" buttons positioned at top-right of code blocks.
+  - Event delegation pattern ensures copy functionality persists across all interactions.
+* Raw/Rendered Toggle: Blue "View Raw" button appears on hover at bottom-right of responses, allowing users to switch between rendered markdown and raw text. Toggle persists across multiple conversation turns.
+* Optimized Styling: Table styling with `width: auto` and `table-layout: auto` for content-fitted display, compact list spacing (`line-height: 1.3`, `margin: 0` on list items), and consistent formatting across all markdown elements.
+
+Static Assets & UI Improvements
+
+* Local JavaScript Libraries: Moved to local copies of `marked.js` and `socket.io.js` for air-gapped deployment support. All static assets now served from `/static/` directory.
+* Consolidated Static File Serving: Single `/static/{filename}` route handles all static assets (JS, CSS, SVG) with automatic MIME type detection.
+* Custom Favicon: Added SVG favicon (blue circle with white "T") for professional browser tab appearance.
+* Proper MIME Types: Added support for `.svg` files with `image/svg+xml` content type to ensure proper rendering in browsers.
+
+
 ## 0.16.4 - Document Generation & Security
 
 * Chatbot - Document Generation: End-to-end document creation (PDF, DOCX, XLSX, PPTX) with download links.
@@ -35,7 +61,6 @@
 Example Usage
 
 > Write an algorithm in python to sort a list of number. Create a PDF to describe how it works.
-
 
 ## 0.16.2 - Repetition Filter Settings
 

@@ -2,6 +2,8 @@
 <html>
 <head>
     <title>TinyLLM Chatbot</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/prism.min.css">
     <meta name="viewport" content="width=device-width, height=device-height, maximum-scale=1.0">
     <style>
         body {
@@ -81,7 +83,7 @@
         .code-box code {
             display: block; /* Ensures line breaks are preserved */
             font-family: "Courier New", Courier, monospace; /* Use a monospace font for code */
-            font-size: 14px;
+            font-size: 12px;
             line-height: 1.5;
             color: #333;
         }
@@ -110,6 +112,33 @@
         }
         .copy-button:hover {
             background-color: #45a049;
+        }
+        /* Style for raw/rendered toggle button */
+        .toggle-raw-button {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 100;
+        }
+        .toggle-raw-button:hover {
+            background-color: #0b7dda;
+        }
+        .ai-response {
+            position: relative;
+        }
+        .ai-response:hover .toggle-raw-button {
+            opacity: 1;
+        }
+        .streaming-text {
+            margin: 0 0 20px 0;
         }
         .notification {
             position: fixed;
@@ -249,12 +278,144 @@
         .rightcolumn {
             width: 100%;
         }
+        /* Markdown element styling */
+        /* Headers */
+        p {
+            margin: 0 0 18px 0;
+        }
+        p:first-child {
+            margin-top: 0;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        h1 {
+            font-size: 28px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+        h2 {
+            font-size: 24px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        h3 {
+            font-size: 20px;
+        }
+        h4 {
+            font-size: 16px;
+        }
+        h5 {
+            font-size: 14px;
+        }
+        h6 {
+            font-size: 12px;
+            color: #666;
+        }
+        /* Bold and italic */
+        strong, b {
+            font-weight: bold;
+        }
+        em, i {
+            font-style: italic;
+        }
+        /* Tables */
+        table {
+            border-collapse: collapse;
+            width: auto;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+            table-layout: auto;
+        }
+        table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+        }
+        table td {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        table tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        table tbody tr:hover {
+            background-color: #f0f0f0;
+        }
+        /* Lists */
+        ul, ol {
+            margin: 5px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 0;
+            line-height: 1.3;
+        }
+        /* Blockquotes */
+        blockquote {
+            margin: 10px 0;
+            padding: 10px 15px;
+            border-left: 4px solid #007bff;
+            background-color: #f9f9f9;
+            color: #555;
+        }
+        /* Horizontal rule */
+        hr {
+            margin: 20px 0;
+            border: none;
+            border-top: 2px solid #ddd;
+        }
+        /* Links */
+        a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        /* Inline code */
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Courier New", monospace;
+            font-size: 14px;
+        }
+        /* Pre-formatted code blocks with syntax highlighting */
+        pre {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre[class*="language-"] {
+            background-color: #202020 !important;
+        }
+        pre code,
+        code[class*="language-"],
+        pre[class*="language-"] code {
+            padding: 0;
+            border-radius: 0;
+            background-color: #202020 !important;
+            font-family: "Courier New", Consolas, Monaco, monospace;
+            font-size: 14px !important;
+            line-height: 1.2 !important;
+            color: #ccc !important;
+        }
+
         @media only screen and (max-width: 430px) {
             /* Styles for iPhone or devices with smaller screens */
             body {
                 font-family: Arial, sans-serif;
                 overflow: hidden; /* Hide scrollbars */
-                font-size: 16px;
+                font-size: 12px;
             }
             #container {
                 display: flex;
@@ -533,7 +694,14 @@
         }
     </script>
     <!-- END: pop-up-dialogue -->
-    <script src="/socket.io.js"></script>
+    <script src="/static/socket.io.js"></script>
+    <!-- Markdown parser library for full markdown support -->
+    <script src="/static/marked.min.js"></script>
+    <!-- Syntax highlighting library -->
+    <script src="/static/prism.min.js"></script>
+    <script src="/static/prism-python.min.js"></script>
+    <script src="/static/prism-javascript.min.js"></script>
+    <script src="/static/prism-markup.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -735,7 +903,12 @@
 
         // Connect to the Socket.IO server
         const socket = io.connect('http://' + document.domain + ':' + location.port);
-        var incode =false;
+        var incode = false;
+        
+        // Buffer for AI response tokens to handle streaming properly
+        let aiResponseBuffer = '';
+        let aiResponseElement = null;
+        let markdownParseTimeout = null;
 
         // Function to send prompt to the server
         function sendMessage(visible = true) {
@@ -785,24 +958,171 @@
             openModelDialogue();
         });
 
+        // Function to add copy buttons to code blocks
+        function addCopyButtonsToCodeBlocks(container) {
+            const codeBlocks = container.querySelectorAll('pre > code');
+            codeBlocks.forEach((codeBlock, index) => {
+                const preBlock = codeBlock.parentElement;
+                
+                // Skip if copy button already exists
+                if (preBlock.querySelector('.copy-button')) {
+                    return;
+                }
+                
+                // Create a wrapper for the pre block
+                const wrapper = document.createElement('div');
+                wrapper.className = 'code-container';
+                wrapper.style.position = 'relative';
+                
+                // Extract language if available from the class attribute
+                let language = 'code';
+                if (codeBlock.className) {
+                    const langMatch = codeBlock.className.match(/language-(\w+)/);
+                    if (langMatch) {
+                        language = langMatch[1];
+                    }
+                }
+                
+                // Move pre block into wrapper
+                preBlock.parentNode.insertBefore(wrapper, preBlock);
+                wrapper.appendChild(preBlock);
+                
+                // Create and append copy button (event handler will be via delegation)
+                const copyButton = document.createElement('button');
+                copyButton.className = 'copy-button';
+                copyButton.textContent = `Copy ${language}`;
+                
+                wrapper.appendChild(copyButton);
+            });
+        }
+
+        // Function to add toggle raw/rendered button
+        function addToggleRawButton(container) {
+            // Skip if button already exists
+            if (container.querySelector('.toggle-raw-button')) {
+                return;
+            }
+            
+            // Create toggle button
+            const toggleButton = document.createElement('button');
+            toggleButton.className = 'toggle-raw-button';
+            toggleButton.textContent = 'View Raw';
+            
+            container.appendChild(toggleButton);
+        }
+        
+        // Global event handler for toggle buttons using event delegation
+        document.addEventListener('click', function(e) {
+            // Check if clicked element is a toggle button
+            if (e.target.classList.contains('toggle-raw-button')) {
+                e.preventDefault();
+                
+                // Find the parent container
+                const container = e.target.closest('.ai-response');
+                if (!container) return;
+                
+                const currentIsRaw = container.dataset.isRaw === 'true';
+                
+                if (currentIsRaw) {
+                    // Show rendered HTML - restore from data attribute
+                    container.innerHTML = container.dataset.renderedHTML;
+                    // Re-add copy buttons since we just restored the HTML
+                    addCopyButtonsToCodeBlocks(container);
+                    // Re-add toggle button
+                    addToggleRawButton(container);
+                    container.dataset.isRaw = 'false';
+                } else {
+                    // Show raw markdown
+                    const rawText = container.dataset.rawText || '';
+                    container.innerHTML = `<pre style="white-space: pre-wrap; background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;">${rawText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+                    // Re-add toggle button
+                    const toggleButton = document.createElement('button');
+                    toggleButton.className = 'toggle-raw-button';
+                    toggleButton.textContent = 'View Rendered';
+                    container.appendChild(toggleButton);
+                    container.dataset.isRaw = 'true';
+                }
+            }
+            
+            // Check if clicked element is a copy button
+            if (e.target.classList.contains('copy-button')) {
+                e.preventDefault();
+                
+                // Find the code block
+                const codeContainer = e.target.closest('.code-container');
+                if (!codeContainer) return;
+                
+                const codeBlock = codeContainer.querySelector('code');
+                if (!codeBlock) return;
+                
+                const codeText = codeBlock.textContent || codeBlock.innerText;
+                
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(codeText)
+                        .then(() => {
+                            showNotification('Code copied to clipboard!');
+                        })
+                        .catch(err => {
+                            showNotification('Unable to copy to clipboard', true);
+                            console.error('Clipboard writeText failed:', err);
+                        });
+                } else {
+                    // Fallback for older browsers
+                    const textarea = document.createElement('textarea');
+                    textarea.value = codeText;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showNotification('Code copied to clipboard!');
+                }
+            }
+        });
+
         // Function to handle updates received from the server
         socket.on('update', function(data) {
             const updateContainer = document.getElementById('messageContainer');
 
             if (data.voice === "done") {
-                // Try to identify code and format it for display
-                updateContainer.innerHTML = updateContainer.innerHTML.replace(/```([\s\S]*?)```/g, function(match, codeBlock) {
-                    const codeTypeMatch = codeBlock.match(/^(\w+)<br>\n/);
-                    const codeType = codeTypeMatch ? codeTypeMatch[1] : '';
-                    const formattedCodeBlock = codeBlock.replace(/^\w+<br>\n/, '').replace(/<br>\n/g, '\n');
-
-                    // Add a copy-to-clipboard button
-                    const codeBox = `<div class="code-container"><pre class="code-box" data-code-type="${codeType}"><code>${formattedCodeBlock}</code></pre><button class="copy-button" onclick="copyToClipboard(this)">Copy ${codeType} code</button></div>\n`;
-                    return codeBox;
-                });
-
-                // Convert newline and carriage return characters outside the code-box to <br>
-                updateContainer.innerHTML = updateContainer.innerHTML.replace(/`([\s\S]*?)`/g, '<code>$1</code>');
+                // Parse any buffered AI content when streaming completes
+                if (aiResponseElement && aiResponseBuffer.trim()) {
+                    try {
+                        marked.setOptions({
+                            breaks: true,
+                            gfm: true,
+                            pedantic: false,
+                            smartLists: true,
+                            smartypants: true
+                        });
+                        const htmlContent = marked.parse(aiResponseBuffer);
+                        aiResponseElement.innerHTML = htmlContent;
+                        
+                        // Apply syntax highlighting to all code blocks
+                        const codeBlocks = aiResponseElement.querySelectorAll('pre code');
+                        codeBlocks.forEach(block => {
+                            Prism.highlightElement(block);
+                        });
+                        
+                        // Add copy buttons to code blocks
+                        addCopyButtonsToCodeBlocks(aiResponseElement);
+                        
+                        // Store data attributes BEFORE adding toggle button
+                        // This ensures renderedHTML doesn't include the toggle button itself
+                        aiResponseElement.dataset.renderedHTML = aiResponseElement.innerHTML;
+                        aiResponseElement.dataset.rawText = aiResponseBuffer;
+                        aiResponseElement.dataset.isRaw = 'false';
+                        aiResponseElement.classList.add('ai-response');
+                        
+                        // Add toggle raw/rendered button (will be recreated on each toggle)
+                        addToggleRawButton(aiResponseElement);
+                    } catch (e) {
+                        console.error('Markdown parsing error:', e);
+                        aiResponseElement.innerHTML = aiResponseBuffer.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/[\n\r]/g, "<br>\n");
+                    }
+                }
+                aiResponseBuffer = '';
+                aiResponseElement = null;
+                clearTimeout(markdownParseTimeout);
             }
 
             if (data.voice === "user") {
@@ -815,12 +1135,31 @@
                 // Convert any single &nbsp; sounded by characters on either side into a regular space ( )
                 data.update = data.update.replace(/&nbsp;([^&])/g, " $1").replace(/([^&])&nbsp;/g, "$1 ");
                 updateContainer.innerHTML += "<p class='user-text'>" + data.update + "</p>";
+                // Reset AI buffer when a new user message arrives
+                aiResponseBuffer = '';
+                aiResponseElement = null;
             }
 
             if (data.voice === "ai") {
-                // Encode html tags and newlines
-                data.update = data.update.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                updateContainer.innerHTML += data.update.replace(/[\n\r]/g, "<br>\n");
+                // Buffer AI tokens and display as they arrive
+                aiResponseBuffer += data.update;
+                
+                // Create or update the AI response container
+                if (!aiResponseElement) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'streaming-text';
+                    wrapper.innerHTML = '';
+                    updateContainer.appendChild(wrapper);
+                    aiResponseElement = wrapper;
+                }
+                
+                // Display tokens in real-time as plain text while streaming
+                // Markdown will be applied when streaming completes (on "done")
+                // Escape HTML and add temporary line breaks for readability
+                aiResponseElement.innerHTML = escapeHtml(aiResponseBuffer).replace(/\n/g, '<br>');
+                
+                // Scroll to show latest content
+                updateContainer.scrollTop = updateContainer.scrollHeight;
             }
 
             if (data.voice === "ref") {

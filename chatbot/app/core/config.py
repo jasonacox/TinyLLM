@@ -10,7 +10,7 @@ github.com/jasonacox/TinyLLM
 """
 
 # Version of the TinyLLM (Major, Minor, Patch)
-VERSION = "v0.16.4"
+VERSION = "v0.16.5"
 
 # Imports
 import os
@@ -81,6 +81,8 @@ IMAGE_SEED = int(os.environ.get("IMAGE_SEED", -1))                          # Se
 IMAGE_TIMEOUT = int(os.environ.get("IMAGE_TIMEOUT", 300))                   # Timeout for image generation (seconds)
 IMAGE_WIDTH = int(os.environ.get("IMAGE_WIDTH", 1024))                      # Width for image generation
 IMAGE_HEIGHT = int(os.environ.get("IMAGE_HEIGHT", 1024))                    # Height for image generation
+# Image Edit defaults
+IMAGE_EDIT_NOISE = float(os.environ.get("IMAGE_EDIT_NOISE", 0.35))          # Default noise/strength for /image edit (0..1)
 # OpenAI specific settings
 OPENAI_IMAGE_API_KEY = os.environ.get("OPENAI_IMAGE_API_KEY", "")           # Dedicated OpenAI API key for image generation
 OPENAI_IMAGE_API_BASE = os.environ.get("OPENAI_IMAGE_API_BASE", "https://api.openai.com/v1")  # Dedicated OpenAI API base
