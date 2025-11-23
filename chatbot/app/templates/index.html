@@ -874,12 +874,13 @@
                     if (data.result === 'Success') {
                         // Convert the image data to base64 image format
                         console.log('File uploaded:', data.filename, 'size:', data.size);
-                        const imageId = 'img-' + Date.now();
+                        const imageId = 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
                         const imageData = `data:image/png;base64,${data.image_data}`;
+                        const escapedFilename = data.filename.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
                         updateContainer.innerHTML += `
                             <div class="image-container">
                                 <img id="${imageId}" src="${imageData}">
-                                <button class="image-download-button" onclick="downloadImage('${imageId}', '${data.filename}')">⬇ Download</button>
+                                <button class="image-download-button" data-image-id="${imageId}" data-filename="${escapedFilename}">⬇ Download</button>
                             </div>
                         `;
                         // Make sure the image is visible
@@ -1255,12 +1256,14 @@
                     updateContainer.innerHTML += `<p>Uploaded image: ${data.filename}</p>`;
                 }
                 // Create a unique ID for this image
-                const imageId = 'img-' + Date.now();
+                const imageId = 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
                 const imageData = `data:image/png;base64,${data.image_data}`;
+                const filename = data.generated ? 'generated' : data.filename;
+                const escapedFilename = filename.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
                 updateContainer.innerHTML += `
                     <div class="image-container">
                         <img id="${imageId}" src="${imageData}">
-                        <button class="image-download-button" onclick="downloadImage('${imageId}', '${data.generated ? 'generated' : data.filename}')">⬇ Download</button>
+                        <button class="image-download-button" data-image-id="${imageId}" data-filename="${escapedFilename}">⬇ Download</button>
                     </div>
                 `;
             }
@@ -1273,6 +1276,17 @@
 
             // Ensure we always show the latest
             updateContainer.scrollTop = updateContainer.scrollHeight;
+        });
+
+        // Event delegation for image download buttons
+        document.getElementById('messageContainer').addEventListener('click', function(e) {
+            if (e.target.classList.contains('image-download-button')) {
+                const imageId = e.target.getAttribute('data-image-id');
+                const filename = e.target.getAttribute('data-filename');
+                if (imageId && filename) {
+                    downloadImage(imageId, filename);
+                }
+            }
         });
 
         // Function to copy conversation to clipboard
@@ -1350,9 +1364,17 @@
             const link = document.createElement('a');
             link.href = img.src;
             
+            // Detect the file extension from the data URI
+            let extension = '.png';
+            if (img.src.startsWith('data:image/')) {
+                const match = img.src.match(/^data:image\/(\w+);/);
+                if (match) {
+                    extension = '.' + match[1].replace('jpeg', 'jpg');
+                }
+            }
+            
             // Set the download filename
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-            const extension = img.src.startsWith('data:image/png') ? '.png' : '.jpg';
             link.download = filename === 'generated' ? `generated-image-${timestamp}${extension}` : filename;
             
             // Trigger the download

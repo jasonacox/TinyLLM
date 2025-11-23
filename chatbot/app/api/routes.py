@@ -1319,7 +1319,7 @@ async def handle_normal_prompt(session_id, p):
                     return
             if "news" in intent:
                 # Get news
-                type_of_news = await ask_llm_intent(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general news' if general news is requested. Otherwise list the company, placer, person or subject if given:", model=client[session_id]["model"])
+                type_of_news = await ask_llm_intent(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general news' if general news is requested. Otherwise list the company, place, person or subject if given:", model=client[session_id]["model"])
                 log(f"Type of news: {type_of_news}")
                 score, _ = await prompt_similarity(session_id, p, "What is the current news?")
                 if score > 1:
