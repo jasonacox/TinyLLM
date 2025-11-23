@@ -18,7 +18,7 @@ from typing import Optional, Any
 import openai
 from openai import OpenAIError
 from app.core.config import (client, stats, API_KEY, API_BASE, MYMODEL, TEMPERATURE,
-                             EXTRA_BODY, ONESHOT, MAX_IMAGES, VERSION,
+                             EXTRA_BODY, ONESHOT, MAX_IMAGES, VERSION, INTENT_ROUTER_LLM,
                              log, debug, llm_stream)
 from app.core.prompts import (base_prompt, expand_prompt, prompts)
 
@@ -249,6 +249,27 @@ async def ask_llm(query,  model=MYMODEL):
     # close the openai client
     await llm.close()
     debug(f"ask_llm -> {response.choices[0].message.content.strip()}")
+    return response.choices[0].message.content.strip()
+
+async def ask_llm_intent(query, model=MYMODEL):
+    # Ask LLM a question for intent routing - uses INTENT_ROUTER_LLM if set, otherwise falls back to provided model
+    intent_model = INTENT_ROUTER_LLM if INTENT_ROUTER_LLM else model
+    global stats # pylint: disable=global-variable-not-assigned
+    stats["ask_llm"] += 1
+    content = base_prompt(expand_prompt(prompts["clarify"], values={})) + [{"role": "user",
+                "content": query}]
+    debug(f"ask_llm_intent (model: {intent_model}): {content}")
+    llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
+    response = await llm.chat.completions.create(
+        model=intent_model,
+        stream=False,
+        temperature=TEMPERATURE,
+        messages=content,
+        extra_body=EXTRA_BODY,
+    )
+    # close the openai client
+    await llm.close()
+    debug(f"ask_llm_intent -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
 
 async def ask_context(messages, model=MYMODEL):
