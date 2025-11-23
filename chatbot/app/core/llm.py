@@ -18,7 +18,7 @@ from typing import Optional, Any
 import openai
 from openai import OpenAIError
 from app.core.config import (client, stats, API_KEY, API_BASE, MYMODEL, TEMPERATURE,
-                             EXTRA_BODY, ONESHOT, MAX_IMAGES, VERSION,
+                             EXTRA_BODY, ONESHOT, MAX_IMAGES, VERSION, INTENT_ROUTER_LLM,
                              log, debug, llm_stream)
 from app.core.prompts import (base_prompt, expand_prompt, prompts)
 
@@ -231,16 +231,23 @@ async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None)
 
     return response
 
-async def ask_llm(query,  model=MYMODEL):
+async def ask_llm(query, model=MYMODEL, use_intent_model=False):
     # Ask LLM a question
+    # If use_intent_model is True and INTENT_ROUTER_LLM is set, use that model instead
     global stats # pylint: disable=global-variable-not-assigned
     stats["ask_llm"] += 1
+    
+    # Determine which model to use
+    selected_model = model
+    if use_intent_model and INTENT_ROUTER_LLM:
+        selected_model = INTENT_ROUTER_LLM
+    
     content = base_prompt(expand_prompt(prompts["clarify"], values={})) + [{"role": "user",
                 "content": query}]
-    debug(f"ask_llm: {content}")
+    debug(f"ask_llm{'_intent' if use_intent_model else ''} (model: {selected_model}): {content}")
     llm = openai.AsyncOpenAI(api_key=API_KEY, base_url=API_BASE)
     response = await llm.chat.completions.create(
-        model=model,
+        model=selected_model,
         stream=False,
         temperature=TEMPERATURE,
         messages=content,
@@ -248,8 +255,13 @@ async def ask_llm(query,  model=MYMODEL):
     )
     # close the openai client
     await llm.close()
-    debug(f"ask_llm -> {response.choices[0].message.content.strip()}")
+    debug(f"ask_llm{'_intent' if use_intent_model else ''} -> {response.choices[0].message.content.strip()}")
     return response.choices[0].message.content.strip()
+
+async def ask_llm_intent(query, model=MYMODEL):
+    # Ask LLM a question for intent routing - uses INTENT_ROUTER_LLM if set, otherwise falls back to provided model
+    # This is a convenience wrapper around ask_llm with use_intent_model=True
+    return await ask_llm(query, model=model, use_intent_model=True)
 
 async def ask_context(messages, model=MYMODEL):
     # Ask LLM a simple question

@@ -44,7 +44,7 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         MAXTOKENS, TEMPERATURE, PORT, PROMPT_FILE, PROMPT_RO,
                         USE_SYSTEM, TOKEN, ONESHOT, RAG_ONLY, EXTRA_BODY,
                         TOXIC_THRESHOLD, THINKING, THINK_FILTER, SEARXNG,
-                        INTENT_ROUTER, WEB_SEARCH, WEAVIATE_LIBRARY, RESULTS,
+                        INTENT_ROUTER, INTENT_ROUTER_LLM, WEB_SEARCH, WEAVIATE_LIBRARY, RESULTS,
                         WEAVIATE_HOST, WEAVIATE_GRPC_HOST, WEAVIATE_PORT,
                         WEAVIATE_GRPC_PORT, ALPHA_KEY, IMAGE_PROVIDER, SWARMUI, IMAGE_MODEL,
                         IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CFGSCALE, IMAGE_STEPS,
@@ -53,7 +53,7 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         OPENAI_IMAGE_QUALITY, OPENAI_IMAGE_STYLE, baseprompt, REPEAT_WINDOW, REPEAT_COUNT)
 from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
                         extract_text_from_url, query_index)
-from app.core.llm import (client, get_models, ask, ask_llm, ask_context)
+from app.core.llm import (client, get_models, ask, ask_llm, ask_llm_intent, ask_context)
 from app.core.prompts import (prompts, base_prompt, default_prompts, save_prompts, expand_prompt)
 from app.image import create_image_generator
 from app.document import generate_document_from_response, get_document_generator
@@ -218,6 +218,7 @@ async def home(format: str = None):
         "Think Tag Filter (THINK_FILTER)": THINK_FILTER,
         "SearXNG Search Engine (SEARXNG)": SEARXNG,
         "Intent Router (INTENT_ROUTER)": INTENT_ROUTER,
+        "Intent Router LLM (INTENT_ROUTER_LLM)": INTENT_ROUTER_LLM if INTENT_ROUTER_LLM else "Uses Default LLM",
         "Web Search (WEB_SEARCH)": WEB_SEARCH,
         "Image Provider (IMAGE_PROVIDER)": IMAGE_PROVIDER,
         "SwarmUI Host (SWARMUI)": SWARMUI if IMAGE_PROVIDER == "swarmui" else "Not Used",
@@ -1226,7 +1227,7 @@ async def handle_normal_prompt(session_id, p):
             f"What type of document format is being requested in this prompt: '{p}'\n"
             "Respond with only one word: pdf, word, excel, or powerpoint. If the format is unclear, respond with 'pdf'."
         )
-        doc_type = await ask_llm(doc_type_prompt, model=client[session_id]["model"])
+        doc_type = await ask_llm_intent(doc_type_prompt, model=client[session_id]["model"])
         doc_type = doc_type.lower().strip()
         
         # Set document request flag
@@ -1259,7 +1260,7 @@ async def handle_normal_prompt(session_id, p):
         
         Based on the full conversation context, what content should be included in the document? Provide a clear, comprehensive description of what the user wants documented."""
         
-        content_request = await ask_llm(content_prompt, model=client[session_id]["model"])
+        content_request = await ask_llm_intent(content_prompt, model=client[session_id]["model"])
         
         await sio.emit('update', {'update': f'[Document Generation Requested: {doc_type.upper()}]', 'voice': 'user'}, room=session_id)
         
@@ -1303,11 +1304,11 @@ async def handle_normal_prompt(session_id, p):
         prompt_context = prompt_context.replace("news", "")
         prompt_context += "\nNew Request: " + p
         # If it is just a greeting or pleasantry, skip intent detection
-        answer = await ask_llm(f"PROMPT: {p}\nIs the user greeting or thanking us? (yes or no):", model=client[session_id]["model"])
+        answer = await ask_llm_intent(f"PROMPT: {p}\nIs the user saying hi, greeting or thanking us? (yes or no):", model=client[session_id]["model"])
         if "yes" in answer.lower():
             client[session_id]["prompt"] = p
             return
-        intent = await ask_llm(expand_prompt(prompts["intent"], {"prompt": prompt_context}), model=client[session_id]["model"])
+        intent = await ask_llm_intent(expand_prompt(prompts["intent"], {"prompt": prompt_context}), model=client[session_id]["model"])
         if intent:
             intent = intent.lower().split()[-1]
             debug(f"Intent detected: {intent}")
@@ -1318,7 +1319,7 @@ async def handle_normal_prompt(session_id, p):
                     return
             if "news" in intent:
                 # Get news
-                type_of_news = await ask_llm(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general news' if general news is requested. Otherwise list the company, placer, person or subject if given:", model=client[session_id]["model"])
+                type_of_news = await ask_llm_intent(f"What subject, company, person, place or type of news are they looking for in this request: <REQUEST>\n{prompt_context}\n</REQUEST>\nList a single word or state 'general news' if general news is requested. Otherwise list the company, place, person or subject if given:", model=client[session_id]["model"])
                 log(f"Type of news: {type_of_news}")
                 score, _ = await prompt_similarity(session_id, p, "What is the current news?")
                 if score > 1:
@@ -1332,7 +1333,7 @@ async def handle_normal_prompt(session_id, p):
                 return
             if "image" in intent:
                 # Image requested
-                image_prompt = await ask_llm(f"Create a single image generation prompt from the following request: <REQUEST>\n{prompt_context}\n</REQUEST>\n", model=client[session_id]["model"])
+                image_prompt = await ask_llm_intent(f"Create a single image generation prompt from the following request: <REQUEST>\n{prompt_context}\n</REQUEST>\n", model=client[session_id]["model"])
                 if image_prompt:
                     # Add instructions to also list company stock ticker
                     p = f"/image {image_prompt}"
@@ -1370,7 +1371,7 @@ async def handle_normal_prompt(session_id, p):
 
 async def double_check(session_id, prompt, question):
     # Ask LLM to double check the prompt
-    check = await ask_llm(f"<PROMPT>\n{prompt}\n</PROMPT>\n{question} - Answer yes or no:", model=client[session_id]["model"])
+    check = await ask_llm_intent(f"<PROMPT>\n{prompt}\n</PROMPT>\n{question} - Answer yes or no:", model=client[session_id]["model"])
     if check:
         check = check.lower()
         if "yes" in check:
@@ -1380,7 +1381,7 @@ async def double_check(session_id, prompt, question):
 
 async def process_search(session_id, prompt, context):
     # Ask LLM to determin topic to search
-    search_topic = await ask_llm(f"Context: {context}\n\nCreate a single internet search phrase to best answer the fllowing prompt. Don't add commentary.\nPROMPT: {prompt}", model=client[session_id]["model"])
+    search_topic = await ask_llm_intent(f"Context: {context}\n\nCreate a single internet search phrase to best answer the fllowing prompt. Don't add commentary.\nPROMPT: {prompt}", model=client[session_id]["model"])
     if search_topic:
         search_topic = search_topic.strip()
         search_topic = search_topic.replace('"', '')

@@ -80,6 +80,7 @@ Below are the main environment variables you can set to configure the TinyLLM Ch
 | `THINK_FILTER`          | false                                    | Enable thinking filter |
 | `TOXIC_THRESHOLD`       | 99                                       | Toxicity threshold (0-1, 99 disables) |
 | `INTENT_ROUTER`         | false                                    | Enable intent detection & routing |
+| `INTENT_ROUTER_LLM`     |                                          | Optional separate LLM for intent routing (uses LLM_MODEL if not set) |
 | `MAX_IMAGES`            | 1                                        | Max images to keep in context |
 | `PROMPT_FILE`           | .tinyllm/prompts.json                    | File to store system prompts |
 | `PROMPT_RO`             | false                                    | Enable read-only prompts |
@@ -342,6 +343,12 @@ The chatbot looks for the environmental variable `SEARXNG` to set the URL of the
 The chatbot now has the ability to read prompts and determine if a function call would help provide a grounded answer. 
 
 It can be activated by setting the `INTENT_ROUTER=true` environmental variable or using the prompt command `/intent on`.  It will use things like /search to find current data on things that tend to change frequently (e.g. cost of eggs). It will also use /weather, /stock and /news. The heuristics it is using is based on LLM calls so the performance will vary based on the LLM you are using. It was tuned for use with the Llama-3.2-11B-Vision model.
+
+**Using a Separate Model for Intent Routing**: You can optionally specify a different, faster LLM model for intent detection by setting the `INTENT_ROUTER_LLM` environment variable. This is useful when you want to use a smaller, faster model for intent classification while using a larger, more capable model for actual content generation. If not set, the default LLM model specified by `LLM_MODEL` will be used for both intent routing and content generation.
+
+```bash
+export INTENT_ROUTER_LLM="your-fast-model-name"
+```
 
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/422a7c13-ec6f-43bb-a959-e37d0bb709ec" />
 

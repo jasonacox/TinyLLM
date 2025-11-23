@@ -10,7 +10,7 @@ github.com/jasonacox/TinyLLM
 """
 
 # Version of the TinyLLM (Major, Minor, Patch)
-VERSION = "v0.16.5"
+VERSION = "v0.16.6"
 
 # Imports
 import os
@@ -60,6 +60,7 @@ THINKING = os.environ.get("THINKING", "false").lower() == "true"            # Se
 THINK_FILTER = os.environ.get("THINK_FILTER", "false").lower() == "true"    # Set to True to enable thinking filter
 TOXIC_THRESHOLD = float(os.environ.get("TOXIC_THRESHOLD", 99))              # Toxicity threshold for responses 0-1 or 99 disable
 INTENT_ROUTER = os.environ.get("INTENT_ROUTER", "false").lower() == "true"  # Set to True to enable intent detection & routing
+INTENT_ROUTER_LLM = os.environ.get("INTENT_ROUTER_LLM", None)               # Optional - Separate LLM for intent routing (uses MYMODEL if not set)
 MAX_IMAGES = int(os.environ.get("MAX_IMAGES", 1))                           # Maximum number of images to keep in context
 
 # Prompt Management

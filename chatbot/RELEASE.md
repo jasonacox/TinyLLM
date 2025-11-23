@@ -4,6 +4,16 @@
 
 The TinyLLM Chatbot docker container is available at: [jasonacox/chatbot](https://hub.docker.com/r/jasonacox/chatbot).
 
+## 0.16.6 - UI Enhancements and Intent Router Improvements
+
+* Added download button for generated and uploaded images with hover-to-reveal functionality.
+* Enhanced list formatting with proper bottom margin spacing for better readability.
+* Improved UI button opacity settings for better visual hierarchy (View Raw button now translucent).
+* Added support for separate LLM model for intent routing via `INTENT_ROUTER_LLM` environment variable.
+* This allows using a faster, smaller model for intent detection while using a more capable model for content generation.
+* Updated stats page to display intent router LLM configuration.
+* Image download functionality includes automatic filename generation with timestamps for generated images.
+
 ## 0.16.5 - Enhanced Markdown and Code Rendering
 
 * Added syntax highlighting for code blocks using Prism.js with support for Python, JavaScript, and HTML.

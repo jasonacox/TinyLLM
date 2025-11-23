@@ -135,10 +135,44 @@
             position: relative;
         }
         .ai-response:hover .toggle-raw-button {
-            opacity: 1;
+            opacity: 0.7;
         }
         .streaming-text {
             margin: 0 0 20px 0;
+        }
+        /* Image container with download button */
+        .image-container {
+            position: relative;
+            display: inline-block;
+            margin: 10px 0;
+            max-width: 50%;
+        }
+        .image-container img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+        .image-download-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            border-radius: 3px;
+            z-index: 100;
+        }
+        .image-download-button:hover {
+            background-color: #0b7dda;
+            opacity: 1 !important;
+        }
+        .image-container:hover .image-download-button {
+            opacity: 0.8;
         }
         .notification {
             position: fixed;
@@ -351,7 +385,7 @@
         }
         /* Lists */
         ul, ol {
-            margin: 5px 0;
+            margin: 5px 0 20px 0;
             padding-left: 30px;
         }
         li {
@@ -840,7 +874,15 @@
                     if (data.result === 'Success') {
                         // Convert the image data to base64 image format
                         console.log('File uploaded:', data.filename, 'size:', data.size);
-                        updateContainer.innerHTML += `<img src="data:image/png;base64,${data.image_data}" style="max-width: 50%; height: auto;">`;
+                        const imageId = 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                        const imageData = `data:image/png;base64,${data.image_data}`;
+                        const escapedFilename = data.filename.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+                        updateContainer.innerHTML += `
+                            <div class="image-container">
+                                <img id="${imageId}" src="${imageData}">
+                                <button class="image-download-button" data-image-id="${imageId}" data-filename="${escapedFilename}">⬇ Download</button>
+                            </div>
+                        `;
                         // Make sure the image is visible
                         updateContainer.scrollTop = updateContainer.scrollHeight;
                     } else {
@@ -1213,7 +1255,17 @@
                 } else {
                     updateContainer.innerHTML += `<p>Uploaded image: ${data.filename}</p>`;
                 }
-                updateContainer.innerHTML += `<img src="data:image/png;base64,${data.image_data}" style="max-width: 50%; height: auto;">`;
+                // Create a unique ID for this image
+                const imageId = 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                const imageData = `data:image/png;base64,${data.image_data}`;
+                const filename = data.generated ? 'generated' : data.filename;
+                const escapedFilename = filename.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+                updateContainer.innerHTML += `
+                    <div class="image-container">
+                        <img id="${imageId}" src="${imageData}">
+                        <button class="image-download-button" data-image-id="${imageId}" data-filename="${escapedFilename}">⬇ Download</button>
+                    </div>
+                `;
             }
 
             // Handle document download
@@ -1224,6 +1276,17 @@
 
             // Ensure we always show the latest
             updateContainer.scrollTop = updateContainer.scrollHeight;
+        });
+
+        // Event delegation for image download buttons
+        document.getElementById('messageContainer').addEventListener('click', function(e) {
+            if (e.target.classList.contains('image-download-button')) {
+                const imageId = e.target.getAttribute('data-image-id');
+                const filename = e.target.getAttribute('data-filename');
+                if (imageId && filename) {
+                    downloadImage(imageId, filename);
+                }
+            }
         });
 
         // Function to copy conversation to clipboard
@@ -1290,6 +1353,36 @@
                 // Show notification
                 showNotification('Code copied to clipboard!');
             }
+        }
+
+        // Function to download an image
+        function downloadImage(imageId, filename) {
+            const img = document.getElementById(imageId);
+            if (!img) return;
+            
+            // Create a temporary anchor element
+            const link = document.createElement('a');
+            link.href = img.src;
+            
+            // Detect the file extension from the data URI
+            let extension = '.png';
+            if (img.src.startsWith('data:image/')) {
+                const match = img.src.match(/^data:image\/(\w+);/);
+                if (match) {
+                    extension = '.' + match[1].replace('jpeg', 'jpg');
+                }
+            }
+            
+            // Set the download filename
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            link.download = filename === 'generated' ? `generated-image-${timestamp}${extension}` : filename;
+            
+            // Trigger the download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showNotification('Image downloaded!');
         }
 
         // Function to display a notification
