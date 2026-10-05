@@ -41,6 +41,8 @@ MYMODEL = os.environ.get("LLM_MODEL", "models/7B/gguf-model.bin")           # Pi
 TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.0))                     # LLM temperature
 USE_SYSTEM = os.environ.get("USE_SYSTEM", "false").lower() == "true"        # Use system in chat prompt if True
 EXTRA_BODY = os.environ.get("EXTRA_BODY", None)                             # Extra body parameters for OpenAI API
+KEEP_ALIVE = os.environ.get("KEEP_ALIVE", None)                             # Ollama keep_alive for the active model, e.g. -1 (forever) or 30m — pins it resident
+OLLAMA_API = os.environ.get("OLLAMA_API", None)                             # Optional - Ollama native API base (e.g. http://localhost:11434); derived from OPENAI_API_BASE if unset
 
 # LiteLLM Proxy Settings
 LITELLM_PROXY = os.environ.get("LITELLM_PROXY", None)                       # Optional - LITELLM Proxy URL

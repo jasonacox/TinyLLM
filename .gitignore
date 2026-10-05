@@ -183,3 +183,9 @@ images/output.png
 agents/moviebot.db
 agents/message.txt
 chatbot/localtest.sh
+
+# TinyLLM router + test artifacts
+.pytest-prompts.json
+.tinyllm/
+router/router.yaml
+router/placement.yaml

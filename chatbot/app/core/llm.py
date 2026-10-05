@@ -17,7 +17,7 @@ import asyncio
 from typing import Optional, Any
 import openai
 from openai import OpenAIError
-from app.core.config import (client, stats, API_KEY, API_BASE, MYMODEL, TEMPERATURE,
+from app.core.config import (client, stats, API_KEY, API_BASE, MYMODEL, TEMPERATURE, KEEP_ALIVE, OLLAMA_API,
                              EXTRA_BODY, ONESHOT, MAX_IMAGES, VERSION, INTENT_ROUTER_LLM,
                              log, debug, llm_stream)
 from app.core.prompts import (base_prompt, expand_prompt, prompts)
@@ -108,6 +108,74 @@ def get_models():
         log(f"Unable to get models: {str(erro)}")
         return []
 
+# ── Resident models (Ollama) ──────────────────────────────────────────────────────────
+# /v1/models says what EXISTS; Ollama's native /api/ps says what is LOADED right now. A model
+# that is not resident costs a load on the next request (seconds to a minute for large models,
+# and by default Ollama unloads after 5 idle minutes). Surfacing residency lets the picker
+# prefer warm models, and warm_model() pins the chosen one with keep_alive.
+_RESIDENT_CACHE = {"ts": 0.0, "models": None}
+
+def ollama_api_base():
+    """Native Ollama API base derived from OPENAI_API_BASE (…:11434/v1 -> …:11434), or OLLAMA_API."""
+    if OLLAMA_API:
+        return OLLAMA_API.rstrip("/")
+    base = (API_BASE or "").rstrip("/")
+    return base[:-3] if base.endswith("/v1") else base
+
+def resident_models(ttl: float = 5.0):
+    """Set of model names currently loaded on the Ollama server, or None if the backend is not Ollama
+    (or unreachable). Cached for `ttl` seconds so the model dialog never hammers the server."""
+    import time as _time
+    now = _time.time()
+    if _RESIDENT_CACHE["models"] is not None and now - _RESIDENT_CACHE["ts"] < ttl:
+        return _RESIDENT_CACHE["models"]
+    try:
+        import requests as _rq
+        r = _rq.get(f"{ollama_api_base()}/api/ps", timeout=2)
+        if r.status_code != 200:
+            _RESIDENT_CACHE.update(ts=now, models=None); return None
+        loaded = {m.get("name") or m.get("model") for m in r.json().get("models", [])}
+        loaded |= {n.split(":")[0] for n in list(loaded) if n and n.endswith(":latest")}   # "llama3:latest" answers to "llama3"
+        _RESIDENT_CACHE.update(ts=now, models=loaded)
+        return loaded
+    except Exception as erro:  # not Ollama, or down — degrade to "unknown"
+        debug(f"resident_models: {erro}")
+        _RESIDENT_CACHE.update(ts=now, models=None)
+        return None
+
+def get_models_detail():
+    """[{id, resident}] — resident is True/False when the backend is Ollama, None when unknown.
+    Resident models sort first so the dialog and /model list lead with what answers instantly."""
+    loaded = resident_models()
+    def _is_resident(name):
+        if loaded is None:
+            return None
+        return name in loaded or name.split(":")[0] in loaded or f"{name}:latest" in loaded
+    detail = [{"id": m, "resident": _is_resident(m)} for m in get_models()]
+    detail.sort(key=lambda d: (d["resident"] is not True, d["id"]))
+    return detail
+
+def warm_model(model: str, keep_alive=None):
+    """Load `model` on an Ollama server and pin it with keep_alive (env KEEP_ALIVE unless given).
+    Returns True if the server accepted the request. No-op for non-Ollama backends."""
+    ka = KEEP_ALIVE if keep_alive is None else keep_alive
+    if ka is None or not model:
+        return False
+    try:
+        import requests as _rq
+        ka_val = int(ka) if str(ka).lstrip("-").isdigit() else ka            # -1 / 0 as ints, "30m" as a string
+        r = _rq.post(f"{ollama_api_base()}/api/generate", json={"model": model, "prompt": "", "keep_alive": ka_val}, timeout=600)
+        ok = r.status_code == 200
+        if ok:
+            _RESIDENT_CACHE["ts"] = 0.0                                        # invalidate: it is resident now
+            log(f"Pinned model {model} resident (keep_alive={ka})")
+        else:
+            log(f"warm_model({model}) -> HTTP {r.status_code}")
+        return ok
+    except Exception as erro:
+        log(f"warm_model({model}) failed: {erro}")
+        return False
+
 # Initialize LLM connection
 async def init_llm():
     while True:
@@ -116,6 +184,8 @@ async def init_llm():
         else:
             log("Sleeping 5 seconds...")
             await asyncio.sleep(5)
+    if KEEP_ALIVE:
+        warm_model(MYMODEL)
 
 # Function - Send user prompt to LLM for streaming response
 async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None) -> Any:
