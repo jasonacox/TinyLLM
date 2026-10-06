@@ -55,7 +55,8 @@ def loaded_models(url):
 def warm(url, model, keep_alive=-1):
     """Load+pin one model. Returns 'warm', 'loaded in Ns', or 'fail: reason'."""
     try:
-        was_warm = model in loaded_models(url) or f"{model}:latest" in loaded_models(url)
+        loaded = loaded_models(url)                      # one /api/ps call
+        was_warm = model in loaded or f"{model}:latest" in loaded
     except Exception as e:  # noqa: BLE001
         return f"fail: ps {e}"
     t0 = time.time()

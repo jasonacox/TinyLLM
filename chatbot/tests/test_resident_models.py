@@ -79,10 +79,67 @@ def test_warm_model_is_noop_without_keep_alive_and_pins_with_it(ollama, monkeypa
     monkeypatch.setattr(llm, "API_BASE", "http://127.0.0.1:1/v1"); assert llm.warm_model("llama3:8b") is False   # down -> False, no raise
 
 
-# ── integration / functional (HTTP routes) ──────────────────────────────────
-def test_models_detail_route_and_model_list_command(ollama, monkeypatch):
-    from fastapi.testclient import TestClient
+# ── performance: nothing on the event loop waits for Ollama ──────────────────
+async def _ticks_during(coro, period=0.02):
+    """Run `coro` while a ticker coroutine counts; returns (result, ticks, seconds). A blocked loop -> ~0 ticks."""
+    import asyncio
+    ticks, done = 0, False
+    async def ticker():
+        nonlocal ticks
+        while not done:
+            await asyncio.sleep(period); ticks += 1
+    t = asyncio.create_task(ticker()); t0 = time.time()
+    try:
+        res = await coro
+    finally:
+        done = True; await t
+    return res, ticks, time.time() - t0
+
+
+def test_warm_model_background_returns_immediately_and_does_not_block_loop(monkeypatch):
+    import asyncio
+    s = FakeOllama(slow=2.0)                                                    # a 2 s "cold load" on /api/generate
+    monkeypatch.setattr(llm, "API_BASE", s.url + "/v1"); monkeypatch.setattr(llm, "OLLAMA_API", None)
+    monkeypatch.setattr(llm, "KEEP_ALIVE", "-1")
+    async def go():
+        t0 = time.time(); task = llm.warm_model_background("llama3.2:3b"); spawn = time.time() - t0
+        _, ticks, secs = await _ticks_during(asyncio.wait_for(asyncio.shield(task), 10))
+        return spawn, ticks, secs, task.result()
+    try:
+        spawn, ticks, secs, ok = asyncio.run(go())
+    finally:
+        s.close()
+    assert spawn < 0.05 and ok is True                                          # handler-side cost is ~0
+    assert secs >= 1.9 and ticks >= 40, f"event loop starved during warm: {ticks} ticks in {secs:.1f}s"
+    monkeypatch.setattr(llm, "KEEP_ALIVE", None); assert llm.warm_model_background("x") is None
+
+
+def test_init_llm_warms_off_the_event_loop(monkeypatch):
+    import asyncio
+    s = FakeOllama(slow=1.5)
+    monkeypatch.setattr(llm, "API_BASE", s.url + "/v1"); monkeypatch.setattr(llm, "OLLAMA_API", None)
+    monkeypatch.setattr(llm, "KEEP_ALIVE", "-1")
+    async def ok(): return True
+    monkeypatch.setattr(llm, "test_model", ok)
+    try:
+        _, ticks, secs = asyncio.run(_ticks_during(llm.init_llm()))
+    finally:
+        s.close()
+    assert secs >= 1.4 and ticks >= 30, f"init_llm blocked the loop: {ticks} ticks in {secs:.1f}s"
+
+
+# ── integration / functional (HTTP + socket.io handlers) ────────────────────
+# app.api.routes hard-imports the RAG/document/image stack; skip (not fail) on a minimal chatbot install.
+def _routes():
+    for dep in ("pandas", "pypandoc", "pypdf", "weaviate", "bs4", "aiohttp", "PIL", "pillow_heif", "slowapi", "socketio"):
+        pytest.importorskip(dep)
     from app.api import routes
+    return routes
+
+
+def test_models_detail_route_and_model_list_command(ollama, monkeypatch):
+    routes = _routes()
+    from fastapi.testclient import TestClient
     monkeypatch.setattr(routes, "get_models", lambda: ["llama3:8b", "llama3.2:3b"])
     monkeypatch.setattr(llm, "get_models", lambda: ["llama3:8b", "llama3.2:3b"])
     with TestClient(routes.app) as c:
@@ -91,6 +148,35 @@ def test_models_detail_route_and_model_list_command(ollama, monkeypatch):
         assert d[0]["id"] == "llama3:8b" and d[0]["resident"] is True and d[1]["resident"] is False
     html = (CHATBOT / "app/templates/index.html").read_text()
     assert "/models/detail" in html and "●" in html
+
+
+def test_model_switch_and_detail_route_do_not_block_event_loop(monkeypatch):
+    import asyncio, httpx
+    routes = _routes()
+    s = FakeOllama(models=["llama3:8b", "llama3.2:3b"], slow=2.0, slow_get=1.0)   # cold load 2 s, /api/ps 1 s
+    monkeypatch.setattr(llm, "API_BASE", s.url + "/v1"); monkeypatch.setattr(llm, "OLLAMA_API", None)
+    monkeypatch.setattr(llm, "KEEP_ALIVE", "-1"); llm._RESIDENT_CACHE.update(ts=0.0, models=None)
+    monkeypatch.setattr(routes, "get_models", lambda: ["llama3:8b", "llama3.2:3b"])
+    monkeypatch.setattr(llm, "get_models", lambda: ["llama3:8b", "llama3.2:3b"])
+    emitted = []
+    async def emit(*a, **k): emitted.append(a)
+    monkeypatch.setattr(routes.sio, "emit", emit)
+    monkeypatch.setitem(routes.client, "sid1", {"model": "llama3:8b", "context": []})
+    async def go():
+        t0 = time.time(); await routes.change_model("sid1", "llama3.2:3b"); switch = time.time() - t0
+        t0 = time.time(); await routes.handle_model_command("sid1", "/model llama3:8b"); cmd = time.time() - t0
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=routes.app), base_url="http://t") as c:
+            r, ticks, secs = await _ticks_during(c.get("/models/detail"))
+        await asyncio.gather(*list(llm._WARM_TASKS))                           # let the background pins finish
+        return switch, cmd, r, ticks, secs
+    try:
+        switch, cmd, r, ticks, secs = asyncio.run(go())
+    finally:
+        s.close()
+    assert switch < 0.5 and cmd < 0.5, f"model switch waited on the cold load ({switch:.2f}s / {cmd:.2f}s)"
+    assert routes.client["sid1"]["model"] == "llama3:8b"
+    assert r.status_code == 200 and secs >= 0.9 and ticks >= 20, f"/models/detail blocked the loop: {ticks} ticks in {secs:.1f}s"
+    assert sum(1 for c in s.calls if c[0] == "POST" and c[1] == "/api/generate") == 2   # both switches were pinned
 
 
 # ── frame ───────────────────────────────────────────────────────────────────

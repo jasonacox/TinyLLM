@@ -7,8 +7,9 @@ import pytest
 
 
 class FakeOllama:
-    def __init__(self, models=("llama3:8b", "llama3.2:3b"), loaded=("llama3:8b",), fail=False, slow=0.0, reply="pong"):
+    def __init__(self, models=("llama3:8b", "llama3.2:3b"), loaded=("llama3:8b",), fail=False, slow=0.0, reply="pong", slow_get=0.0, fail_stream=False):
         self.models, self.loaded, self.fail, self.slow, self.reply = list(models), set(loaded), fail, slow, reply
+        self.slow_get, self.fail_stream = slow_get, fail_stream    # delay GETs (/api/ps); 500 only on stream requests
         self.calls = []
         self.lock = threading.Lock()
         srv = self
@@ -20,6 +21,7 @@ class FakeOllama:
             def do_GET(self):
                 with srv.lock: srv.calls.append(("GET", self.path))
                 if srv.fail: return self._send(500, {"error": "down"})
+                time.sleep(srv.slow_get)
                 if self.path == "/api/tags": return self._send(200, {"models": [{"name": m} for m in srv.models]})
                 if self.path == "/api/ps": return self._send(200, {"models": [{"name": m, "expires_at": "2319-01-01T00:00:00Z"} for m in srv.loaded]})
                 if self.path == "/v1/models": return self._send(200, {"object": "list", "data": [{"id": m} for m in srv.models]})
@@ -34,6 +36,7 @@ class FakeOllama:
                 if self.path == "/v1/chat/completions":
                     srv.loaded.add(body.get("model"))
                     if body.get("stream"):
+                        if srv.fail_stream: return self._send(500, {"error": "stream down"})
                         self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
                         for tok in (srv.reply, "!"):
                             self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': tok}}]})}\n\n".encode())

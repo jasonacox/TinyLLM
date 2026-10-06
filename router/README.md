@@ -36,6 +36,14 @@ uvicorn tinyrouter:app --app-dir router --host 0.0.0.0 --port 8000
 
 Point the chatbot at the router: `OPENAI_API_BASE=http://<router>:8000/v1 LLM_MODEL=chat`.
 
+> **Security:** the router binds `0.0.0.0` with **no authentication** by default — keep it behind your LAN/firewall,
+> or bind it locally (`HOST=127.0.0.1 python3 router/tinyrouter.py`, or `--host 127.0.0.1` with uvicorn). It never
+> forwards the client's `Authorization` header to backends.
+
+Optional `keep_alive:` (top level of `router.yaml`, e.g. `-1` or `30m`) is injected into every request sent to a
+`kind: ollama` backend, so whatever the router routes to stays resident; a client-supplied `keep_alive` wins, and
+`kind: openai` backends never receive it. Omit it to leave Ollama's own default alone.
+
 Cron (every 10 minutes keeps the placement true across Ollama restarts):
 
 ```

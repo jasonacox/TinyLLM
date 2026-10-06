@@ -176,6 +176,19 @@ def warm_model(model: str, keep_alive=None):
         log(f"warm_model({model}) failed: {erro}")
         return False
 
+_WARM_TASKS = set()                                                            # strong refs so fire-and-forget tasks aren't GC'd
+
+def warm_model_background(model: str, keep_alive=None):
+    """Fire-and-forget warm_model() on a worker thread. Call from async handlers: a model switch
+    returns immediately and never waits on (or blocks the event loop for) a cold load.
+    Returns the task, or None when there is nothing to do (KEEP_ALIVE unset)."""
+    if (KEEP_ALIVE if keep_alive is None else keep_alive) is None or not model:
+        return None
+    task = asyncio.create_task(asyncio.to_thread(warm_model, model, keep_alive))
+    _WARM_TASKS.add(task)
+    task.add_done_callback(_WARM_TASKS.discard)
+    return task
+
 # Initialize LLM connection
 async def init_llm():
     while True:
@@ -185,7 +198,7 @@ async def init_llm():
             log("Sleeping 5 seconds...")
             await asyncio.sleep(5)
     if KEEP_ALIVE:
-        warm_model(MYMODEL)
+        await asyncio.to_thread(warm_model, MYMODEL)                           # off the event loop
 
 # Function - Send user prompt to LLM for streaming response
 async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None) -> Any:

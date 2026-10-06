@@ -12,3 +12,6 @@ pools:
   #   - {url: http://192.168.1.10:8000, model: mistralai/Mistral-7B-Instruct-v0.1, kind: openai}
 health_interval: 15
 request_timeout: 120
+# Optional: keep_alive sent to kind=ollama backends on every request (-1 = never unload, or e.g. "30m").
+# A keep_alive set by the client wins; kind=openai backends never get it. Omit to leave Ollama's default.
+# keep_alive: -1

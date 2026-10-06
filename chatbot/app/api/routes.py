@@ -53,7 +53,7 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         OPENAI_IMAGE_QUALITY, OPENAI_IMAGE_STYLE, baseprompt, REPEAT_WINDOW, REPEAT_COUNT)
 from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
                         extract_text_from_url, query_index)
-from app.core.llm import (client, get_models, get_models_detail, warm_model, ask, ask_llm, ask_llm_intent, ask_context)
+from app.core.llm import (client, get_models, get_models_detail, warm_model_background, ask, ask_llm, ask_llm_intent, ask_context)
 from app.core.prompts import (prompts, base_prompt, default_prompts, save_prompts, expand_prompt)
 from app.image import create_image_generator
 from app.document import generate_document_from_response, get_document_generator
@@ -337,7 +337,7 @@ async def list_models():
 async def list_models_detail():
     """Models with residency: [{id, resident}] — resident True/False on Ollama, null when unknown.
     Resident models are listed first; they answer without a load delay."""
-    return get_models_detail()
+    return await asyncio.to_thread(get_models_detail)    # /api/ps is a blocking request; keep it off the loop
 
 # Upload a file
 @app.post('/upload')
@@ -729,7 +729,7 @@ async def change_model(session_id, model):
                 return
             debug(f"Changing model for {session_id} to {model}")
             client[session_id]["model"] = model
-            warm_model(model)                       # pin it resident when KEEP_ALIVE is set (no-op otherwise)
+            warm_model_background(model)            # pin resident when KEEP_ALIVE is set; fire-and-forget, off the loop
         # Update footer
         await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {model}", 'voice': 'footer',
                                   'model': model}, room=session_id)
@@ -1034,13 +1034,13 @@ async def handle_model_command(session_id, p):
     if args in model_list and args != current_model:
         debug(f"Changing model to {args}")
         client[session_id]["model"] = args
-        warm_model(args)
+        warm_model_background(args)             # fire-and-forget, never blocks the loop
         await sio.emit('update', {'update': f'[Model changed to {args}]', 'voice': 'user'}, room=session_id)
         await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {args}", 'voice': 'footer',
                                   'model': args}, room=session_id)
     elif args in ["list", "help"]:
         msg = f'Current LLM Model: {client[session_id]["model"]}\n'
-        detail = get_models_detail()
+        detail = await asyncio.to_thread(get_models_detail)
         if any(d["resident"] is not None for d in detail):
             marked = [("● " if d["resident"] else "○ ") + d["id"] for d in detail]
             msg += f'- Available Models (● resident, ○ would load on first use): {", ".join(marked)}\n'

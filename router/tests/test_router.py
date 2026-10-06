@@ -55,6 +55,19 @@ def test_warm_status_and_pin_logic(fake_ollama):
     assert any("missing=[]" in r for r in warm.status({s.url: ["llama3:8b", "llama3.2:3b"]}))
 
 
+def test_load_config_reads_optional_keep_alive(tmp_path):
+    p = tmp_path / "r.yaml"; p.write_text("pools:\n  chat:\n    - {url: http://a, model: m}\nkeep_alive: -1\n")
+    assert tr.load_config(str(p))["keep_alive"] == -1
+    p.write_text("pools:\n  chat:\n    - {url: http://a, model: m}\n")
+    assert tr.load_config(str(p))["keep_alive"] is None
+
+
+def test_warm_fetches_api_ps_once(fake_ollama):
+    s = fake_ollama(loaded=["llama3:8b"])
+    assert warm.warm(s.url, "llama3:8b") == "warm"
+    assert sum(1 for c in s.calls if c[0] == "GET" and c[1] == "/api/ps") == 1
+
+
 # ── security ────────────────────────────────────────────────────────────────
 def test_unknown_model_is_404_and_only_configured_models_are_reachable(fake_ollama):
     s = fake_ollama()
@@ -89,6 +102,45 @@ def test_failover_to_second_backend_when_first_errors(fake_ollama):
         r = c.post("/v1/chat/completions", json={"model": "chat", "messages": [{"role": "user", "content": "hi"}]})
     assert r.status_code == 200 and r.json()["choices"][0]["message"]["content"] == "from-good"
     assert b1.failures >= 1
+
+
+def _stream_pool(*servers):
+    bs = [tr.Backend(x.url, "llama3:8b") for x in servers]
+    tr.STATE.clear(); tr.STATE.update(pools={"chat": bs}, health_interval=999, request_timeout=5)
+    return bs
+
+
+def test_stream_fails_over_when_first_backend_returns_5xx(fake_ollama):
+    bad, good = fake_ollama(fail_stream=True, reply="bad"), fake_ollama(loaded=[], reply="from-good")
+    b1, b2 = _stream_pool(bad, good)
+    with TestClient(tr.app) as c:
+        b1.resident, b2.resident = True, False                                    # the broken one is the preferred pick
+        with c.stream("POST", "/v1/chat/completions", json={"model": "chat", "stream": True, "messages": []}) as r:
+            body = b"".join(r.iter_bytes())
+        assert r.status_code == 200 and b'"content": "from-good"' in body and b"[DONE]" in body
+    assert any(c[1] == "/v1/chat/completions" for c in bad.calls if c[0] == "POST"), "bad backend was tried first"
+    assert b1.failures == 1 and "500" in b1.last_error and b2.failures == 0
+    assert b1.inflight == 0 and b2.inflight == 0, "inflight counters leaked"
+
+
+def test_stream_all_backends_5xx_is_503_and_inflight_released(fake_ollama):
+    b1, b2 = _stream_pool(fake_ollama(fail_stream=True), fake_ollama(fail_stream=True))
+    with TestClient(tr.app) as c:
+        r = c.post("/v1/chat/completions", json={"model": "chat", "stream": True, "messages": []})
+    assert r.status_code == 503
+    assert (b1.inflight, b2.inflight) == (0, 0) and b1.failures == 1 and b2.failures == 1
+
+
+def test_stream_connection_error_fails_over_without_leaking(fake_ollama):
+    good = fake_ollama(reply="from-good")
+    dead = tr.Backend("http://127.0.0.1:1", "llama3:8b")
+    b_good = tr.Backend(good.url, "llama3:8b")
+    tr.STATE.clear(); tr.STATE.update(pools={"chat": [dead, b_good]}, health_interval=999, request_timeout=5)
+    with TestClient(tr.app) as c:
+        dead.healthy, dead.resident, b_good.resident = True, True, False
+        with c.stream("POST", "/v1/chat/completions", json={"model": "chat", "stream": True, "messages": []}) as r:
+            body = b"".join(r.iter_bytes())
+    assert b'"content": "from-good"' in body and dead.inflight == 0 and b_good.inflight == 0
 
 
 def test_all_backends_down_is_503(fake_ollama):
@@ -134,6 +186,33 @@ def test_chat_end_to_end_routes_to_resident_backend_and_streams(fake_ollama):
         assert b"[DONE]" in body and b'"content": "warm"' in body
 
 
+def test_keep_alive_injected_for_ollama_backends_only(fake_ollama):
+    o, v = fake_ollama(models=["llama3:8b"]), fake_ollama(models=["mistral"])
+    tr.STATE.clear(); tr.STATE.update(pools={"chat": [tr.Backend(o.url, "llama3:8b", "ollama")], "big": [tr.Backend(v.url, "mistral", "openai")]},
+                                      health_interval=999, request_timeout=5, keep_alive=-1)
+    with TestClient(tr.app) as c:
+        assert c.post("/v1/chat/completions", json={"model": "chat", "messages": []}).status_code == 200
+        assert c.post("/v1/chat/completions", json={"model": "big", "messages": []}).status_code == 200
+        with c.stream("POST", "/v1/chat/completions", json={"model": "chat", "stream": True, "messages": []}) as r:
+            b"".join(r.iter_bytes())
+        assert c.post("/v1/chat/completions", json={"model": "chat", "keep_alive": "5m", "messages": []}).status_code == 200
+    o_posts = [c[2] for c in o.calls if c[0] == "POST" and c[1] == "/v1/chat/completions"]
+    v_posts = [c[2] for c in v.calls if c[0] == "POST" and c[1] == "/v1/chat/completions"]
+    assert [p.get("keep_alive") for p in o_posts] == [-1, -1, "5m"]              # injected (plain + stream); client value wins
+    assert v_posts and all("keep_alive" not in p for p in v_posts)               # never sent to kind=openai
+
+
+def test_keep_alive_wired_from_router_yaml(tmp_path, fake_ollama):
+    o = fake_ollama()
+    p = tmp_path / "r.yaml"; p.write_text(yaml.safe_dump({"pools": {"chat": [{"url": o.url, "model": "llama3:8b"}]}, "keep_alive": "30m", "health_interval": 999}))
+    tr.STATE.clear()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(tr, "load_config", lambda path=str(p), _f=tr.load_config: _f(path))
+        with TestClient(tr.app) as c:                                             # lifespan loads the config file
+            assert c.post("/v1/chat/completions", json={"model": "chat", "messages": []}).status_code == 200
+    assert [c[2].get("keep_alive") for c in o.calls if c[0] == "POST"] == ["30m"]
+
+
 def test_load_config_example_parses_and_rejects_empty(tmp_path):
     cfg = tr.load_config(str(HERE / "router.yaml.example"))
     assert set(cfg["pools"]) == {"chat", "fast"} and cfg["pools"]["chat"][1].max_inflight == 2
@@ -147,6 +226,16 @@ def test_app_starts_and_health_answers(fake_ollama):
     tr.STATE.clear(); tr.STATE.update(pools={"chat": [tr.Backend(s.url, "llama3:8b")]}, health_interval=999, request_timeout=5)
     with TestClient(tr.app) as c:
         h = c.get("/health").json(); assert h["ok"] and h["backends"] == 1 and h["healthy"] == 1
+
+
+def test_lifespan_starts_and_cancels_health_task(fake_ollama):
+    s = fake_ollama()
+    tr.STATE.clear(); tr.STATE.update(pools={"chat": [tr.Backend(s.url, "llama3:8b")]}, health_interval=999, request_timeout=5)
+    with TestClient(tr.app) as c:
+        task = tr.STATE["_health_task"]; assert not task.done()
+        assert c.get("/health").json()["healthy"] == 1
+    assert task.cancelled() or task.done()
+    assert "on_event" not in (HERE / "tinyrouter.py").read_text()               # lifespan, not the deprecated hook
 
 
 def test_warm_cli_help_and_status_run(tmp_path, fake_ollama):

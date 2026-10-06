@@ -28,6 +28,7 @@ Config (router.yaml):
         - {url: http://192.168.1.7:11434,  model: llama3.2:3b, kind: ollama}
     health_interval: 15        # seconds between health sweeps
     request_timeout: 120       # seconds per backend attempt
+    keep_alive: -1             # optional: injected into requests to kind=ollama backends (unless the client set one)
 
 A request may name a pool ("chat") or an exact model ("llama3:8b"); exact names route to every
 pool backend serving that model. Only models in the config are reachable through the router.
@@ -39,6 +40,7 @@ import json
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import httpx
@@ -95,7 +97,8 @@ def load_config(path: str = CONFIG_PATH) -> dict:
     if not pools:
         raise ValueError(f"{path}: no pools defined")
     return {"pools": pools, "health_interval": float(cfg.get("health_interval", 15)),
-            "request_timeout": float(cfg.get("request_timeout", 120))}
+            "request_timeout": float(cfg.get("request_timeout", 120)),
+            "keep_alive": cfg.get("keep_alive")}          # None = leave Ollama's own keep_alive alone
 
 
 def pick(backends: list, model: Optional[str] = None) -> Optional[Backend]:
@@ -140,23 +143,33 @@ async def check_backend(client: httpx.AsyncClient, b: Backend):
 
 async def health_loop(state: dict):
     async with httpx.AsyncClient() as client:
-        while True:
-            await asyncio.gather(*(check_backend(client, b) for bs in state["pools"].values() for b in bs))
+        while True:                                        # lifespan did the first sweep; wait before the next
             await asyncio.sleep(state["health_interval"])
+            await asyncio.gather(*(check_backend(client, b) for bs in state["pools"].values() for b in bs))
 
 
-app = FastAPI(title="TinyLLM Router")
 STATE: dict = {}
 
 
-@app.on_event("startup")
-async def _startup():
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     if not STATE:
         STATE.update(load_config())
     async with httpx.AsyncClient() as client:              # first sweep before serving
         await asyncio.gather(*(check_backend(client, b) for bs in STATE["pools"].values() for b in bs))
-    STATE["_health_task"] = asyncio.create_task(health_loop(STATE))
+    task = STATE["_health_task"] = asyncio.create_task(health_loop(STATE))
     log.info("router up: pools=%s", {k: len(v) for k, v in STATE["pools"].items()})
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="TinyLLM Router", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -208,12 +221,16 @@ async def chat(request: Request):
         t0 = time.time()
         try:
             if payload.get("stream"):
-                return await _stream(b, payload, t0)
+                resp = await _stream(b, payload, t0)
+                if resp is None:                               # 5xx on connect: already cleaned up, try the next one
+                    continue
+                return resp
             async with httpx.AsyncClient(timeout=STATE["request_timeout"]) as client:
                 r = await client.post(f"{b.url}/v1/chat/completions", json=payload)
             b.inflight -= 1
             if r.status_code >= 500:
                 b.observe(time.time() - t0, ok=False)
+                b.last_error = f"HTTP {r.status_code}"
                 log.warning("backend %s -> HTTP %s, failing over", b.url, r.status_code)
                 continue
             b.observe(time.time() - t0, ok=True)
@@ -227,14 +244,24 @@ async def chat(request: Request):
     raise HTTPException(503, f"no healthy backend answered for '{requested}' (tried {len(tried)})")
 
 
-async def _stream(b: Backend, payload: dict, t0: float):
+async def _stream(b: Backend, payload: dict, t0: float) -> Optional[StreamingResponse]:
+    """Open a streaming request to `b`. Returns the StreamingResponse, or None if the backend answered 5xx
+    (response closed, inflight released, failure recorded) so chat() can fail over. Connection errors are
+    re-raised as httpx errors after cleanup; chat()'s except releases inflight for those."""
     client = httpx.AsyncClient(timeout=STATE["request_timeout"])
-    req = client.build_request("POST", f"{b.url}/v1/chat/completions", json=payload)
-    resp = await client.send(req, stream=True)
+    try:
+        req = client.build_request("POST", f"{b.url}/v1/chat/completions", json=payload)
+        resp = await client.send(req, stream=True)
+    except BaseException:
+        await client.aclose()
+        raise
     if resp.status_code >= 500:
-        await resp.aclose(); await client.aclose(); b.inflight -= 1
+        await resp.aclose(); await client.aclose()
+        b.inflight -= 1
         b.observe(time.time() - t0, ok=False)
-        raise HTTPException(502, f"backend {b.url} returned {resp.status_code}")
+        b.last_error = f"HTTP {resp.status_code} on stream"
+        log.warning("backend %s -> HTTP %s on stream, failing over", b.url, resp.status_code)
+        return None
 
     async def gen():
         try:
@@ -247,7 +274,8 @@ async def _stream(b: Backend, payload: dict, t0: float):
         finally:
             b.inflight -= 1
             await resp.aclose(); await client.aclose()
-    return StreamingResponse(gen(), media_type=resp.headers.get("content-type", "text/event-stream"))
+    return StreamingResponse(gen(), status_code=resp.status_code,
+                             media_type=resp.headers.get("content-type", "text/event-stream"))
 
 
 if __name__ == "__main__":
