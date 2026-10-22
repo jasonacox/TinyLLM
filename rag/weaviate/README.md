@@ -8,6 +8,8 @@ Weaviate is an open source, AI-native vector database that includes the option o
 docker compose up -d
 ```
 
+> **Upgrading from Weaviate 1.23:** the compose files now use Weaviate 1.39. Weaviate only supports upgrading one minor version at a time, so pointing 1.39 directly at a `weaviate_data` folder written by 1.23 is not supported. Either step through each minor version (1.24, 1.25, ... 1.39), or stop the stack, move `weaviate_data` aside and re-ingest your documents.
+
 ## Test Weaviate
 
 ```python
