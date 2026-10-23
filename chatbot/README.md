@@ -387,6 +387,8 @@ The Document Manager uses a vector database to store the uploaded content. Set u
 docker compose up -d
 ```
 
+Upgrading an existing Weaviate 1.23 install? See the [upgrade note](../rag/weaviate/README.md#docker-composeyml).
+
 To run the Document Manager, run the following and adjust as needed. Once running, the document manager will be available at http://localhost:5001
 
 ```bash
