@@ -79,6 +79,31 @@ def log(msg):
 # Defaults
 MAX_CHUNK_SIZE=256*4
 
+def register_integration(client):
+    """
+    Identify TinyLLM to Weaviate with the X-Weaviate-Client-Integration header
+    (tinyllm/<version>), sent on both REST and gRPC requests. Weaviate 1.38+
+    uses it to attribute traffic; older servers ignore it. Best effort: it
+    relies on private weaviate-client API, so any failure is ignored.
+    """
+    try:
+        # pylint: disable=import-outside-toplevel
+        from pydantic import Field
+        from weaviate.connect.integrations import _IntegrationConfig
+        try:
+            from app.core.config import VERSION
+            version = VERSION[1:] if VERSION.startswith("v") else VERSION
+        except Exception: # pylint: disable=broad-exception-caught
+            version = "unknown"
+
+        class _TinyLLMIntegration(_IntegrationConfig):
+            integration: str = Field(default=f"tinyllm/{version}",
+                                     serialization_alias="X-Weaviate-Client-Integration")
+
+        client.integrations.configure(_TinyLLMIntegration())
+    except Exception as er: # pylint: disable=broad-exception-caught
+        logger.debug(f"Unable to set Weaviate integration header: {er}")
+
 # Data Schema
 schema_properties=[
     {
@@ -210,6 +235,7 @@ class Documents:
                     ),
                     **weaviate_optional
                 )
+                register_integration(self.client)
                 log(f"Connected to Weaviate at {self.host}")
                 return True
             except WeaviateConnectionError as er:
