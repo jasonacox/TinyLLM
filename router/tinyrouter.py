@@ -39,6 +39,7 @@ import asyncio
 import json
 import logging
 import os
+import signal
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -46,7 +47,7 @@ from typing import Optional
 import httpx
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 log = logging.getLogger("tinyrouter")
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
@@ -74,6 +75,8 @@ class Backend:
         self.latency = 1.0                     # EMA of seconds per request
         self.failures = 0
         self.last_error = ""
+        self.requests = 0                      # lifetime counters (survive a SIGHUP reload; exposed at /metrics)
+        self.errors = 0
 
     def score(self) -> float:
         """Lower is better: least-loaded, latency-aware. Residency is handled before scoring."""
@@ -91,7 +94,8 @@ class Backend:
     def as_dict(self) -> dict:
         return {"url": self.url, "model": self.model, "kind": self.kind, "healthy": self.healthy,
                 "resident": self.resident, "inflight": self.inflight, "latency_s": round(self.latency, 3),
-                "failures": self.failures, "last_error": self.last_error[:120]}
+                "failures": self.failures, "requests": self.requests, "errors": self.errors,
+                "last_error": self.last_error[:120]}
 
 
 def load_config(path: str = CONFIG_PATH) -> dict:
@@ -104,6 +108,7 @@ def load_config(path: str = CONFIG_PATH) -> dict:
         raise ValueError(f"{path}: no pools defined")
     return {"pools": pools, "health_interval": float(cfg.get("health_interval", 15)),
             "request_timeout": float(cfg.get("request_timeout", 120)),
+            "queue_timeout": float(cfg.get("queue_timeout", 0.0)),   # >0: briefly wait for a slot before 503
             "keep_alive": cfg.get("keep_alive")}          # None = leave Ollama's own keep_alive alone
 
 
@@ -125,8 +130,16 @@ def resolve(pools: dict, requested: str) -> tuple:
     return matches, (requested if matches else None)
 
 
-async def check_backend(client: httpx.AsyncClient, b: Backend):
-    """Health + residency. Ollama: /api/tags must answer and /api/ps tells what is loaded. Others: /v1/models."""
+def _ka(keep_alive):
+    """Normalize a keep_alive config value: -1/0/30 stay ints, '30m'/'1h' stay strings."""
+    return int(keep_alive) if str(keep_alive).lstrip("-").isdigit() else keep_alive
+
+
+async def check_backend(client: httpx.AsyncClient, b: Backend, keep_alive=None):
+    """Health + residency. Ollama: /api/tags must answer and /api/ps tells what is loaded. Others: /v1/models.
+    When keep_alive is set, re-pin already-resident Ollama models with a native empty generate — Ollama's
+    OpenAI /v1 endpoint ignores a body keep_alive, so per-request injection there is a no-op. We only pin what
+    is already loaded (never force-load a cold model during a health check)."""
     try:
         if b.kind == "ollama":
             r = await client.get(f"{b.url}/api/tags", timeout=5)
@@ -146,16 +159,48 @@ async def check_backend(client: httpx.AsyncClient, b: Backend):
         b.healthy = False
         b.resident = False
         b.last_error = f"{type(e).__name__}: {e}"
+        return
+    if b.kind == "ollama" and keep_alive is not None and b.resident:
+        try:
+            await client.post(f"{b.url}/api/generate", json={"model": b.model, "prompt": "", "keep_alive": _ka(keep_alive)}, timeout=30)
+        except Exception as e:  # noqa: BLE001 — best-effort pin; a pin failure never fails the health check
+            log.debug("keep_alive pin on %s failed: %s", b.url, e)
+
+
+async def _sweep(client, state):
+    await asyncio.gather(*(check_backend(client, b, state.get("keep_alive"))
+                           for bs in state["pools"].values() for b in bs))
 
 
 async def health_loop(state: dict):
     async with httpx.AsyncClient() as client:
         while True:                                        # lifespan did the first sweep; wait before the next
             await asyncio.sleep(state["health_interval"])
-            await asyncio.gather(*(check_backend(client, b) for bs in state["pools"].values() for b in bs))
+            await _sweep(client, state)
 
 
 STATE: dict = {}
+
+
+def reload_config():
+    """SIGHUP: re-read the config file and swap pools in place. A backend that persists (same url+model) keeps
+    its live object, so its in-flight count and latency survive; new backends are added, removed ones are dropped
+    (in-flight requests hold their own reference and finish unaffected). A bad file is logged and ignored."""
+    try:
+        new = load_config()
+    except Exception as e:  # noqa: BLE001
+        log.error("SIGHUP reload failed, keeping current config: %s", e)
+        return
+    old = {(b.url, b.model): b for bs in STATE["pools"].values() for b in bs}
+    for bs in new["pools"].values():
+        for i, b in enumerate(bs):
+            prev = old.get((b.url, b.model))
+            if prev:                                       # reuse the live object so inflight accounting stays correct
+                prev.max_inflight, prev.kind = b.max_inflight, b.kind
+                bs[i] = prev
+    for k in ("pools", "health_interval", "request_timeout", "queue_timeout", "keep_alive"):
+        STATE[k] = new[k]
+    log.info("SIGHUP reloaded: pools=%s", {k: len(v) for k, v in STATE["pools"].items()})
 
 
 @asynccontextmanager
@@ -163,8 +208,12 @@ async def lifespan(_app: FastAPI):
     if not STATE:
         STATE.update(load_config())
     async with httpx.AsyncClient() as client:              # first sweep before serving
-        await asyncio.gather(*(check_backend(client, b) for bs in STATE["pools"].values() for b in bs))
+        await _sweep(client, STATE)
     task = STATE["_health_task"] = asyncio.create_task(health_loop(STATE))
+    try:
+        asyncio.get_running_loop().add_signal_handler(signal.SIGHUP, reload_config)
+    except (NotImplementedError, ValueError, AttributeError, RuntimeError):
+        pass                                               # no SIGHUP (Windows) or not the main thread (e.g. TestClient)
     log.info("router up: pools=%s", {k: len(v) for k, v in STATE["pools"].items()})
     try:
         yield
@@ -208,34 +257,50 @@ async def models():
     return {"object": "list", "data": data}
 
 
-@app.post("/v1/chat/completions")
-async def chat(request: Request):
-    body = await request.json()
-    requested = str(body.get("model") or "")
+async def _acquire(backends: list, exact: Optional[str], tried: list) -> Optional[Backend]:
+    """Pick an untried, healthy, under-cap backend. On the FIRST dispatch (nothing tried yet), if the only
+    reason nothing is pickable is that every healthy match is at its inflight cap, wait up to queue_timeout
+    for a slot to free — smoothing a burst into a short queue instead of an immediate 503. Failover picks
+    (tried non-empty) never wait."""
+    deadline = time.monotonic() + STATE.get("queue_timeout", 0.0)
+    while True:
+        b = pick([x for x in backends if x not in tried], exact)
+        if b is not None or tried:
+            return b
+        healthy = [x for x in backends if x.healthy and (exact is None or x.model == exact)]
+        if not healthy or time.monotonic() >= deadline:     # nothing to wait for, or budget spent
+            return None
+        await asyncio.sleep(0.05)
+
+
+async def _proxy(path: str, body: dict, requested: str, allow_stream: bool):
+    """Route one OpenAI-style POST (chat or embeddings) to the best backend in the pool, failing over to the
+    next on a 5xx or connection error. `path` is the backend path; streaming applies only to chat."""
     backends, exact = resolve(STATE["pools"], requested)
     if not backends:
         raise HTTPException(404, f"unknown model or pool '{requested}' — see /v1/models")
     tried = []
-    for _ in range(len(backends)):
-        b = pick([x for x in backends if x not in tried], exact)
+    while len(tried) < len(backends):
+        b = await _acquire(backends, exact, tried)
         if b is None:
             break
         tried.append(b)
         payload = dict(body, model=b.model)
-        if b.kind == "ollama" and STATE.get("keep_alive") is not None and "keep_alive" not in payload:
-            payload["keep_alive"] = STATE["keep_alive"]
         b.inflight += 1
+        b.requests += 1
         t0 = time.time()
         try:
-            if payload.get("stream"):
-                resp = await _stream(b, payload, t0)
+            if allow_stream and payload.get("stream"):
+                resp = await _stream(b, payload, t0, path)
                 if resp is None:                               # 5xx on connect: already cleaned up, try the next one
+                    b.errors += 1
                     continue
                 return resp
             async with httpx.AsyncClient(timeout=STATE["request_timeout"]) as client:
-                r = await client.post(f"{b.url}/v1/chat/completions", json=payload)
+                r = await client.post(f"{b.url}{path}", json=payload)
             b.inflight -= 1
             if r.status_code >= 500:
+                b.errors += 1
                 b.observe(time.time() - t0, ok=False)
                 b.last_error = f"HTTP {r.status_code}"
                 log.warning("backend %s -> HTTP %s, failing over", b.url, r.status_code)
@@ -245,19 +310,55 @@ async def chat(request: Request):
             return JSONResponse(r.json(), status_code=r.status_code)
         except (httpx.HTTPError, asyncio.TimeoutError) as e:
             b.inflight -= 1
+            b.errors += 1
             b.observe(time.time() - t0, ok=False)
             b.last_error = f"{type(e).__name__}: {e}"
             log.warning("backend %s failed (%s), failing over", b.url, b.last_error)
     raise HTTPException(503, f"no healthy backend answered for '{requested}' (tried {len(tried)})")
 
 
-async def _stream(b: Backend, payload: dict, t0: float) -> Optional[StreamingResponse]:
+@app.post("/v1/chat/completions")
+async def chat(request: Request):
+    body = await request.json()
+    return await _proxy("/v1/chat/completions", body, str(body.get("model") or ""), allow_stream=True)
+
+
+@app.post("/v1/embeddings")
+async def embeddings(request: Request):
+    """Same pool/resident/failover routing as chat, for embedding models (RAG). Never streams."""
+    body = await request.json()
+    return await _proxy("/v1/embeddings", body, str(body.get("model") or ""), allow_stream=False)
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus text exposition of per-backend state — no client library, just the counters we already keep."""
+    series = {
+        "tinyrouter_backend_healthy": ("gauge", "1 if the backend passed its last health check", lambda b: int(b.healthy)),
+        "tinyrouter_backend_resident": ("gauge", "1 if the model is loaded on the backend", lambda b: int(b.resident)),
+        "tinyrouter_backend_inflight": ("gauge", "in-flight requests on the backend", lambda b: b.inflight),
+        "tinyrouter_backend_latency_seconds": ("gauge", "EMA of seconds per request", lambda b: round(b.latency, 3)),
+        "tinyrouter_backend_requests_total": ("counter", "requests routed to the backend", lambda b: b.requests),
+        "tinyrouter_backend_errors_total": ("counter", "requests to the backend that errored or 5xx'd", lambda b: b.errors),
+    }
+    out = []
+    for metric, (mtype, help_, fn) in series.items():
+        out.append(f"# HELP {metric} {help_}")
+        out.append(f"# TYPE {metric} {mtype}")
+        for name, bs in STATE["pools"].items():
+            for b in bs:
+                lbl = f'pool="{name}",url="{b.url}",model="{b.model}"'
+                out.append(f"{metric}{{{lbl}}} {fn(b)}")
+    return PlainTextResponse("\n".join(out) + "\n")
+
+
+async def _stream(b: Backend, payload: dict, t0: float, path: str = "/v1/chat/completions") -> Optional[StreamingResponse]:
     """Open a streaming request to `b`. Returns the StreamingResponse, or None if the backend answered 5xx
-    (response closed, inflight released, failure recorded) so chat() can fail over. Connection errors are
-    re-raised as httpx errors after cleanup; chat()'s except releases inflight for those."""
+    (response closed, inflight released, failure recorded) so _proxy() can fail over. Connection errors are
+    re-raised as httpx errors after cleanup; _proxy()'s except releases inflight for those."""
     client = httpx.AsyncClient(timeout=STATE["request_timeout"])
     try:
-        req = client.build_request("POST", f"{b.url}/v1/chat/completions", json=payload)
+        req = client.build_request("POST", f"{b.url}{path}", json=payload)
         resp = await client.send(req, stream=True)
     except BaseException:
         await client.aclose()

@@ -33,6 +33,10 @@ class FakeOllama:
                 time.sleep(srv.slow)
                 if self.path in ("/api/generate", "/api/embed"):
                     srv.loaded.add(body.get("model")); return self._send(200, {"done": True})
+                if self.path == "/v1/embeddings":
+                    srv.loaded.add(body.get("model"))
+                    return self._send(200, {"object": "list", "model": body.get("model"),
+                                            "data": [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2, 0.3]}]})
                 if self.path == "/v1/chat/completions":
                     srv.loaded.add(body.get("model"))
                     if body.get("stream"):

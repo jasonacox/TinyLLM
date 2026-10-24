@@ -12,6 +12,11 @@ pools:
   #   - {url: http://192.168.1.10:8000, model: mistralai/Mistral-7B-Instruct-v0.1, kind: openai}
 health_interval: 15
 request_timeout: 120
-# Optional: keep_alive sent to kind=ollama backends on every request (-1 = never unload, or e.g. "30m").
-# A keep_alive set by the client wins; kind=openai backends never get it. Omit to leave Ollama's default.
+# Optional: when every healthy backend for a request is at its inflight cap, wait up to this many seconds
+# for a slot to free before returning 503 (smooths bursts). 0 (default) = fail fast, no queue.
+queue_timeout: 0
+# Optional: keep RESIDENT kind=ollama models pinned by re-asserting keep_alive on each health sweep with a
+# native /api/generate (-1 = never unload, or e.g. "30m"). Ollama's OpenAI /v1 endpoint ignores a body
+# keep_alive, so this is done out-of-band; a cold model is never force-loaded, kind=openai is never pinned.
+# For a full placement-based warmer across all servers, see warm.py. Omit to leave Ollama's default.
 # keep_alive: -1

@@ -68,6 +68,11 @@ def test_warm_fetches_api_ps_once(fake_ollama):
     assert sum(1 for c in s.calls if c[0] == "GET" and c[1] == "/api/ps") == 1
 
 
+def test_ka_normalizes_keep_alive_values():
+    assert tr._ka(-1) == -1 and tr._ka("-1") == -1 and tr._ka("0") == 0          # ints stay ints
+    assert tr._ka("30m") == "30m" and tr._ka("1h") == "1h"                       # durations stay strings
+
+
 # ── security ────────────────────────────────────────────────────────────────
 def test_unknown_model_is_404_and_only_configured_models_are_reachable(fake_ollama):
     s = fake_ollama()
@@ -89,6 +94,20 @@ def test_no_credentials_in_config_or_logs():
 def test_pick_is_fast_over_many_backends():
     bs = [_b(f"http://b{i}", resident=(i % 7 == 0), inflight=i % 5, latency=0.1 + (i % 11) / 10) for i in range(2000)]
     t0 = time.time(); [tr.pick(bs) for _ in range(50)]; assert time.time() - t0 < 0.5
+
+
+def test_acquire_without_queue_budget_is_immediate_none():
+    at_cap = _b(resident=True, inflight=1, cap=1)
+    tr.STATE.clear(); tr.STATE["queue_timeout"] = 0.0
+    t0 = time.time()
+    assert asyncio.run(tr._acquire([at_cap], None, [])) is None and time.time() - t0 < 0.2
+
+
+def test_acquire_during_failover_never_waits():
+    at_cap = _b(resident=True, inflight=1, cap=1)
+    tr.STATE.clear(); tr.STATE["queue_timeout"] = 5.0                            # budget exists, but a failover pick ignores it
+    t0 = time.time()
+    assert asyncio.run(tr._acquire([at_cap], None, [at_cap])) is None and time.time() - t0 < 0.2
 
 
 # ── retry / failover ────────────────────────────────────────────────────────
@@ -151,6 +170,17 @@ def test_all_backends_down_is_503(fake_ollama):
     assert r.status_code == 503
 
 
+def test_embeddings_fails_over_to_second_backend(fake_ollama):
+    bad, good = fake_ollama(fail=True), fake_ollama(models=["nomic-embed-text"], loaded=["nomic-embed-text"])
+    b1, b2 = tr.Backend(bad.url, "nomic-embed-text"), tr.Backend(good.url, "nomic-embed-text")
+    tr.STATE.clear(); tr.STATE.update(pools={"embed": [b1, b2]}, health_interval=999, request_timeout=5, queue_timeout=0.0, keep_alive=None)
+    with TestClient(tr.app) as c:
+        b1.healthy, b1.resident, b2.healthy, b2.resident = True, True, True, False   # the broken one is preferred
+        r = c.post("/v1/embeddings", json={"model": "embed", "input": "x"})
+    assert r.status_code == 200 and r.json()["data"][0]["embedding"]
+    assert b1.failures >= 1 and b1.errors >= 1 and b1.inflight == 0 and b2.inflight == 0
+
+
 # ── integration ─────────────────────────────────────────────────────────────
 def test_health_sweep_reads_residency_from_api_ps(fake_ollama):
     s = fake_ollama(models=["llama3:8b", "llama3.2:3b"], loaded=["llama3.2:3b"])
@@ -185,6 +215,34 @@ def test_models_endpoint_lists_pools_and_models_with_residency(fake_ollama):
         assert c.get("/pools").json()["chat"][0]["resident"] is True
 
 
+def test_metrics_endpoint_exposes_prometheus_series(fake_ollama):
+    o = fake_ollama(loaded=["llama3:8b"])
+    tr.STATE.clear(); tr.STATE.update(pools={"chat": [tr.Backend(o.url, "llama3:8b")]}, health_interval=999, request_timeout=5, queue_timeout=0.0, keep_alive=None)
+    with TestClient(tr.app) as c:
+        c.post("/v1/chat/completions", json={"model": "chat", "messages": []})
+        m = c.get("/metrics")
+    assert m.status_code == 200 and m.headers["content-type"].startswith("text/plain")
+    assert "# TYPE tinyrouter_backend_requests_total counter" in m.text
+    assert "# TYPE tinyrouter_backend_healthy gauge" in m.text
+    assert 'tinyrouter_backend_requests_total{pool="chat"' in m.text
+
+
+def test_sighup_reload_swaps_pools_and_keeps_live_state(tmp_path, fake_ollama):
+    o1, o2 = fake_ollama(loaded=["llama3:8b"]), fake_ollama(loaded=["mistral"])
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump({"pools": {"chat": [{"url": o1.url, "model": "llama3:8b"}]}, "health_interval": 999}))
+    tr.STATE.clear(); tr.STATE.update(tr.load_config(str(p)))
+    b_old = tr.STATE["pools"]["chat"][0]; b_old.inflight, b_old.healthy, b_old.requests = 3, True, 7   # live state
+    p.write_text(yaml.safe_dump({"pools": {"chat": [{"url": o1.url, "model": "llama3:8b"}, {"url": o2.url, "model": "mistral"}]},
+                                 "health_interval": 7, "queue_timeout": 2.0}))
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(tr, "load_config", lambda path=str(p), _f=tr.load_config: _f(path))
+        tr.reload_config()
+    pool = tr.STATE["pools"]["chat"]
+    assert len(pool) == 2 and tr.STATE["health_interval"] == 7 and tr.STATE["queue_timeout"] == 2.0
+    assert pool[0] is b_old and pool[0].inflight == 3 and pool[0].requests == 7   # same object, live state preserved
+
+
 # ── functional ──────────────────────────────────────────────────────────────
 def test_chat_end_to_end_routes_to_resident_backend_and_streams(fake_ollama):
     cold, warm_srv = fake_ollama(loaded=[], reply="cold"), fake_ollama(loaded=["llama3:8b"], reply="warm")
@@ -198,31 +256,44 @@ def test_chat_end_to_end_routes_to_resident_backend_and_streams(fake_ollama):
         assert b"[DONE]" in body and b'"content": "warm"' in body
 
 
-def test_keep_alive_injected_for_ollama_backends_only(fake_ollama):
-    o, v = fake_ollama(models=["llama3:8b"]), fake_ollama(models=["mistral"])
-    tr.STATE.clear(); tr.STATE.update(pools={"chat": [tr.Backend(o.url, "llama3:8b", "ollama")], "big": [tr.Backend(v.url, "mistral", "openai")]},
-                                      health_interval=999, request_timeout=5, keep_alive=-1)
+def test_keep_alive_pins_resident_ollama_models_natively(fake_ollama):
+    # Ollama's OpenAI /v1 endpoint ignores a body keep_alive, so the router pins RESIDENT ollama models with a
+    # native /api/generate during the health sweep — never force-loading a cold model, never touching kind=openai.
+    o = fake_ollama(models=["llama3:8b"], loaded=["llama3:8b"])          # resident -> pinned
+    cold = fake_ollama(models=["llama3:8b"], loaded=[])                  # not resident -> must NOT be force-loaded
+    v = fake_ollama(models=["mistral"])                                 # openai kind -> never pinned
+    b_res, b_cold, b_v = tr.Backend(o.url, "llama3:8b", "ollama"), tr.Backend(cold.url, "llama3:8b", "ollama"), tr.Backend(v.url, "mistral", "openai")
+    async def go():
+        async with httpx.AsyncClient() as client:
+            for b in (b_res, b_cold, b_v):
+                await tr.check_backend(client, b, keep_alive=-1)
+    asyncio.run(go())
+    gen = lambda s: [c for c in s.calls if c[0] == "POST" and c[1] == "/api/generate"]
+    assert gen(o) and gen(o)[0][2].get("keep_alive") == -1              # resident ollama model pinned natively
+    assert not gen(cold)                                               # cold model never force-loaded by a health check
+    assert not gen(v)                                                  # kind=openai never gets a native pin
+
+
+def test_keep_alive_not_injected_into_v1_requests(fake_ollama):
+    # The no-op injection is gone: a configured keep_alive must NOT ride along on the /v1 chat payload.
+    o = fake_ollama(models=["llama3:8b"], loaded=["llama3:8b"])
+    tr.STATE.clear(); tr.STATE.update(pools={"chat": [tr.Backend(o.url, "llama3:8b", "ollama")]},
+                                      health_interval=999, request_timeout=5, queue_timeout=0.0, keep_alive=-1)
     with TestClient(tr.app) as c:
         assert c.post("/v1/chat/completions", json={"model": "chat", "messages": []}).status_code == 200
-        assert c.post("/v1/chat/completions", json={"model": "big", "messages": []}).status_code == 200
-        with c.stream("POST", "/v1/chat/completions", json={"model": "chat", "stream": True, "messages": []}) as r:
-            b"".join(r.iter_bytes())
-        assert c.post("/v1/chat/completions", json={"model": "chat", "keep_alive": "5m", "messages": []}).status_code == 200
-    o_posts = [c[2] for c in o.calls if c[0] == "POST" and c[1] == "/v1/chat/completions"]
-    v_posts = [c[2] for c in v.calls if c[0] == "POST" and c[1] == "/v1/chat/completions"]
-    assert [p.get("keep_alive") for p in o_posts] == [-1, -1, "5m"]              # injected (plain + stream); client value wins
-    assert v_posts and all("keep_alive" not in p for p in v_posts)               # never sent to kind=openai
+    chat_posts = [c[2] for c in o.calls if c[0] == "POST" and c[1] == "/v1/chat/completions"]
+    assert chat_posts and all("keep_alive" not in p for p in chat_posts)
 
 
 def test_keep_alive_wired_from_router_yaml(tmp_path, fake_ollama):
-    o = fake_ollama()
+    o = fake_ollama(loaded=["llama3:8b"])                                # resident so the first sweep pins it
     p = tmp_path / "r.yaml"; p.write_text(yaml.safe_dump({"pools": {"chat": [{"url": o.url, "model": "llama3:8b"}]}, "keep_alive": "30m", "health_interval": 999}))
     tr.STATE.clear()
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(tr, "load_config", lambda path=str(p), _f=tr.load_config: _f(path))
-        with TestClient(tr.app) as c:                                             # lifespan loads the config file
+        with TestClient(tr.app) as c:                                             # lifespan loads the config and sweeps once
             assert c.post("/v1/chat/completions", json={"model": "chat", "messages": []}).status_code == 200
-    assert [c[2].get("keep_alive") for c in o.calls if c[0] == "POST"] == ["30m"]
+    assert [c[2].get("keep_alive") for c in o.calls if c[0] == "POST" and c[1] == "/api/generate"] == ["30m"]
 
 
 def test_load_config_example_parses_and_rejects_empty(tmp_path):
@@ -230,6 +301,28 @@ def test_load_config_example_parses_and_rejects_empty(tmp_path):
     assert set(cfg["pools"]) == {"chat", "fast"} and cfg["pools"]["chat"][1].max_inflight == 2
     empty = tmp_path / "e.yaml"; empty.write_text("pools: {}\n")
     with pytest.raises(ValueError): tr.load_config(str(empty))
+
+
+def test_embeddings_route_to_resident_pool_backend(fake_ollama):
+    o = fake_ollama(models=["nomic-embed-text"], loaded=["nomic-embed-text"])
+    tr.STATE.clear(); tr.STATE.update(pools={"embed": [tr.Backend(o.url, "nomic-embed-text")]}, health_interval=999, request_timeout=5, queue_timeout=0.0, keep_alive=None)
+    with TestClient(tr.app) as c:
+        r = c.post("/v1/embeddings", json={"model": "embed", "input": "hello"})
+    assert r.status_code == 200 and r.json()["data"][0]["embedding"] == [0.1, 0.2, 0.3]
+    assert any(call[0] == "POST" and call[1] == "/v1/embeddings" for call in o.calls)
+
+
+def test_queue_waits_for_a_slot_then_picks():
+    b = _b(resident=True, inflight=1, cap=1)                                     # at its cap right now
+    tr.STATE.clear(); tr.STATE["queue_timeout"] = 1.0
+    async def go():
+        async def free_later():
+            await asyncio.sleep(0.1); b.inflight = 0                             # a slot frees mid-wait
+        t = asyncio.create_task(free_later())
+        got = await tr._acquire([b], None, [])
+        await t
+        return got
+    assert asyncio.run(go()) is b                                               # waited, then picked it
 
 
 # ── frame ───────────────────────────────────────────────────────────────────
@@ -247,6 +340,25 @@ def test_lifespan_starts_and_cancels_health_task(fake_ollama):
         task = tr.STATE["_health_task"]; assert not task.done()
         assert c.get("/health").json()["healthy"] == 1
     assert task.cancelled() or task.done()
+
+
+def test_example_config_parses_queue_timeout_and_keep_alive(tmp_path):
+    cfg = tr.load_config(str(HERE / "router.yaml.example"))
+    assert cfg["queue_timeout"] == 0.0 and "keep_alive" in cfg          # both knobs present/defaulted, example valid
+
+
+def test_metrics_output_is_well_formed_prometheus(fake_ollama):
+    s = fake_ollama()
+    tr.STATE.clear(); tr.STATE.update(pools={"chat": [tr.Backend(s.url, "llama3:8b")]}, health_interval=999, request_timeout=5)
+    with TestClient(tr.app) as c:
+        lines = [ln for ln in c.get("/metrics").text.splitlines() if ln]
+    # every non-comment line is `name{labels} value`; every metric has a HELP and a TYPE comment
+    helps = {ln.split()[2] for ln in lines if ln.startswith("# HELP")}
+    types = {ln.split()[2] for ln in lines if ln.startswith("# TYPE")}
+    samples = {ln.split("{")[0] for ln in lines if not ln.startswith("#")}
+    assert samples and samples <= helps and samples <= types
+    for ln in (x for x in lines if not x.startswith("#")):
+        assert ln.endswith(tuple("0123456789")) and "{" in ln and ln.rstrip().split()[-1]   # value present
     assert "on_event" not in (HERE / "tinyrouter.py").read_text()               # lifespan, not the deprecated hook
 
 
