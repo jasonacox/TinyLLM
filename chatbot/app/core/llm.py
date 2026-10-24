@@ -14,10 +14,12 @@ github.com/jasonacox/TinyLLM
 
 # Imports
 import asyncio
+import time
 from typing import Optional, Any
 import openai
+import requests
 from openai import OpenAIError
-from app.core.config import (client, stats, API_KEY, API_BASE, MYMODEL, TEMPERATURE,
+from app.core.config import (client, stats, API_KEY, API_BASE, MYMODEL, TEMPERATURE, KEEP_ALIVE, OLLAMA_API,
                              EXTRA_BODY, ONESHOT, MAX_IMAGES, VERSION, INTENT_ROUTER_LLM,
                              log, debug, llm_stream)
 from app.core.prompts import (base_prompt, expand_prompt, prompts)
@@ -108,6 +110,82 @@ def get_models():
         log(f"Unable to get models: {str(erro)}")
         return []
 
+# ── Resident models (Ollama) ──────────────────────────────────────────────────────────
+# /v1/models says what EXISTS; Ollama's native /api/ps says what is LOADED right now. A model
+# that is not resident costs a load on the next request (seconds to a minute for large models,
+# and by default Ollama unloads after 5 idle minutes). Surfacing residency lets the picker
+# prefer warm models, and warm_model() pins the chosen one with keep_alive.
+_RESIDENT_CACHE = {"ts": 0.0, "models": None}
+
+def ollama_api_base():
+    """Native Ollama API base derived from OPENAI_API_BASE (…:11434/v1 -> …:11434), or OLLAMA_API."""
+    if OLLAMA_API:
+        return OLLAMA_API.rstrip("/")
+    base = (API_BASE or "").rstrip("/")
+    return base[:-3] if base.endswith("/v1") else base
+
+def _model_key(name):
+    """Ollama treats a bare model name as its :latest tag ("llama3" == "llama3:latest")."""
+    return name if ":" in name else f"{name}:latest"
+
+def resident_models(ttl: float = 5.0):
+    """Set of model names currently loaded on the Ollama server, or None if the backend is not Ollama
+    (or unreachable). Cached for `ttl` seconds so the model dialog never hammers the server."""
+    now = time.time()
+    if _RESIDENT_CACHE["models"] is not None and now - _RESIDENT_CACHE["ts"] < ttl:
+        return _RESIDENT_CACHE["models"]
+    loaded = None
+    try:
+        r = requests.get(f"{ollama_api_base()}/api/ps", timeout=2)
+        if r.status_code == 200:
+            names = (m.get("name") or m.get("model") for m in r.json().get("models", []))
+            loaded = {_model_key(n) for n in names if n}
+    except Exception as erro:  # not Ollama, or down - degrade to "unknown"
+        debug(f"resident_models: {erro}")
+    _RESIDENT_CACHE.update(ts=now, models=loaded)
+    return loaded
+
+def get_models_detail():
+    """[{id, resident}] - resident is True/False when the backend is Ollama, None when unknown.
+    Resident models sort first so the dialog and /model list lead with what answers instantly."""
+    loaded = resident_models()
+    detail = [{"id": m, "resident": None if loaded is None else _model_key(m) in loaded} for m in get_models()]
+    detail.sort(key=lambda d: (d["resident"] is not True, d["id"]))
+    return detail
+
+def warm_model(model: str, keep_alive=None):
+    """Load `model` on an Ollama server and pin it with keep_alive (env KEEP_ALIVE unless given).
+    Returns True if the server accepted the request. No-op for non-Ollama backends."""
+    ka = KEEP_ALIVE if keep_alive is None else keep_alive
+    if ka is None or not model:
+        return False
+    try:
+        ka_val = int(ka) if str(ka).lstrip("-").isdigit() else ka            # -1 / 0 as ints, "30m" as a string
+        r = requests.post(f"{ollama_api_base()}/api/generate", json={"model": model, "prompt": "", "keep_alive": ka_val}, timeout=600)
+        ok = r.status_code == 200
+        if ok:
+            _RESIDENT_CACHE["ts"] = 0.0                                        # invalidate: it is resident now
+            log(f"Pinned model {model} resident (keep_alive={ka})")
+        else:
+            log(f"warm_model({model}) -> HTTP {r.status_code}")
+        return ok
+    except Exception as erro:
+        log(f"warm_model({model}) failed: {erro}")
+        return False
+
+_WARM_TASKS = set()                                                            # strong refs so fire-and-forget tasks aren't GC'd
+
+def warm_model_background(model: str, keep_alive=None):
+    """Fire-and-forget warm_model() on a worker thread. Call from async handlers: a model switch
+    returns immediately and never waits on (or blocks the event loop for) a cold load.
+    Returns the task, or None when there is nothing to do (KEEP_ALIVE unset)."""
+    if (KEEP_ALIVE if keep_alive is None else keep_alive) is None or not model:
+        return None
+    task = asyncio.create_task(asyncio.to_thread(warm_model, model, keep_alive))
+    _WARM_TASKS.add(task)
+    task.add_done_callback(_WARM_TASKS.discard)
+    return task
+
 # Initialize LLM connection
 async def init_llm():
     while True:
@@ -116,6 +194,8 @@ async def init_llm():
         else:
             log("Sleeping 5 seconds...")
             await asyncio.sleep(5)
+    if KEEP_ALIVE:
+        await asyncio.to_thread(warm_model, MYMODEL)                           # off the event loop
 
 # Function - Send user prompt to LLM for streaming response
 async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None) -> Any:

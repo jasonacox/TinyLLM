@@ -11,6 +11,7 @@ This project helps you build a small locally hosted LLM with a ChatGPT-like web 
 - [Manual Setup](#manual-setup)
 - [Run a Local LLM](#run-a-local-llm)
   - [Ollama Server (Option 1)](#ollama-server-option-1)
+    - [Keeping models resident (no reloads)](#keeping-models-resident-no-reloads)
   - [vLLM Server (Option 2)](#vllm-server-option-2)
   - [Llama-cpp-python Server (Option 3)](#llama-cpp-python-server-option-3)
 - [Run a Chatbot](#run-a-chatbot)
@@ -84,6 +85,24 @@ docker exec -it ollama ollama run mistral
 ```
 
 If you use the TinyLLM Chatbot (see below) with Ollama, make sure you specify the model via: `LLM_MODEL="llama3"` This will cause Ollama to download and run this model. It may take a while to start on first run unless you run one of the `ollama run` or `curl` commands above.
+
+### Keeping models resident (no reloads)
+
+If the first token of a reply takes 30 seconds, the model was probably **loaded**, not slow. Ollama unloads
+idle models after 5 minutes, keeps only 3 loaded by default, and reserves KV-cache memory for the model's
+full default context (262k tokens for the Qwen3 family) — so one big model can evict the rest. Fix it once
+in the Ollama service environment:
+
+```bash
+OLLAMA_KEEP_ALIVE=-1            # never unload on idle
+OLLAMA_MAX_LOADED_MODELS=3      # how many stay resident (size to your RAM)
+OLLAMA_CONTEXT_LENGTH=16384     # caps the KV reservation: 8192 on 16 GB, 16384 on 32 GB, 32768 on 64 GB+
+```
+
+The chatbot can pin its own model: set `KEEP_ALIVE=-1` and it sends Ollama a keep-alive for the active
+model at startup and whenever you switch with `/model`. The model dialog and `/model list` mark models that
+are **● resident** (answer immediately) versus **○ not loaded** (will load on first use), read live from
+Ollama's `/api/ps`.
 
 ### vLLM Server (Option 2)
 
