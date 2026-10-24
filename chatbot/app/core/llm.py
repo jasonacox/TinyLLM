@@ -14,8 +14,10 @@ github.com/jasonacox/TinyLLM
 
 # Imports
 import asyncio
+import time
 from typing import Optional, Any
 import openai
+import requests
 from openai import OpenAIError
 from app.core.config import (client, stats, API_KEY, API_BASE, MYMODEL, TEMPERATURE, KEEP_ALIVE, OLLAMA_API,
                              EXTRA_BODY, ONESHOT, MAX_IMAGES, VERSION, INTENT_ROUTER_LLM,
@@ -122,36 +124,32 @@ def ollama_api_base():
     base = (API_BASE or "").rstrip("/")
     return base[:-3] if base.endswith("/v1") else base
 
+def _model_key(name):
+    """Ollama treats a bare model name as its :latest tag ("llama3" == "llama3:latest")."""
+    return name if ":" in name else f"{name}:latest"
+
 def resident_models(ttl: float = 5.0):
     """Set of model names currently loaded on the Ollama server, or None if the backend is not Ollama
     (or unreachable). Cached for `ttl` seconds so the model dialog never hammers the server."""
-    import time as _time
-    now = _time.time()
+    now = time.time()
     if _RESIDENT_CACHE["models"] is not None and now - _RESIDENT_CACHE["ts"] < ttl:
         return _RESIDENT_CACHE["models"]
+    loaded = None
     try:
-        import requests as _rq
-        r = _rq.get(f"{ollama_api_base()}/api/ps", timeout=2)
-        if r.status_code != 200:
-            _RESIDENT_CACHE.update(ts=now, models=None); return None
-        loaded = {m.get("name") or m.get("model") for m in r.json().get("models", [])}
-        loaded |= {n.split(":")[0] for n in list(loaded) if n and n.endswith(":latest")}   # "llama3:latest" answers to "llama3"
-        _RESIDENT_CACHE.update(ts=now, models=loaded)
-        return loaded
-    except Exception as erro:  # not Ollama, or down — degrade to "unknown"
+        r = requests.get(f"{ollama_api_base()}/api/ps", timeout=2)
+        if r.status_code == 200:
+            names = (m.get("name") or m.get("model") for m in r.json().get("models", []))
+            loaded = {_model_key(n) for n in names if n}
+    except Exception as erro:  # not Ollama, or down - degrade to "unknown"
         debug(f"resident_models: {erro}")
-        _RESIDENT_CACHE.update(ts=now, models=None)
-        return None
+    _RESIDENT_CACHE.update(ts=now, models=loaded)
+    return loaded
 
 def get_models_detail():
-    """[{id, resident}] — resident is True/False when the backend is Ollama, None when unknown.
+    """[{id, resident}] - resident is True/False when the backend is Ollama, None when unknown.
     Resident models sort first so the dialog and /model list lead with what answers instantly."""
     loaded = resident_models()
-    def _is_resident(name):
-        if loaded is None:
-            return None
-        return name in loaded or name.split(":")[0] in loaded or f"{name}:latest" in loaded
-    detail = [{"id": m, "resident": _is_resident(m)} for m in get_models()]
+    detail = [{"id": m, "resident": None if loaded is None else _model_key(m) in loaded} for m in get_models()]
     detail.sort(key=lambda d: (d["resident"] is not True, d["id"]))
     return detail
 
@@ -162,9 +160,8 @@ def warm_model(model: str, keep_alive=None):
     if ka is None or not model:
         return False
     try:
-        import requests as _rq
         ka_val = int(ka) if str(ka).lstrip("-").isdigit() else ka            # -1 / 0 as ints, "30m" as a string
-        r = _rq.post(f"{ollama_api_base()}/api/generate", json={"model": model, "prompt": "", "keep_alive": ka_val}, timeout=600)
+        r = requests.post(f"{ollama_api_base()}/api/generate", json={"model": model, "prompt": "", "keep_alive": ka_val}, timeout=600)
         ok = r.status_code == 200
         if ok:
             _RESIDENT_CACHE["ts"] = 0.0                                        # invalidate: it is resident now

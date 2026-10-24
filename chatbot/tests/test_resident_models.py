@@ -1,12 +1,12 @@
 """Chatbot resident-model awareness — categories: unit, security, performance, retry, integration, functional, frame.
-Run: pytest chatbot/tests -q   (the fake Ollama fixture lives in router/tests/conftest.py and is reused here)."""
+Run: pytest chatbot/tests -q   (the fake Ollama server lives in chatbot/tests/conftest.py)."""
 import os, subprocess, sys, time
 from pathlib import Path
 
 import pytest
 
 CHATBOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(CHATBOT)); sys.path.insert(0, str(CHATBOT.parent / "router" / "tests"))
+sys.path.insert(0, str(CHATBOT)); sys.path.insert(0, str(Path(__file__).resolve().parent))
 os.environ.setdefault("OPENAI_API_BASE", "http://127.0.0.1:1/v1")      # never a real server during import
 os.environ.setdefault("PROMPT_FILE", str(CHATBOT / ".pytest-prompts.json"))
 from conftest import FakeOllama   # noqa: E402
@@ -41,6 +41,20 @@ def test_latest_tag_equivalence(ollama, monkeypatch):
     ollama.loaded = {"llama3:latest"}; llm._RESIDENT_CACHE.update(ts=0.0, models=None)
     monkeypatch.setattr(llm, "get_models", lambda: ["llama3", "llama3:latest"])
     assert all(x["resident"] for x in llm.get_models_detail())
+
+
+def test_latest_does_not_mark_other_tags_resident(ollama, monkeypatch):
+    ollama.loaded = {"qwen3:latest"}; llm._RESIDENT_CACHE.update(ts=0.0, models=None)
+    monkeypatch.setattr(llm, "get_models", lambda: ["qwen3", "qwen3:8b", "qwen3:32b"])
+    detail = {x["id"]: x["resident"] for x in llm.get_models_detail()}
+    assert detail == {"qwen3": True, "qwen3:8b": False, "qwen3:32b": False}
+
+
+def test_bare_name_loaded_matches_latest(ollama, monkeypatch):
+    ollama.loaded = {"llama3"}; llm._RESIDENT_CACHE.update(ts=0.0, models=None)
+    monkeypatch.setattr(llm, "get_models", lambda: ["llama3:latest", "llama3:8b"])
+    detail = {x["id"]: x["resident"] for x in llm.get_models_detail()}
+    assert detail == {"llama3:latest": True, "llama3:8b": False}
 
 
 # ── security ────────────────────────────────────────────────────────────────

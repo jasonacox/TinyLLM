@@ -11,8 +11,8 @@ This project helps you build a small locally hosted LLM with a ChatGPT-like web 
 - [Manual Setup](#manual-setup)
 - [Run a Local LLM](#run-a-local-llm)
   - [Ollama Server (Option 1)](#ollama-server-option-1)
-  - [Keeping models resident (no reloads)](#keeping-models-resident-no-reloads)
-- [vLLM Server (Option 2)](#vllm-server-option-2)
+    - [Keeping models resident (no reloads)](#keeping-models-resident-no-reloads)
+  - [vLLM Server (Option 2)](#vllm-server-option-2)
   - [Llama-cpp-python Server (Option 3)](#llama-cpp-python-server-option-3)
 - [Run a Chatbot](#run-a-chatbot)
   - [Example Session](#example-session)
@@ -103,10 +103,6 @@ The chatbot can pin its own model: set `KEEP_ALIVE=-1` and it sends Ollama a kee
 model at startup and whenever you switch with `/model`. The model dialog and `/model list` mark models that
 are **● resident** (answer immediately) versus **○ not loaded** (will load on first use), read live from
 Ollama's `/api/ps`.
-
-Running more than one server? See [`router/`](router/README.md): an OpenAI-compatible router that
-health-checks your backends, prefers the one where the model is already resident, fails over, and a
-`warm.py` that keeps a placement of models pinned across all your Ollama servers.
 
 ### vLLM Server (Option 2)
 

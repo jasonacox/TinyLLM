@@ -1,2 +1,0 @@
-pytest>=7
-httpx>=0.25
