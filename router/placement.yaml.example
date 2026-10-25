@@ -1,0 +1,6 @@
+# warm.py placement — copy to placement.yaml. Which models should be RESIDENT on which Ollama server.
+# Size to the box: pin only what fits with headroom (see README: context length drives memory).
+http://192.168.1.6:11434:  [llama3:8b, qwen3:30b-a3b, nomic-embed-text]
+http://192.168.1.77:11434: [llama3:8b, nomic-embed-text]
+http://192.168.1.7:11434:  [llama3.2:3b, llama3:8b]
+http://192.168.1.5:11434:  [llama3.2:3b]
