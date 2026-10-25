@@ -614,20 +614,23 @@
             const modelSelect = document.getElementById('modelSelect');
             modelSelect.innerHTML = '';
             // Fetch the current models and populate the form
-            fetch('/models')
-            .then(response => response.json())
+            // /models/detail adds residency (Ollama /api/ps): resident models are listed first and marked ●,
+            // models that would have to load on first use are marked ○. Falls back to /models if unavailable.
+            fetch('/models/detail')
+            .then(response => response.ok ? response.json() : fetch('/models').then(r => r.json()).then(list => list.map(id => ({id, resident: null}))))
             .then(data => {
                 const currentModel = getModel();
                 document.getElementById('currentModel').textContent = currentModel;
+                const label = m => (m.resident === true ? '● ' : (m.resident === false ? '○ ' : '')) + m.id;
                 // List models as bullets
                 const modelList = document.getElementById('modelList');
-                modelList.innerHTML = data.map(model => `<li>${model}</li>`).join('');
+                modelList.innerHTML = data.map(m => `<li title="${m.resident === true ? 'resident (answers immediately)' : (m.resident === false ? 'not loaded (will load on first use)' : '')}">${label(m)}</li>`).join('');
                 // Create options for the models
-                data.forEach(model => {
+                data.forEach(m => {
                 const option = document.createElement('option');
-                option.value = model;
-                option.textContent = model;
-                if (model === currentModel) {
+                option.value = m.id;
+                option.textContent = label(m);
+                if (m.id === currentModel) {
                     option.selected = true;
                 }
                 modelSelect.appendChild(option);

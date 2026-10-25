@@ -67,6 +67,8 @@ Below are the main environment variables you can set to configure the TinyLLM Ch
 | `TEMPERATURE`           | 0.0                                      | LLM temperature (creativity) |
 | `USE_SYSTEM`            | false                                    | Use system prompt in chat if true |
 | `EXTRA_BODY`            |                                          | Extra body parameters for OpenAI API (JSON) |
+| `KEEP_ALIVE`            |                                          | Ollama keep_alive for the active model, e.g. `-1` (forever) or `30m`; pins it resident at startup and on `/model` |
+| `OLLAMA_API`            | `OPENAI_API_BASE` without `/v1`          | Ollama native API base for residency checks |
 | `LITELLM_PROXY`         |                                          | LiteLLM Proxy URL (optional) |
 | `LITELLM_KEY`           |                                          | LiteLLM Secret Key (optional) |
 | `PORT`                  | 5000                                     | Port for chatbot server |
