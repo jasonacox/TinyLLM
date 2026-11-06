@@ -172,6 +172,12 @@ async def _sweep(client, state):
                            for bs in state["pools"].values() for b in bs))
 
 
+async def _sweep_new(backends: list, keep_alive=None):
+    """One immediate health check of backends added by a reload, so they serve without waiting health_interval."""
+    async with httpx.AsyncClient() as client:
+        await asyncio.gather(*(check_backend(client, b, keep_alive) for b in backends))
+
+
 async def health_loop(state: dict):
     async with httpx.AsyncClient() as client:
         while True:                                        # lifespan did the first sweep; wait before the next
@@ -192,14 +198,23 @@ def reload_config():
         log.error("SIGHUP reload failed, keeping current config: %s", e)
         return
     old = {(b.url, b.model): b for bs in STATE["pools"].values() for b in bs}
+    added = []
     for bs in new["pools"].values():
         for i, b in enumerate(bs):
             prev = old.get((b.url, b.model))
             if prev:                                       # reuse the live object so inflight accounting stays correct
                 prev.max_inflight, prev.kind = b.max_inflight, b.kind
                 bs[i] = prev
+            else:
+                added.append(b)
     for k in ("pools", "health_interval", "request_timeout", "queue_timeout", "keep_alive"):
         STATE[k] = new[k]
+    try:                                                   # add_signal_handler runs us on the loop, so scheduling is safe
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None                                        # called outside the loop (tests): next regular sweep covers it
+    if added and loop is not None:                         # keep a reference so the task is not garbage-collected
+        STATE["_reload_sweep"] = loop.create_task(_sweep_new(added, STATE.get("keep_alive")))
     log.info("SIGHUP reloaded: pools=%s", {k: len(v) for k, v in STATE["pools"].items()})
 
 
@@ -305,9 +320,17 @@ async def _proxy(path: str, body: dict, requested: str, allow_stream: bool):
                 b.last_error = f"HTTP {r.status_code}"
                 log.warning("backend %s -> HTTP %s, failing over", b.url, r.status_code)
                 continue
+            try:
+                data = r.json()
+            except ValueError:                                 # non-JSON body (proxy error page, truncated reply): fail over
+                b.errors += 1
+                b.observe(time.time() - t0, ok=False)
+                b.last_error = f"HTTP {r.status_code} with non-JSON body"
+                log.warning("backend %s -> HTTP %s with non-JSON body, failing over", b.url, r.status_code)
+                continue
             b.observe(time.time() - t0, ok=True)
             b.resident = True                                  # it just answered; it is loaded now
-            return JSONResponse(r.json(), status_code=r.status_code)
+            return JSONResponse(data, status_code=r.status_code)
         except (httpx.HTTPError, asyncio.TimeoutError) as e:
             b.inflight -= 1
             b.errors += 1

@@ -7,9 +7,10 @@ import pytest
 
 
 class FakeOllama:
-    def __init__(self, models=("llama3:8b", "llama3.2:3b"), loaded=("llama3:8b",), fail=False, slow=0.0, reply="pong", slow_get=0.0, fail_stream=False):
+    def __init__(self, models=("llama3:8b", "llama3.2:3b"), loaded=("llama3:8b",), fail=False, slow=0.0, reply="pong", slow_get=0.0, fail_stream=False, bad_json=False):
         self.models, self.loaded, self.fail, self.slow, self.reply = list(models), set(loaded), fail, slow, reply
         self.slow_get, self.fail_stream = slow_get, fail_stream    # delay GETs (/api/ps); 500 only on stream requests
+        self.bad_json = bad_json                                   # 200 with an HTML body on non-stream chat
         self.calls = []
         self.lock = threading.Lock()
         srv = self
@@ -45,6 +46,7 @@ class FakeOllama:
                         for tok in (srv.reply, "!"):
                             self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': tok}}]})}\n\n".encode())
                         self.wfile.write(b"data: [DONE]\n\n"); return
+                    if srv.bad_json: return self._send(200, b"<html>bad gateway</html>", "text/html")
                     return self._send(200, {"id": "x", "object": "chat.completion", "model": body.get("model"),
                                             "choices": [{"index": 0, "message": {"role": "assistant", "content": srv.reply}, "finish_reason": "stop"}]})
                 self._send(404, {"error": "nope"})

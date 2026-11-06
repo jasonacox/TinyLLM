@@ -181,6 +181,17 @@ def test_embeddings_fails_over_to_second_backend(fake_ollama):
     assert b1.failures >= 1 and b1.errors >= 1 and b1.inflight == 0 and b2.inflight == 0
 
 
+def test_non_json_2xx_fails_over_without_leaking(fake_ollama):
+    bad, good = fake_ollama(bad_json=True), fake_ollama(loaded=[], reply="from-good")
+    b1, b2 = _stream_pool(bad, good)
+    with TestClient(tr.app) as c:
+        b1.resident, b2.resident = True, False                                    # the broken one is the preferred pick
+        r = c.post("/v1/chat/completions", json={"model": "chat", "messages": []})
+    assert r.status_code == 200 and r.json()["choices"][0]["message"]["content"] == "from-good"
+    assert b1.errors == 1 and b1.failures == 1 and "non-JSON" in b1.last_error
+    assert b1.inflight == 0 and b2.inflight == 0, "inflight counters leaked"
+
+
 # ── integration ─────────────────────────────────────────────────────────────
 def test_health_sweep_reads_residency_from_api_ps(fake_ollama):
     s = fake_ollama(models=["llama3:8b", "llama3.2:3b"], loaded=["llama3.2:3b"])
@@ -241,6 +252,26 @@ def test_sighup_reload_swaps_pools_and_keeps_live_state(tmp_path, fake_ollama):
     pool = tr.STATE["pools"]["chat"]
     assert len(pool) == 2 and tr.STATE["health_interval"] == 7 and tr.STATE["queue_timeout"] == 2.0
     assert pool[0] is b_old and pool[0].inflight == 3 and pool[0].requests == 7   # same object, live state preserved
+
+
+def test_sighup_reload_sweeps_new_backends_immediately(tmp_path, fake_ollama):
+    o1, o2 = fake_ollama(loaded=["llama3:8b"]), fake_ollama(loaded=["mistral"])
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump({"pools": {"chat": [{"url": o1.url, "model": "llama3:8b"}]}, "health_interval": 999}))
+    tr.STATE.clear(); tr.STATE.update(tr.load_config(str(p)))
+    b_old = tr.STATE["pools"]["chat"][0]; b_old.healthy = True
+    p.write_text(yaml.safe_dump({"pools": {"chat": [{"url": o1.url, "model": "llama3:8b"}, {"url": o2.url, "model": "mistral"}]},
+                                 "health_interval": 999}))
+
+    async def run():                                                              # signal handlers run on the loop
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(tr, "load_config", lambda path=str(p), _f=tr.load_config: _f(path))
+            tr.reload_config()
+        await tr.STATE.pop("_reload_sweep")
+    asyncio.run(run())
+    b_new = tr.STATE["pools"]["chat"][1]
+    assert b_new.healthy and b_new.resident, "new backend should be live without waiting health_interval"
+    assert not any(c[0] == "GET" for c in o1.calls), "persisting backends are not re-swept"
 
 
 # ── functional ──────────────────────────────────────────────────────────────
