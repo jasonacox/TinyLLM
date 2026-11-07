@@ -588,7 +588,7 @@ async def handle_connect(session_id, env): # pylint: disable=unused-argument
                                 completion_text += chunk
                                 tokens += 1
                                 # Check for repeating text
-                                if await is_repeating_exact(completion_text):
+                                if await is_repeating_exact(completion_text, session_id):
                                     debug(f"Repeating text detected - ending - {completion_text}")
                                     await sio.emit('update', {'update': '[Repeating Text Detected - Ending]', 'voice': 'user'},room=session_id)
                                     break
