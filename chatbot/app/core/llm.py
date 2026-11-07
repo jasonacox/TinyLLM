@@ -252,7 +252,14 @@ async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None)
 
         except OpenAIError as e:
             error_msg = str(e)
+
+            def drop_pending_prompt():
+                # The retry appends the (possibly shortened) prompt again - remove this attempt's copy
+                if client[sid]["context"] and client[sid]["context"][-1].get("role") == "user":
+                    client[sid]["context"].pop()
+
             if "does not exist" in error_msg:
+                drop_pending_prompt()
                 await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'}, room=sid)
                 log("Model does not exist - retrying")
                 await test_model()
@@ -260,6 +267,7 @@ async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None)
                 await sio.emit('update', {'update': f"TinyLLM Chatbot {VERSION} - {client[sid]['model']} ",
                                       'voice': 'footer', 'model': client[sid]['model']}, room=sid)
             elif "maximum context length" in error_msg:
+                drop_pending_prompt()
                 if len(prompt) > 1000:
                     prompt = prompt[:len(prompt)//4] + " ... " + prompt[-len(prompt)//4:]
                     log(f"Session {sid} - Reduce prompt size - Now: ~{len(prompt)/4} tokens")
