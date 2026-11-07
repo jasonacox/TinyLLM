@@ -230,7 +230,7 @@ View the chatbot at http://localhost:5000
 pip install -r requirements.txt
 
 # Run the chatbot web server - change the base URL to be where you host your llmserver
-OPENAI_API_BASE="http://localhost:8000/v1" python3 server.py
+OPENAI_API_BASE="http://localhost:8000/v1" uvicorn app.main:app --port 5000
 ```
 
 ### Chat Commands and Retrieval Augmented Generation (RAG)
