@@ -53,7 +53,8 @@ from app.core.config import (log, debug, stats, VERSION, API_KEY, API_BASE, LITE
                         OPENAI_IMAGE_QUALITY, OPENAI_IMAGE_STYLE, baseprompt, REPEAT_WINDOW, REPEAT_COUNT)
 from app.rag.rag import (rag_documents, get_weather, get_stock, get_news,
                         extract_text_from_url, query_index)
-from app.core.llm import (client, get_models, get_models_detail, warm_model_background, ask, ask_llm, ask_llm_intent, ask_context)
+from app.core.llm import (client, get_models, get_models_detail, warm_model_background, ask, ask_llm, ask_llm_intent, ask_context,
+                          LLMRateLimitError)
 from app.core.prompts import (prompts, base_prompt, default_prompts, save_prompts, expand_prompt)
 from app.image import create_image_generator
 from app.document import generate_document_from_response, get_document_generator
@@ -642,6 +643,9 @@ async def handle_connect(session_id, env): # pylint: disable=unused-argument
                                 client[session_id]["context"].append({"role": "user", "content": client[session_id]["cot_prompt"]} )
                             # Remember answer
                             client[session_id]["context"].append({"role": "assistant", "content" : completion_text})
+                    except LLMRateLimitError:
+                        # ask() already told the user when to retry - keep the conversation
+                        pass
                     except Exception as erro:
                         # Unable to process prompt, give error
                         log(f"ERROR {erro}")
