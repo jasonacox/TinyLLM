@@ -17,6 +17,7 @@ github.com/jasonacox/TinyLLM
 import asyncio
 import base64
 import datetime
+import html
 import io
 import json
 import os
@@ -1459,7 +1460,8 @@ async def search_web(session_id, prompt, results=5):
     try:
         # Search the SEARXNG service with URI: /search?q={prompt}&format=json
         # use GET request to get the search results (max results)
-        search_results = requests.get(f"{SEARXNG}/search?q={prompt}&format=json", timeout=10).json()
+        # Let requests URL-encode the query (e.g. "AT&T", "C# tips", "1+1")
+        search_results = requests.get(f"{SEARXNG}/search", params={"q": prompt, "format": "json"}, timeout=10).json()
         count = 0
         for result in search_results.get('results', []):
             if count >= results:
@@ -1468,7 +1470,13 @@ async def search_web(session_id, prompt, results=5):
             context_str += f"* {result['title']}\n{result['url']}\n{result['content']}\n\n"
             # Build references
             if "url" in result:
-                references = references + f"\n - {result['title']} - <a href='{result['url']}' target='_blank'>[Link]</a>"
+                # Titles and URLs come from third-party pages and are rendered as HTML - escape them
+                title = html.escape(str(result.get('title', '')))
+                url = str(result['url'])
+                if url.lower().startswith(("http://", "https://")):
+                    references = references + f"\n - {title} - <a href='{html.escape(url, quote=True)}' target='_blank' rel='noopener noreferrer'>[Link]</a>"
+                else:
+                    references = references + f"\n - {title}"
         if not context_str:
             context_str = "[No search results found]"
         if references:

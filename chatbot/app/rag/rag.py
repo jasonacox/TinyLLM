@@ -12,6 +12,7 @@ github.com/jasonacox/TinyLLM
 # pylint: disable=redefined-outer-name
 
 # Imports
+import html
 import io
 
 import aiohttp
@@ -202,7 +203,8 @@ def query_index(query, library, num_results=RESULTS):
         # Skip duplicate titles and files
         if ans['title'] == previous_title and ans['file'] == previous_file:
             continue
-        references = references + f"\n - {ans['title']} - {ans['file']}"
+        # References are rendered as HTML in the chat UI - escape document metadata
+        references = references + f"\n - {html.escape(str(ans['title']))} - {html.escape(str(ans['file']))}"
         # Skip duplicates of content
         if ans['content'] == previous_content:
             continue
