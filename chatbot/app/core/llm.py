@@ -14,6 +14,7 @@ github.com/jasonacox/TinyLLM
 
 # Imports
 import asyncio
+import re
 import time
 from typing import Optional, Any
 import openai
@@ -34,6 +35,10 @@ class LLMConnectionError(LLMError):
 
 class LLMTimeoutError(LLMError):
     """Exception for timeout-related errors"""
+    pass
+
+class LLMRateLimitError(LLMError):
+    """The LLM provider returned HTTP 429; the user has already been notified"""
     pass
 
 # Test OpenAI API
@@ -197,6 +202,28 @@ async def init_llm():
     if KEEP_ALIVE:
         await asyncio.to_thread(warm_model, MYMODEL)                           # off the event loop
 
+def rate_limit_message(error) -> str:
+    """Friendly chat message for an HTTP 429 from the LLM provider (Azure, OpenAI, LiteLLM...).
+    Uses the Retry-After header, or the "retry after N seconds" text in the error, when present."""
+    wait = None
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    try:
+        wait = int(float(headers.get("retry-after")))
+    except (TypeError, ValueError):
+        match = re.search(r"retry after (\d+) second", str(error), re.IGNORECASE)
+        if match:
+            wait = int(match.group(1))
+    if wait is None:
+        return "[LLM rate limit reached - please wait a moment and try again]"
+    if wait < 120:
+        when = f"{wait} seconds"
+    elif wait < 7200:
+        when = f"{round(wait / 60)} minutes"
+    else:
+        when = f"{wait / 3600:.1f} hours"
+    return f"[LLM rate limit reached - please try again in about {when}]"
+
 # Function - Send user prompt to LLM for streaming response
 async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None) -> Any:
     """Send user prompt to LLM for streaming response with improved error handling"""
@@ -252,6 +279,15 @@ async def ask(prompt: str, sid: Optional[str] = None, sio: Optional[Any] = None)
 
         except OpenAIError as e:
             error_msg = str(e)
+            if isinstance(e, openai.RateLimitError):
+                # The openai client already retried with backoff; tell the user when to come back
+                log(f"Rate limited by LLM provider: {error_msg}")
+                stats["errors"] += 1
+                # Keep the conversation intact: drop only this unanswered prompt
+                if client[sid]["context"] and client[sid]["context"][-1].get("role") == "user":
+                    client[sid]["context"].pop()
+                await sio.emit('update', {'update': rate_limit_message(e), 'voice': 'user'}, room=sid)
+                raise LLMRateLimitError(error_msg) from e
             if "does not exist" in error_msg:
                 await sio.emit('update', {'update': '[Model Unavailable... Retrying]', 'voice': 'user'}, room=sid)
                 log("Model does not exist - retrying")
