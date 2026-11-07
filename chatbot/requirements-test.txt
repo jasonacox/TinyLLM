@@ -1,0 +1,5 @@
+# Test dependencies for chatbot/tests (pytest chatbot/tests -q)
+pytest
+httpx
+# Runs marked.js + safe_markdown.js in V8 for the UI rendering tests
+mini-racer
