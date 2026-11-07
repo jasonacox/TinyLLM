@@ -570,10 +570,11 @@ async def handle_connect(session_id, env): # pylint: disable=unused-argument
                             await sio.emit('update', {'update': '\n\n', 'voice': 'ai'},room=session_id)
                     else:
                         client_cot = False
+                    # Defined before ask() so the debug log below works when ask() raises
+                    completion_text = ''
                     try:
                         # Ask LLM for answers
                         response= await ask(client[session_id]["prompt"],session_id, sio)
-                        completion_text = ''
                         tokens = 0
                         in_thinking = client[session_id]["think"]
                         # Iterate through the stream of tokens and send to client
