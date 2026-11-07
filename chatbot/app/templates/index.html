@@ -596,9 +596,9 @@
                         }
                         document.querySelector('tbody').innerHTML += `
                             <tr>
-                                <td>${name}</td>
+                                <td>${escapeHtml(name)}</td>
                                 <td>
-                                    <textarea id="${name}" class="prompt-value" oninput="highlightTextarea(this)" onpaste="handlePaste(event)">${value}</textarea>
+                                    <textarea id="${escapeHtml(name)}" class="prompt-value" oninput="highlightTextarea(this)" onpaste="handlePaste(event)">${escapeHtml(value)}</textarea>
                                 </td>
                             </tr>
                         `;
@@ -686,9 +686,9 @@
                     Object.entries(data).forEach(([name, value]) => {
                         document.querySelector('tbody').innerHTML += `
                             <tr>
-                                <td>${name}</td>
+                                <td>${escapeHtml(name)}</td>
                                 <td>
-                                    <textarea id="${name}" class="prompt-value" oninput="highlightTextarea(this)">${value}</textarea>
+                                    <textarea id="${escapeHtml(name)}" class="prompt-value" oninput="highlightTextarea(this)">${escapeHtml(value)}</textarea>
                                 </td>
                             </tr>
                         `;
@@ -734,6 +734,8 @@
     <script src="/static/socket.io.js"></script>
     <!-- Markdown parser library for full markdown support -->
     <script src="/static/marked.min.js"></script>
+    <!-- Escapes raw HTML and unsafe link schemes in LLM markdown output -->
+    <script src="/static/safe_markdown.js"></script>
     <!-- Syntax highlighting library -->
     <script src="/static/prism.min.js"></script>
     <script src="/static/prism-python.min.js"></script>
@@ -1132,14 +1134,8 @@
                 // Parse any buffered AI content when streaming completes
                 if (aiResponseElement && aiResponseBuffer.trim()) {
                     try {
-                        marked.setOptions({
-                            breaks: true,
-                            gfm: true,
-                            pedantic: false,
-                            smartLists: true,
-                            smartypants: true
-                        });
-                        const htmlContent = marked.parse(aiResponseBuffer);
+                        // Raw HTML in LLM output is escaped and unsafe link schemes removed
+                        const htmlContent = renderMarkdownSafe(aiResponseBuffer);
                         aiResponseElement.innerHTML = htmlContent;
                         
                         // Apply syntax highlighting to all code blocks
@@ -1220,7 +1216,7 @@
                     var linkID = key;
                     var linkURL = payload[key];
                     var re = new RegExp(linkID, "g");
-                    messageText = messageText.replace(re, "<a href='" + linkURL + "' target='_blank'>[Link]</a>");
+                    messageText = messageText.replace(re, "<a href='" + escapeHtml(safeUrl(linkURL)) + "' target='_blank' rel='noopener noreferrer'>[Link]</a>");
                 }
                 messageContainer.innerHTML = messageText;
             }
