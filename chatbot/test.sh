@@ -27,4 +27,4 @@ export RESULTS=1
 
 # Start the server
 echo "Starting TinyLLM Chatbot Server... ^C to exit"
-uvicorn server:app --port $PORT
+uvicorn app.main:app --port $PORT
